@@ -1,0 +1,20 @@
+[package]
+name = "ai-commerce-hq"
+version = "1.0.0"
+description = "AI Commerce HQ - Autonomous E-Commerce Operations"
+authors = ["AI Commerce HQ"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+tauri = { version = "1.6", features = ["shell-open", "window-close", "window-maximize", "window-minimize"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.11", features = ["json"] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.env
+*.env.local
+src-tauri/target/
+src-tauri/binaries/backend*
+build/
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+.DS_Store
+Thumbs.db
+*.log
+hq.db
