@@ -1,13 +1,16 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useAppStore } from '../store/useAppStore'
-import type { WSMessage, Agent, Product, Desk } from '../types'
+import type { WSMessage, Agent, Product, Desk, WalkEvent, TalkingTableEntry } from '../types'
 
 const WS_URL = 'ws://localhost:8765/ws'
 
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const { updateAgent, addAgent, updateProduct, addProduct, addEvent, addDesk, setBackendReady } = useAppStore()
+  const {
+    updateAgent, addAgent, updateProduct, addEvent, addDesk,
+    setBackendReady, addTalkingMessage, setWalk,
+  } = useAppStore()
 
   const handleMessage = useCallback(
     (msg: WSMessage) => {
@@ -15,6 +18,24 @@ export function useWebSocket() {
         case 'agent_update': {
           const agent = msg.data as unknown as Agent
           updateAgent(agent)
+          break
+        }
+        case 'agent_arrival': {
+          // Treat as agent_update — the visual arrival is handled by status 'entering'
+          // The agent record is already in DB and broadcast via agent_update separately
+          break
+        }
+        case 'agent_walk': {
+          const walk = msg.data as unknown as WalkEvent
+          setWalk(walk)
+          break
+        }
+        case 'talking_table': {
+          const entry: TalkingTableEntry = {
+            message: String(msg.data.message || ''),
+            timestamp: Number(msg.data.timestamp || Date.now()),
+          }
+          addTalkingMessage(entry)
           break
         }
         case 'desk_created': {
@@ -43,7 +64,7 @@ export function useWebSocket() {
           break
       }
     },
-    [updateAgent, addAgent, updateProduct, addProduct, addEvent, addDesk]
+    [updateAgent, addAgent, updateProduct, addEvent, addDesk, setBackendReady, addTalkingMessage, setWalk]
   )
 
   const connect = useCallback(() => {

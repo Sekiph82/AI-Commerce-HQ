@@ -3,13 +3,17 @@
   "version": "1.0.0",
   "description": "Autonomous AI E-Commerce Headquarters",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "start": "python dev.py",
+    "start:backend": "python dev.py --backend",
+    "check:env": "python dev.py --check"
   },
   "dependencies": {
     "@tauri-apps/api": "^1.6.0",

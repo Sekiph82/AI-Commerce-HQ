@@ -1,41 +1,70 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { listen } from '@tauri-apps/api/event'
 
 interface Props {
   onComplete: () => void
 }
 
 const STAGES = [
-  'Initializing AI Commerce HQ...',
-  'Loading orchestration runtime...',
-  'Connecting agent systems...',
-  'Verifying configuration...',
-  'Starting office environment...',
+  'Launching AI Commerce HQ...',
+  'Starting backend services...',
+  'Initializing agent runtime...',
+  'Connecting to agent systems...',
+  'Loading office environment...',
+  'All systems online.',
 ]
 
 export function SplashScreen({ onComplete }: Props) {
   const [stage, setStage] = useState(0)
   const [progress, setProgress] = useState(0)
+  const completedRef = useRef(false)
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setProgress((p) => {
-        if (p >= 100) {
-          clearInterval(interval)
-          setTimeout(onComplete, 400)
-          return 100
-        }
-        return p + 2
-      })
-    }, 40)
+    let unlisten: (() => void) | null = null
 
-    const stageInterval = setInterval(() => {
-      setStage((s) => Math.min(s + 1, STAGES.length - 1))
-    }, 400)
+    const complete = () => {
+      if (completedRef.current) return
+      completedRef.current = true
+      setProgress(100)
+      setStage(STAGES.length - 1)
+      setTimeout(onComplete, 700)
+    }
+
+    // Hard timeout — if backend never responds, unblock the user after 50 s
+    const hardTimeout = setTimeout(complete, 50_000)
+
+    // Listen for the Tauri backend-ready event emitted by main.rs
+    listen<boolean>('backend-ready', (event) => {
+      clearTimeout(hardTimeout)
+      // Payload is true = healthy, false = timed out but we proceed either way
+      complete()
+    }).then((fn) => {
+      unlisten = fn
+    })
+
+    // Animate progress to ~80 % while waiting for the backend.
+    // Each tick = 100 ms, so we reach 80 in ~8 s — typical backend cold-start time.
+    const progressTick = setInterval(() => {
+      setProgress((p) => {
+        if (p >= 80) {
+          clearInterval(progressTick)
+          return p
+        }
+        return p + 1
+      })
+    }, 100)
+
+    // Cycle through stage labels every ~1.5 s (stops at second-to-last)
+    const stageTick = setInterval(() => {
+      setStage((s) => Math.min(s + 1, STAGES.length - 2))
+    }, 1_500)
 
     return () => {
-      clearInterval(interval)
-      clearInterval(stageInterval)
+      clearTimeout(hardTimeout)
+      clearInterval(progressTick)
+      clearInterval(stageTick)
+      unlisten?.()
     }
   }, [onComplete])
 
@@ -88,7 +117,7 @@ export function SplashScreen({ onComplete }: Props) {
           <motion.div
             className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"
             style={{ width: `${progress}%` }}
-            transition={{ duration: 0.1 }}
+            transition={{ duration: 0.15 }}
           />
         </div>
 
@@ -105,24 +134,17 @@ export function SplashScreen({ onComplete }: Props) {
         </AnimatePresence>
       </motion.div>
 
-      {/* Floating dots */}
+      {/* Ambient floating dots */}
       {[...Array(6)].map((_, i) => (
         <motion.div
           key={i}
           className="absolute w-1 h-1 rounded-full bg-blue-500"
           style={{
-            left: `${10 + Math.random() * 80}%`,
-            top: `${10 + Math.random() * 80}%`,
+            left: `${15 + i * 14}%`,
+            top: `${20 + (i % 3) * 25}%`,
           }}
-          animate={{
-            opacity: [0, 0.5, 0],
-            scale: [0, 1.5, 0],
-          }}
-          transition={{
-            duration: 2 + Math.random() * 2,
-            repeat: Infinity,
-            delay: Math.random() * 2,
-          }}
+          animate={{ opacity: [0, 0.5, 0], scale: [0, 1.5, 0] }}
+          transition={{ duration: 2 + i * 0.4, repeat: Infinity, delay: i * 0.3 }}
         />
       ))}
     </motion.div>

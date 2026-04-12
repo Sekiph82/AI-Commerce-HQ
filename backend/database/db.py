@@ -16,6 +16,22 @@ SessionFactory = async_sessionmaker(ENGINE, class_=AsyncSession, expire_on_commi
 async def init_db():
     async with ENGINE.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    # Apply any missing column migrations (SQLite doesn't support ALTER TABLE IF NOT EXISTS)
+    await _run_migrations()
+
+
+async def _run_migrations():
+    """Add new columns to existing tables without dropping data."""
+    migrations = [
+        "ALTER TABLE products ADD COLUMN etsy_title TEXT",
+        "ALTER TABLE products ADD COLUMN etsy_description TEXT",
+    ]
+    async with ENGINE.begin() as conn:
+        for sql in migrations:
+            try:
+                await conn.execute(__import__("sqlalchemy").text(sql))
+            except Exception:
+                pass  # Column already exists — that's fine
 
 
 async def get_session() -> AsyncSession:

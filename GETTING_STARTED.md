@@ -1,65 +1,77 @@
 # AI Commerce HQ — Getting Started
 
-## Prerequisites
+## For End Users
 
-Install these before anything else:
+1. Run the installer: **`AI Commerce HQ_1.0.0_x64-setup.exe`**
+2. Follow the one-click installer (no admin rights required)
+3. A desktop icon is created automatically
+4. Double-click the icon to launch
+5. The app opens a setup wizard on first run — enter your API keys
+6. The office opens and agents start working
+
+**You never need to open a terminal.**
+
+---
+
+## For Developers — Building the Installer
+
+### Prerequisites
 
 | Tool | Version | Download |
 |------|---------|----------|
+| Python | 3.11–3.14 | https://python.org |
 | Node.js | 18+ | https://nodejs.org |
-| Python | 3.11+ | https://python.org |
 | Rust + Cargo | latest | https://rustup.rs |
 
-## Quick Start (Development)
+### Build the installer (one command)
 
-### Option A — One command
-```powershell
-.\scripts\dev.ps1
+```
+python build-installer.py
 ```
 
-### Option B — Manual (two terminals)
+This script:
+1. Installs Python dependencies
+2. Compiles the Python backend to a standalone `backend.exe` (via PyInstaller, ~2–4 min)
+3. Installs Node.js dependencies
+4. Runs `tauri build` to produce the NSIS installer
 
-**Terminal 1 — Python backend:**
-```powershell
-cd backend
-pip install -r requirements.txt
-python main.py
+Output: `src-tauri/target/release/bundle/nsis/AI Commerce HQ_1.0.0_x64-setup.exe`
+
+### Development mode (live reload, no installer)
+
+```
+python dev.py
 ```
 
-**Terminal 2 — Tauri frontend:**
-```powershell
-npm install
-npm run tauri:dev
-```
+Or double-click `start-dev.bat` on Windows.
 
-## First Run
+This starts the Python backend and Tauri dev server in one step.
 
-1. App opens with splash screen
+---
+
+## First Run (End User Experience)
+
+1. Splash screen appears while the app initializes
 2. Setup wizard asks for API keys:
    - **OpenAI API key** — required for AI reasoning and image generation
-   - **Etsy API key + Shop ID** — for real Etsy listings (optional, simulated without)
-   - **Printify token** — for POD fulfillment (optional, simulated without)
+   - **Etsy API key + Shop ID** — for real Etsy listings (simulated without)
+   - **Printify token** — for POD fulfillment (simulated without)
    - **Gemini key** — optional enhancement
 3. Office view opens automatically
 4. Agents begin working within ~30 seconds
 
-> **Demo mode:** The app works without any API keys using realistic simulated data.
+> **Demo mode:** The app runs without any API keys using realistic simulated data.
 
-## Build Windows Installer
+---
 
-```powershell
-.\scripts\build-windows.ps1
-```
-
-Output: `src-tauri/target/release/bundle/msi/AI Commerce HQ_1.0.0_x64_en-US.msi`
-
-## Architecture
+## How It Works
 
 ```
 AI Commerce HQ
-├── Tauri (Rust)          — Desktop shell, launches Python backend
-├── React + TypeScript    — Office UI, real-time visualization
-├── Python + FastAPI      — AI orchestration runtime
+├── Tauri (Rust)          — Desktop shell, launches backend.exe automatically
+├── React + TypeScript    — Office UI, real-time agent visualization
+├── backend.exe           — Self-contained Python runtime (no Python needed by user)
+│   ├── FastAPI           — REST API + WebSocket server on localhost:8765
 │   ├── GMO               — Global Master Orchestrator
 │   ├── ETMO              — Etsy Master Orchestrator
 │   ├── Sub-Agents        — TRD, DES, QA, POD, LST (dynamically created)
@@ -67,46 +79,46 @@ AI Commerce HQ
 └── WebSocket             — Real-time agent → UI updates
 ```
 
-## How It Works
+**Pipeline (runs every 60 seconds):**
 
-1. App launches → Tauri starts Python backend automatically
-2. GMO initializes → Creates ETMO
-3. ETMO creates sub-agent team (visible as desks appearing in Etsy room)
-4. Every ~60 seconds, ETMO runs a pipeline cycle:
-   - TRD discovers a trending niche
-   - DES generates a product design (DALL-E if key present)
-   - QA validates the design
-   - POD configures Printify product
-   - LST creates Etsy draft listing
-   - Approval packet created → notification appears
-5. You open the Approval Desk and review the product
-6. You click **Publish** (goes live) / **Keep Draft** / **Discard**
+1. TRD discovers a trending niche via AI research
+2. DES generates a product design concept (DALL-E 3 if key present)
+3. QA validates for copyright safety and Etsy compliance
+4. POD configures print-on-demand product on Printify
+5. LST creates SEO-optimized Etsy draft listing
+6. Approval packet assembled → notification badge appears on Approval Desk
+7. **You** open the Approval Desk, review, and click Approve / Reject
 
-## Rooms
+---
+
+## Office Rooms
 
 | Room | Status | Description |
 |------|--------|-------------|
-| GMO | Active | Global control center |
-| Etsy | Active | Full pipeline running |
-| Amazon | Dormant | Future release |
-| eBay | Dormant | Future release |
-| TikTok | Dormant | Future release |
-| Instagram/Facebook | Dormant | Future release |
+| Global Master Orchestrator | Active | System command center |
+| Etsy Operations | **Active** | Full AI pipeline running |
+| Amazon Operations | Dormant | Future release |
+| eBay Operations | Dormant | Future release |
+| TikTok Shop | Dormant | Future release |
+| Instagram / Facebook | Dormant | Future release |
 | Website Store | Dormant | Future release |
+
+---
 
 ## Data Storage
 
-All data stored locally at:
+All data is stored locally — nothing leaves your machine without your approval.
+
 ```
-%APPDATA%\ai-commerce-hq\hq.db    (Windows)
-~/.ai-commerce-hq/hq.db           (fallback)
+%APPDATA%\ai-commerce-hq\hq.db   (Windows)
+~/.ai-commerce-hq/hq.db          (fallback)
 ```
+
+---
 
 ## Known Limitations (v1)
 
 - Only Etsy platform is operational
-- Image generation requires OpenAI API key (DALL-E 3)
-- Etsy OAuth flow not implemented — uses API key auth only
-- Printify integration is simulated without token
-- No email notifications
-- Windows only (macOS/Linux support requires minor config changes)
+- DALL-E image generation requires an OpenAI API key
+- Etsy OAuth not implemented — uses API key auth only
+- No push notifications outside the app

@@ -10,24 +10,25 @@ import { ApprovalPanel } from '../ApprovalDesk/ApprovalPanel'
 import { SystemStatus } from '../StatusPanel/SystemStatus'
 import { SettingsPanel } from '../Settings/SettingsPanel'
 
-const DORMANT_ROOMS = [
-  { id: 'amazon', name: 'Amazon Operations', color: '#1a3a2a', icon: '📦' },
-  { id: 'ebay', name: 'eBay Operations', color: '#1a1f3a', icon: '🔨' },
-  { id: 'tiktok', name: 'TikTok Shop', color: '#2d1a3a', icon: '🎵' },
-  { id: 'instagram', name: 'Instagram/Facebook', color: '#3a1a2d', icon: '📸' },
-  { id: 'website', name: 'Website Store', color: '#1a2a3a', icon: '🌐' },
-]
-
 export function OfficeLayout() {
   useWebSocket()
 
-  const { backendReady, toggleStatusPanel, toggleSettingsPanel, products, fetchInitialState } = useAppStore()
+  const { backendReady, toggleStatusPanel, toggleSettingsPanel, config, products, fetchInitialState } = useAppStore()
 
   useEffect(() => {
     if (backendReady) {
       fetchInitialState()
     }
   }, [backendReady, fetchInitialState])
+
+  // Auto-open settings once on first launch if no API keys are saved yet
+  useEffect(() => {
+    const hasKeys = config?.openaiKey || config?.etsyApiKey
+    if (!hasKeys) {
+      const timer = setTimeout(() => toggleSettingsPanel(), 1200)
+      return () => clearTimeout(timer)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const pendingApprovals = Object.values(products).filter(
     (p) => p.state === 'AWAITING_HUMAN_DECISION'
@@ -55,7 +56,8 @@ export function OfficeLayout() {
             <motion.div
               animate={{ scale: [1, 1.1, 1] }}
               transition={{ duration: 1.5, repeat: Infinity }}
-              className="flex items-center gap-1.5 bg-orange-700/30 border border-orange-600/50 text-orange-300 text-xs px-3 py-1 rounded-full"
+              className="flex items-center gap-1.5 bg-orange-700/30 border border-orange-600/50 text-orange-300 text-xs px-3 py-1 rounded-full cursor-pointer"
+              onClick={() => useAppStore.getState().openApproval('etsy')}
             >
               <Bell size={12} />
               {pendingApprovals} awaiting approval
@@ -80,39 +82,28 @@ export function OfficeLayout() {
       </div>
 
       {/* Office floor */}
-      <div className="flex-1 overflow-auto p-4 office-grid">
+      <div className="flex-1 overflow-auto p-3">
         <div className="h-full min-h-0">
-          {/* Label */}
+          {/* Floor plan label */}
           <div className="text-xs text-gray-600 font-mono mb-3 flex items-center gap-2">
             <div className="h-px flex-1 bg-gray-800" />
             AI COMMERCE HQ — FLOOR PLAN
             <div className="h-px flex-1 bg-gray-800" />
           </div>
 
-          {/* Room grid */}
-          <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1.6fr', gridTemplateRows: 'auto auto auto' }}>
-            {/* GMO Room - top left */}
+          {/* Top row: GMO (350px) + Etsy (1fr) — same height via CSS grid stretch */}
+          <div className="grid gap-3" style={{ gridTemplateColumns: '350px 1fr' }}>
             <GMORoom />
+            <EtsyRoom />
+          </div>
 
-            {/* Etsy Room - top right, spans 2 rows */}
-            <div style={{ gridRow: '1 / 3' }}>
-              <EtsyRoom />
-            </div>
-
-            {/* Amazon Room - middle left */}
-            <DormantRoom id="amazon" name="Amazon Operations" color="#1a3a2a" icon="📦" />
-
-            {/* Bottom row - 3 columns across full width */}
-            <div style={{ gridColumn: '1 / 3' }} className="grid grid-cols-3 gap-4">
-              <DormantRoom id="ebay" name="eBay Operations" color="#1a1f3a" icon="🔨" />
-              <DormantRoom id="tiktok" name="TikTok Shop" color="#2d1a3a" icon="🎵" />
-              <DormantRoom id="instagram" name="Instagram / Facebook" color="#3a1a2d" icon="📸" />
-            </div>
-
-            {/* Website - full width bottom */}
-            <div style={{ gridColumn: '1 / 3' }}>
-              <DormantRoom id="website" name="Website Store" color="#1a2a3a" icon="🌐" />
-            </div>
+          {/* Bottom row: all 5 dormant rooms at equal width (~226px each) */}
+          <div className="grid grid-cols-5 gap-3 mt-3">
+            <DormantRoom id="amazon"    name="Amazon Operations"     color="#1a3a2a" icon="📦" />
+            <DormantRoom id="ebay"      name="eBay Operations"       color="#1a1f3a" icon="🔨" />
+            <DormantRoom id="tiktok"    name="TikTok Shop"           color="#2d1a3a" icon="🎵" />
+            <DormantRoom id="instagram" name="Instagram / Facebook"  color="#3a1a2d" icon="📸" />
+            <DormantRoom id="website"   name="Website Store"         color="#1a2a3a" icon="🌐" />
           </div>
         </div>
       </div>

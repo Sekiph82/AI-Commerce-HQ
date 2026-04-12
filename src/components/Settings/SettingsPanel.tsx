@@ -12,20 +12,28 @@ export function SettingsPanel() {
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({})
   const [saved, setSaved] = useState(false)
 
+  const isFirstTime = !config?.openaiKey && !config?.etsyApiKey
+
   const toggle = (k: string) => setShowKeys((s) => ({ ...s, [k]: !s[k] }))
 
   const save = async () => {
+    const toSave = { ...form, setupComplete: true }
     try {
       await fetch('http://localhost:8765/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(toSave),
       })
     } catch {}
-    localStorage.setItem('hq_config', JSON.stringify(form))
-    setConfig(form)
+    localStorage.setItem('hq_config', JSON.stringify(toSave))
+    setConfig(toSave)
     setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    // Close automatically after saving on first-time setup
+    if (isFirstTime) {
+      setTimeout(() => toggleSettingsPanel(), 1000)
+    } else {
+      setTimeout(() => setSaved(false), 2000)
+    }
   }
 
   const fields = [
@@ -55,14 +63,23 @@ export function SettingsPanel() {
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
           >
             <div className="p-4 border-b border-gray-700 flex items-center justify-between">
-              <h2 className="font-bold text-white">Settings</h2>
+              <div>
+                <h2 className="font-bold text-white">
+                  {isFirstTime ? 'Welcome — Add Your API Keys' : 'Settings'}
+                </h2>
+                {isFirstTime && (
+                  <p className="text-xs text-blue-400 mt-0.5">
+                    The app works without keys in demo mode. Add them to go live.
+                  </p>
+                )}
+              </div>
               <button onClick={toggleSettingsPanel} className="p-1 rounded hover:bg-gray-700 text-gray-400">
                 <X size={16} />
               </button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <p className="text-xs text-gray-400">API credentials are stored locally on your device.</p>
+              <p className="text-xs text-gray-400">Credentials are stored locally on your device only.</p>
               {fields.map((f) => (
                 <div key={f.key}>
                   <label className="block text-sm text-gray-300 mb-1">{f.label}</label>

@@ -38,6 +38,8 @@ class ProductRecord(Base):
     recommendation = Column(Text, nullable=True)
     tags = Column(JSON, nullable=True)
     price = Column(Float, nullable=True)
+    etsy_title = Column(String, nullable=True)
+    etsy_description = Column(Text, nullable=True)
     created_at = Column(Float, nullable=False)
     updated_at = Column(Float, nullable=False)
 

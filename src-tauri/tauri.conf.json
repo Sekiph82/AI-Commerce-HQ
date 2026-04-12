@@ -36,7 +36,7 @@
     "bundle": {
       "active": true,
       "category": "Business",
-      "copyright": "",
+      "copyright": "AI Commerce HQ",
       "deb": { "depends": [] },
       "externalBin": [],
       "icon": [
@@ -47,7 +47,7 @@
         "icons/icon.ico"
       ],
       "identifier": "com.aicommercehq.app",
-      "longDescription": "Autonomous AI E-Commerce Headquarters",
+      "longDescription": "Autonomous AI E-Commerce Headquarters — run AI agents that research niches, design products, and prepare listings for Etsy and beyond.",
       "macOS": {
         "entitlements": null,
         "exceptionDomain": "",
@@ -55,14 +55,19 @@
         "providerShortName": null,
         "signingIdentity": null
       },
-      "resources": ["backend/**"],
-      "shortDescription": "AI Commerce HQ",
-      "targets": "all",
+      "resources": ["binaries/backend.exe"],
+      "shortDescription": "Autonomous AI E-Commerce Operations",
+      "targets": ["nsis"],
       "windows": {
         "certificateThumbprint": null,
         "digestAlgorithm": "sha256",
         "timestampUrl": "",
-        "wix": {}
+        "nsis": {
+          "installMode": "currentUser",
+          "languages": ["English"],
+          "displayLanguageSelector": false
+        },
+        "wix": null
       }
     },
     "security": {

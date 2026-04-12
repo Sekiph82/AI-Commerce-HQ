@@ -1,5 +1,8 @@
 import { create } from 'zustand'
-import type { Agent, Product, Room, SystemEvent, AppConfig, AppScreen, Desk } from '../types'
+import type {
+  Agent, Product, Room, SystemEvent, AppConfig, AppScreen,
+  Desk, TalkingTableEntry, WalkEvent,
+} from '../types'
 
 const API_BASE = 'http://localhost:8765'
 
@@ -10,6 +13,8 @@ interface AppState {
   products: Record<string, Product>
   rooms: Record<string, Room>
   events: SystemEvent[]
+  talkingTable: TalkingTableEntry[]
+  walkingAgents: Record<string, WalkEvent>
   selectedRoom: string | null
   approvalPanelOpen: boolean
   approvalPlatform: string | null
@@ -24,6 +29,8 @@ interface AppState {
   updateProduct: (product: Product) => void
   addProduct: (product: Product) => void
   addEvent: (event: SystemEvent) => void
+  addTalkingMessage: (entry: TalkingTableEntry) => void
+  setWalk: (walk: WalkEvent) => void
   setSelectedRoom: (roomId: string | null) => void
   openApproval: (platform: string) => void
   closeApproval: () => void
@@ -47,7 +54,6 @@ const initialRooms: Record<string, Room> = {
     agents: [],
     desks: [
       { id: 'desk-gmo-main', nameplate: 'Global Master Orchestrator', agentLabel: 'GMO', roomId: 'gmo', position: { x: 50, y: 40 } },
-      { id: 'desk-gmo-approval', nameplate: 'HQ Approval Desk', agentLabel: 'APPROVAL', roomId: 'gmo', isApprovalDesk: true, position: { x: 50, y: 70 } },
     ],
     color: '#1f3a6e',
   },
@@ -58,69 +64,44 @@ const initialRooms: Record<string, Room> = {
     isActive: true,
     agents: [],
     desks: [
-      { id: 'desk-etmo-main', nameplate: 'Etsy Master Orchestrator', agentLabel: 'ETMO', roomId: 'etsy', position: { x: 20, y: 30 } },
-      { id: 'desk-etsy-approval', nameplate: 'Etsy Approval Desk', agentLabel: 'APPROVAL', roomId: 'etsy', isApprovalDesk: true, position: { x: 20, y: 70 } },
+      { id: 'desk-etmo-main', nameplate: 'Etsy Master Orchestrator', agentLabel: 'ETMO', roomId: 'etsy', position: { x: 50, y: 50 } },
+      { id: 'desk-etsy-approval', nameplate: 'Etsy Approval Desk', agentLabel: 'APPROVAL', roomId: 'etsy', isApprovalDesk: true, position: { x: 85, y: 50 } },
+      { id: 'desk-etsy-trd',  nameplate: 'Trend Research Agent',            agentLabel: 'TRD',   roomId: 'etsy', position: { x: 45, y: 12 } },
+      { id: 'desk-etsy-des1', nameplate: 'Primary Design Agent',            agentLabel: 'DES-1', roomId: 'etsy', position: { x: 10, y: 12 } },
+      { id: 'desk-etsy-des2', nameplate: 'Variant Design Agent',            agentLabel: 'DES-2', roomId: 'etsy', position: { x: 10, y: 88 } },
+      { id: 'desk-etsy-prd1', nameplate: 'Primary Product Agent',           agentLabel: 'PRD-1', roomId: 'etsy', position: { x: 27, y: 12 } },
+      { id: 'desk-etsy-prd2', nameplate: 'Alternative Product Agent',       agentLabel: 'PRD-2', roomId: 'etsy', position: { x: 27, y: 88 } },
+      { id: 'desk-etsy-qa',   nameplate: 'Quality Assurance Agent',         agentLabel: 'QA',    roomId: 'etsy', position: { x: 80, y: 12 } },
+      { id: 'desk-etsy-pod',  nameplate: 'POD Fulfillment / Mockup Agent',  agentLabel: 'POD',   roomId: 'etsy', position: { x: 62, y: 88 } },
+      { id: 'desk-etsy-lst',  nameplate: 'Listing / SEO / Copyright Agent', agentLabel: 'LST',   roomId: 'etsy', position: { x: 80, y: 88 } },
+      { id: 'desk-etsy-vid',  nameplate: 'Video Agent',                     agentLabel: 'VID',   roomId: 'etsy', position: { x: 45, y: 88 } },
+      { id: 'desk-etsy-per',  nameplate: 'Personalization Agent',           agentLabel: 'PER',   roomId: 'etsy', position: { x: 62, y: 12 } },
     ],
     color: '#4f2d1e',
   },
   amazon: {
-    id: 'amazon',
-    name: 'Amazon Operations',
-    platform: 'amazon',
-    isActive: false,
-    agents: [],
-    desks: [
-      { id: 'desk-amazon-main', nameplate: 'Amazon Master Orchestrator', agentLabel: 'AMO', roomId: 'amazon', position: { x: 50, y: 40 } },
-      { id: 'desk-amazon-approval', nameplate: 'Amazon Approval Desk', agentLabel: 'APPROVAL', roomId: 'amazon', isApprovalDesk: true, position: { x: 50, y: 70 } },
-    ],
+    id: 'amazon', name: 'Amazon Operations', platform: 'amazon', isActive: false, agents: [],
+    desks: [{ id: 'desk-amazon-main', nameplate: 'Amazon MO', agentLabel: 'AMO', roomId: 'amazon', position: { x: 50, y: 40 } }],
     color: '#1a3a2a',
   },
   ebay: {
-    id: 'ebay',
-    name: 'eBay Operations',
-    platform: 'ebay',
-    isActive: false,
-    agents: [],
-    desks: [
-      { id: 'desk-ebay-main', nameplate: 'eBay Master Orchestrator', agentLabel: 'EBMO', roomId: 'ebay', position: { x: 50, y: 40 } },
-      { id: 'desk-ebay-approval', nameplate: 'eBay Approval Desk', agentLabel: 'APPROVAL', roomId: 'ebay', isApprovalDesk: true, position: { x: 50, y: 70 } },
-    ],
+    id: 'ebay', name: 'eBay Operations', platform: 'ebay', isActive: false, agents: [],
+    desks: [{ id: 'desk-ebay-main', nameplate: 'eBay MO', agentLabel: 'EBMO', roomId: 'ebay', position: { x: 50, y: 40 } }],
     color: '#1a1f3a',
   },
   tiktok: {
-    id: 'tiktok',
-    name: 'TikTok Shop Operations',
-    platform: 'tiktok',
-    isActive: false,
-    agents: [],
-    desks: [
-      { id: 'desk-tiktok-main', nameplate: 'TikTok Master Orchestrator', agentLabel: 'TTMO', roomId: 'tiktok', position: { x: 50, y: 40 } },
-      { id: 'desk-tiktok-approval', nameplate: 'TikTok Approval Desk', agentLabel: 'APPROVAL', roomId: 'tiktok', isApprovalDesk: true, position: { x: 50, y: 70 } },
-    ],
+    id: 'tiktok', name: 'TikTok Shop Operations', platform: 'tiktok', isActive: false, agents: [],
+    desks: [{ id: 'desk-tiktok-main', nameplate: 'TikTok MO', agentLabel: 'TTMO', roomId: 'tiktok', position: { x: 50, y: 40 } }],
     color: '#2d1a3a',
   },
   instagram: {
-    id: 'instagram',
-    name: 'Instagram/Facebook Shop',
-    platform: 'instagram',
-    isActive: false,
-    agents: [],
-    desks: [
-      { id: 'desk-ig-main', nameplate: 'Instagram Master Orchestrator', agentLabel: 'IGMO', roomId: 'instagram', position: { x: 50, y: 40 } },
-      { id: 'desk-ig-approval', nameplate: 'IG Approval Desk', agentLabel: 'APPROVAL', roomId: 'instagram', isApprovalDesk: true, position: { x: 50, y: 70 } },
-    ],
+    id: 'instagram', name: 'Instagram/Facebook Shop', platform: 'instagram', isActive: false, agents: [],
+    desks: [{ id: 'desk-ig-main', nameplate: 'Instagram MO', agentLabel: 'IGMO', roomId: 'instagram', position: { x: 50, y: 40 } }],
     color: '#3a1a2d',
   },
   website: {
-    id: 'website',
-    name: 'Website Store',
-    platform: 'website',
-    isActive: false,
-    agents: [],
-    desks: [
-      { id: 'desk-web-main', nameplate: 'Website Master Orchestrator', agentLabel: 'WSMO', roomId: 'website', position: { x: 50, y: 40 } },
-      { id: 'desk-web-approval', nameplate: 'Web Approval Desk', agentLabel: 'APPROVAL', roomId: 'website', isApprovalDesk: true, position: { x: 50, y: 70 } },
-    ],
+    id: 'website', name: 'Website Store', platform: 'website', isActive: false, agents: [],
+    desks: [{ id: 'desk-web-main', nameplate: 'Website MO', agentLabel: 'WSMO', roomId: 'website', position: { x: 50, y: 40 } }],
     color: '#1a2a3a',
   },
 }
@@ -132,6 +113,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   products: {},
   rooms: initialRooms,
   events: [],
+  talkingTable: [],
+  walkingAgents: {},
   selectedRoom: null,
   approvalPanelOpen: false,
   approvalPlatform: null,
@@ -177,6 +160,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       events: [event, ...state.events].slice(0, 100),
     })),
 
+  addTalkingMessage: (entry) =>
+    set((state) => ({
+      talkingTable: [entry, ...state.talkingTable].slice(0, 30),
+    })),
+
+  setWalk: (walk) => {
+    set((state) => ({
+      walkingAgents: { ...state.walkingAgents, [walk.agentLabel]: walk },
+    }))
+    // Auto-clear after the walk duration + buffer
+    setTimeout(() => {
+      set((state) => {
+        const { [walk.agentLabel]: _removed, ...rest } = state.walkingAgents
+        return { walkingAgents: rest }
+      })
+    }, walk.durationMs + 600)
+  },
+
   setSelectedRoom: (roomId) => set({ selectedRoom: roomId }),
   openApproval: (platform) => set({ approvalPanelOpen: true, approvalPlatform: platform }),
   closeApproval: () => set({ approvalPanelOpen: false, approvalPlatform: null }),
@@ -203,8 +204,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         fetch(`${API_BASE}/api/agents`),
         fetch(`${API_BASE}/api/products`),
       ])
-      const agents: Agent[] = await agentsRes.json()
-      const products: Product[] = await productsRes.json()
+
+      const agentsData = agentsRes.ok ? await agentsRes.json() : []
+      const productsData = productsRes.ok ? await productsRes.json() : []
+
+      const agents: Agent[] = Array.isArray(agentsData) ? agentsData : []
+      const products: Product[] = Array.isArray(productsData) ? productsData : []
 
       const agentMap: Record<string, Agent> = {}
       agents.forEach((a) => (agentMap[a.id] = a))
@@ -219,16 +224,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   approveProduct: async (productId) => {
+    // Step 1: Mark as approved
     await fetch(`${API_BASE}/api/products/${productId}/approve`, { method: 'POST' })
-    const { products } = get()
-    if (products[productId]) {
-      set((state) => ({
-        products: {
-          ...state.products,
-          [productId]: { ...state.products[productId], state: 'APPROVED_FOR_PUBLISH' },
-        },
-      }))
-    }
+    // Step 2: Create Etsy draft (the ONLY path to Etsy)
+    await fetch(`${API_BASE}/api/products/${productId}/publish`, { method: 'POST' })
+    // State updates come via WebSocket broadcasts from the server
   },
 
   rejectProduct: async (productId) => {

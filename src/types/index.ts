@@ -61,6 +61,8 @@ export interface Product {
   fulfillmentMethod?: string
   risks?: string[]
   recommendation?: string
+  etsyTitle?: string
+  etsyDescription?: string
   createdAt: number
   updatedAt: number
   tags?: string[]
@@ -75,6 +77,18 @@ export interface SystemEvent {
   timestamp: number
 }
 
+export interface TalkingTableEntry {
+  message: string
+  timestamp: number
+}
+
+export interface WalkEvent {
+  agentLabel: string
+  fromDesk: string
+  toDesk: string
+  durationMs: number
+}
+
 export interface AppConfig {
   openaiKey: string
   etsyApiKey: string
@@ -87,6 +101,14 @@ export interface AppConfig {
 export type AppScreen = 'splash' | 'wizard' | 'office'
 
 export interface WSMessage {
-  type: 'agent_update' | 'product_update' | 'system_event' | 'desk_created' | 'heartbeat'
+  type:
+    | 'agent_update'
+    | 'product_update'
+    | 'system_event'
+    | 'desk_created'
+    | 'heartbeat'
+    | 'talking_table'
+    | 'agent_walk'
+    | 'agent_arrival'
   data: Record<string, unknown>
 }

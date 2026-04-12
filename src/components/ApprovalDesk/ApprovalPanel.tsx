@@ -36,7 +36,7 @@ export function ApprovalPanel() {
 
           {/* Panel */}
           <motion.div
-            className="fixed right-0 top-0 bottom-0 w-96 bg-office-floor border-l border-gray-700 z-50 flex flex-col"
+            className="fixed right-0 top-0 bottom-0 w-[480px] bg-office-floor border-l border-gray-700 z-50 flex flex-col"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
@@ -50,7 +50,7 @@ export function ApprovalPanel() {
                 </h2>
                 <p className="text-xs text-gray-400 mt-0.5">
                   {awaitingCount > 0
-                    ? `${awaitingCount} product${awaitingCount > 1 ? 's' : ''} awaiting your decision`
+                    ? `${awaitingCount} product${awaitingCount > 1 ? 's' : ''} awaiting decision — approve to create Etsy draft`
                     : 'No products awaiting approval'}
                 </p>
               </div>
@@ -88,7 +88,7 @@ export function ApprovalPanel() {
             {/* Footer */}
             <div className="p-4 border-t border-gray-700 bg-gray-900/50">
               <p className="text-xs text-gray-500 text-center">
-                Publishing requires your explicit approval. No automatic publishing.
+                Etsy draft is created only after your explicit approval. Nothing goes to Etsy automatically.
               </p>
             </div>
           </motion.div>

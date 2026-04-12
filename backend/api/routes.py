@@ -156,8 +156,8 @@ async def archive_product(product_id: str):
 @router.post("/products/{product_id}/publish")
 async def publish_product(product_id: str):
     """
-    Explicit publish endpoint — only callable after user approval.
-    This is the ONLY path to making a listing live.
+    Explicit publish endpoint — only callable AFTER user approval.
+    This creates the Etsy DRAFT listing. This is the ONLY path to Etsy.
     """
     async with SessionFactory() as session:
         result = await session.execute(
@@ -170,11 +170,38 @@ async def publish_product(product_id: str):
             raise HTTPException(status_code=400, detail="Product must be approved before publishing")
 
         config = await get_config()
-        from tools.etsy_tool import publish_listing
-        # Would call publish_listing here with the listing ID
-        # For now just mark as a separate state
+        etsy_key = config.get("etsyApiKey", "")
+        etsy_shop = config.get("etsyShopId", "")
+
+        from tools.etsy_tool import create_draft_listing
+        draft_result = await create_draft_listing(
+            api_key=etsy_key,
+            shop_id=etsy_shop,
+            title=product.etsy_title or product.name,
+            description=product.etsy_description or f"Beautiful {product.niche} art print.",
+            price=product.price or 24.99,
+            tags=product.tags or [],
+        )
+
+        product.state = "ETSY_DRAFT_CREATED"
+        product.updated_at = time.time()
         await session.commit()
-        return {"status": "published"}
+
+        from api.websocket import broadcast_all
+        await broadcast_all({
+            "type": "product_update",
+            "data": _product_to_dict(product),
+        })
+        await broadcast_all({
+            "type": "talking_table",
+            "data": {
+                "message": f"Etsy draft listing created: {product.name}",
+                "timestamp": int(time.time() * 1000),
+            },
+        })
+
+        listing_id = draft_result.get("listing_id", "simulated") if draft_result else "simulated"
+        return {"status": "draft_created", "listing_id": listing_id}
 
 
 def _product_to_dict(p: ProductRecord) -> dict:
@@ -194,6 +221,8 @@ def _product_to_dict(p: ProductRecord) -> dict:
         "recommendation": p.recommendation,
         "tags": p.tags or [],
         "price": p.price,
+        "etsyTitle": p.etsy_title,
+        "etsyDescription": p.etsy_description,
         "createdAt": int(p.created_at * 1000),
         "updatedAt": int(p.updated_at * 1000),
     }
