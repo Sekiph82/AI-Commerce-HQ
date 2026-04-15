@@ -13,7 +13,9 @@ export type ProductState =
   | 'REJECTED'
   | 'ARCHIVED'
 
-export type Platform = 'etsy' | 'amazon' | 'ebay' | 'tiktok' | 'instagram' | 'website'
+export type Platform = 'etsy' | 'amazon' | 'ebay' | 'tiktok' | 'instagram' | 'website' | 'fiverr' | 'youtube' | 'trading'
+
+export type ZoneId = 'etsy' | 'fiverr' | 'trading' | 'youtube' | 'tiktok'
 
 export interface Agent {
   id: string
@@ -98,7 +100,7 @@ export interface AppConfig {
   setupComplete: boolean
 }
 
-export type AppScreen = 'splash' | 'wizard' | 'office'
+export type AppScreen = 'splash' | 'wizard' | 'office' | 'game'
 
 export interface WSMessage {
   type:
@@ -110,5 +112,144 @@ export interface WSMessage {
     | 'talking_table'
     | 'agent_walk'
     | 'agent_arrival'
+    | 'trading_signal'
   data: Record<string, unknown>
+}
+
+export interface TradingSignal {
+  id: string
+  symbol: string
+  currentPrice: number
+  change24h: number
+  trend: string
+  action: 'BUY' | 'SELL' | 'HOLD'
+  entryPrice: number
+  stopLoss: number
+  takeProfit: number
+  riskPercent: number
+  riskReward: number
+  confidence: number
+  reasoning: string
+  timeHorizon: string
+  performance: {
+    totalTrades: number
+    winningTrades: number
+    winRate: number
+    totalPnl: number
+    currentEquity: number
+    drawdown: number
+  }
+  timestamp: number
+}
+
+export interface FiverrService {
+  id: string
+  name: string
+  category: string
+  description: string
+  platform: 'fiverr'
+  state: string
+  startingPrice: number
+  earningsPerOrder: number
+  profileTitle: string
+  profileOverview: string
+  pricingTiers: Record<string, {
+    price: number
+    delivery_days: number
+    revisions: number
+    description: string
+    includes: string[]
+  }>
+  faqs: Array<{ question: string; answer: string }>
+  workflow: Record<string, unknown>
+  createdAt: number
+  updatedAt: number
+}
+
+export interface YouTubeVideo {
+  id: string
+  title: string
+  niche: string
+  hook: string
+  hookAngle: string
+  targetKeywords: string[]
+  estimatedViews: string
+  competition: string
+  videoLength: string
+  platform: 'youtube'
+  state: string
+  script: string
+  editorPlan: Record<string, unknown>
+  thumbnailPrompt: string
+  thumbnailText: string
+  thumbnailUrl: string
+  estimatedEarnings: number
+  createdAt: number
+  updatedAt: number
+}
+
+export interface Achievement {
+  id: string
+  title: string
+  description: string
+  icon: string
+  unlockedAt?: number
+  requirement: {
+    type: 'products' | 'revenue' | 'level' | 'agents' | 'platforms'
+    value: number
+  }
+}
+
+export interface AgentUpgrade {
+  agentId: string
+  type: 'speed' | 'efficiency' | 'quality'
+  level: number
+  cost: number
+}
+
+export interface AchievementsState {
+  achievements: Achievement[]
+  unlockedIds: string[]
+  addAchievement: (achievement: Achievement) => void
+  unlockAchievement: (id: string) => void
+}
+
+export interface UpgradesState {
+  upgrades: Record<string, AgentUpgrade[]>
+  purchaseUpgrade: (agentId: string, type: 'speed' | 'efficiency' | 'quality') => void
+  getUpgradeMultiplier: (agentId: string, type: 'speed' | 'efficiency' | 'quality') => number
+}
+
+export interface ZoneData {
+  id: ZoneId
+  name: string
+  icon: string
+  color: string
+  glowColor: string
+  position: [number, number, number]
+  isActive: boolean
+  income: number
+  agents: Agent[]
+}
+
+export interface GameMission {
+  id: string
+  title: string
+  description: string
+  zoneId: ZoneId
+  status: 'pending' | 'active' | 'completed' | 'failed'
+  reward: number
+  assignedAgent?: string
+}
+
+export interface RevenueData {
+  total: number
+  etsy: number
+  fiverr: number
+  trading: number
+  youtube: number
+  tiktok: number
+  level: number
+  xp: number
+  xpToNext: number
 }

@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type {
   Agent, Product, Room, SystemEvent, AppConfig, AppScreen,
-  Desk, TalkingTableEntry, WalkEvent,
+  Desk, TalkingTableEntry, WalkEvent, RevenueData,
 } from '../types'
 
 const API_BASE = 'http://localhost:8765'
@@ -20,7 +20,10 @@ interface AppState {
   approvalPlatform: string | null
   statusPanelOpen: boolean
   settingsPanelOpen: boolean
+  tradingPanelOpen: boolean
+  achievementsPanelOpen: boolean
   backendReady: boolean
+  revenue: RevenueData
 
   setScreen: (screen: AppScreen) => void
   setConfig: (config: AppConfig) => void
@@ -36,6 +39,9 @@ interface AppState {
   closeApproval: () => void
   toggleStatusPanel: () => void
   toggleSettingsPanel: () => void
+  openTradingPanel: () => void
+  closeTradingPanel: () => void
+  toggleAchievementsPanel: () => void
   setBackendReady: (ready: boolean) => void
   addDesk: (desk: Desk, roomId: string) => void
   initRooms: () => void
@@ -120,7 +126,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   approvalPlatform: null,
   statusPanelOpen: false,
   settingsPanelOpen: false,
+  tradingPanelOpen: false,
+  achievementsPanelOpen: false,
   backendReady: false,
+  revenue: { total: 0, etsy: 0, fiverr: 0, trading: 0, youtube: 0, tiktok: 0, level: 1, xp: 0, xpToNext: 100 },
 
   setScreen: (screen) => set({ screen }),
   setConfig: (config) => set({ config }),
@@ -146,9 +155,28 @@ export const useAppStore = create<AppState>((set, get) => ({
     })),
 
   updateProduct: (product) =>
-    set((state) => ({
-      products: { ...state.products, [product.id]: product },
-    })),
+    set((state) => {
+      const newProducts = { ...state.products, [product.id]: product }
+      let etsyTotal = 0
+      Object.values(newProducts).forEach(p => {
+        if (p.platform === 'etsy' && p.state === 'ETSY_DRAFT_CREATED') {
+          etsyTotal += (p.price || 25) * (p.estimatedMargin || 35) / 100
+        }
+      })
+      const newTotal = etsyTotal + state.revenue.fiverr + state.revenue.trading + state.revenue.youtube + state.revenue.tiktok
+      const newLevel = Math.floor(newTotal / 100) + 1
+      const newXp = newTotal % 100
+      return {
+        products: newProducts,
+        revenue: {
+          ...state.revenue,
+          total: newTotal,
+          etsy: etsyTotal,
+          level: newLevel,
+          xp: newXp,
+        },
+      }
+    }),
 
   addProduct: (product) =>
     set((state) => ({
@@ -183,6 +211,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   closeApproval: () => set({ approvalPanelOpen: false, approvalPlatform: null }),
   toggleStatusPanel: () => set((s) => ({ statusPanelOpen: !s.statusPanelOpen })),
   toggleSettingsPanel: () => set((s) => ({ settingsPanelOpen: !s.settingsPanelOpen })),
+  openTradingPanel: () => set({ tradingPanelOpen: true }),
+  closeTradingPanel: () => set({ tradingPanelOpen: false }),
+  toggleAchievementsPanel: () => set((s) => ({ achievementsPanelOpen: !s.achievementsPanelOpen })),
   setBackendReady: (ready) => set({ backendReady: ready }),
 
   addDesk: (desk, roomId) =>

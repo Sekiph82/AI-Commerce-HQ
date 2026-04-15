@@ -62,6 +62,11 @@ export function useWebSocket() {
         }
         case 'heartbeat':
           break
+        case 'trading_signal': {
+          const signal = msg.data
+          console.log('[WS] Trading signal:', signal)
+          break
+        }
       }
     },
     [updateAgent, addAgent, updateProduct, addEvent, addDesk, setBackendReady, addTalkingMessage, setWalk]

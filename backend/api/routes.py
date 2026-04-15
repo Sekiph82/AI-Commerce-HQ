@@ -1,4 +1,5 @@
 """FastAPI REST routes."""
+
 import time
 from typing import Any
 from fastapi import APIRouter, HTTPException
@@ -13,12 +14,14 @@ router = APIRouter(prefix="/api")
 
 # --- Health ---
 
+
 @router.get("/health")
 async def health():
     return {"status": "ok", "timestamp": time.time()}
 
 
 # --- Config ---
+
 
 class ConfigPayload(BaseModel):
     openaiKey: str = ""
@@ -53,6 +56,7 @@ async def save_config_route(payload: ConfigPayload):
 
 # --- Agents ---
 
+
 @router.get("/agents")
 async def list_agents():
     async with SessionFactory() as session:
@@ -76,12 +80,36 @@ async def list_agents():
 
 # --- Products ---
 
+
 @router.get("/products")
-async def list_products():
+async def list_products(platform: str | None = None):
     async with SessionFactory() as session:
-        result = await session.execute(select(ProductRecord))
+        if platform:
+            result = await session.execute(
+                select(ProductRecord).where(ProductRecord.platform == platform)
+            )
+        else:
+            result = await session.execute(select(ProductRecord))
         products = result.scalars().all()
         return [_product_to_dict(p) for p in products]
+
+
+@router.get("/platforms")
+async def list_platforms():
+    async with SessionFactory() as session:
+        result = await session.execute(select(ProductRecord.platform))
+        platforms = set(row[0] for row in result.all())
+        return list(platforms)
+
+
+@router.get("/trading-signals")
+async def list_trading_signals():
+    async with SessionFactory() as session:
+        result = await session.execute(
+            select(ProductRecord).where(ProductRecord.platform == "trading")
+        )
+        signals = result.scalars().all()
+        return [_product_to_dict(s) for s in signals]
 
 
 @router.post("/products/{product_id}/approve")
@@ -102,10 +130,13 @@ async def approve_product(product_id: str):
 
         # Broadcast the update
         from api.websocket import broadcast_all
-        await broadcast_all({
-            "type": "product_update",
-            "data": _product_to_dict(product),
-        })
+
+        await broadcast_all(
+            {
+                "type": "product_update",
+                "data": _product_to_dict(product),
+            }
+        )
 
         # NOTE: Do NOT auto-publish. Publishing is a separate explicit action.
         return {"status": "approved", "product_id": product_id}
@@ -125,10 +156,13 @@ async def reject_product(product_id: str):
         await session.commit()
 
         from api.websocket import broadcast_all
-        await broadcast_all({
-            "type": "product_update",
-            "data": _product_to_dict(product),
-        })
+
+        await broadcast_all(
+            {
+                "type": "product_update",
+                "data": _product_to_dict(product),
+            }
+        )
         return {"status": "rejected"}
 
 
@@ -146,10 +180,13 @@ async def archive_product(product_id: str):
         await session.commit()
 
         from api.websocket import broadcast_all
-        await broadcast_all({
-            "type": "product_update",
-            "data": _product_to_dict(product),
-        })
+
+        await broadcast_all(
+            {
+                "type": "product_update",
+                "data": _product_to_dict(product),
+            }
+        )
         return {"status": "archived"}
 
 
@@ -167,18 +204,22 @@ async def publish_product(product_id: str):
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
         if product.state != "APPROVED_FOR_PUBLISH":
-            raise HTTPException(status_code=400, detail="Product must be approved before publishing")
+            raise HTTPException(
+                status_code=400, detail="Product must be approved before publishing"
+            )
 
         config = await get_config()
         etsy_key = config.get("etsyApiKey", "")
         etsy_shop = config.get("etsyShopId", "")
 
         from tools.etsy_tool import create_draft_listing
+
         draft_result = await create_draft_listing(
             api_key=etsy_key,
             shop_id=etsy_shop,
             title=product.etsy_title or product.name,
-            description=product.etsy_description or f"Beautiful {product.niche} art print.",
+            description=product.etsy_description
+            or f"Beautiful {product.niche} art print.",
             price=product.price or 24.99,
             tags=product.tags or [],
         )
@@ -188,19 +229,26 @@ async def publish_product(product_id: str):
         await session.commit()
 
         from api.websocket import broadcast_all
-        await broadcast_all({
-            "type": "product_update",
-            "data": _product_to_dict(product),
-        })
-        await broadcast_all({
-            "type": "talking_table",
-            "data": {
-                "message": f"Etsy draft listing created: {product.name}",
-                "timestamp": int(time.time() * 1000),
-            },
-        })
 
-        listing_id = draft_result.get("listing_id", "simulated") if draft_result else "simulated"
+        await broadcast_all(
+            {
+                "type": "product_update",
+                "data": _product_to_dict(product),
+            }
+        )
+        await broadcast_all(
+            {
+                "type": "talking_table",
+                "data": {
+                    "message": f"Etsy draft listing created: {product.name}",
+                    "timestamp": int(time.time() * 1000),
+                },
+            }
+        )
+
+        listing_id = (
+            draft_result.get("listing_id", "simulated") if draft_result else "simulated"
+        )
         return {"status": "draft_created", "listing_id": listing_id}
 
 

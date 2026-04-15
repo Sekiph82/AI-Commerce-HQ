@@ -5,6 +5,7 @@ import { invoke } from '@tauri-apps/api/tauri'
 import { SplashScreen } from './components/Splash/SplashScreen'
 import { SetupWizard } from './components/Wizard/SetupWizard'
 import { OfficeLayout } from './components/Office/OfficeLayout'
+import { GameWorld } from './components/Game/GameWorld'
 import { useAppStore } from './store/useAppStore'
 import type { AppConfig } from './types'
 
@@ -13,6 +14,7 @@ export default function App() {
   const [splashDone, setSplashDone] = useState(false)
   const [backendCrashed, setBackendCrashed] = useState(false)
   const [recovering, setRecovering] = useState(false)
+  const [viewMode, setViewMode] = useState<'office' | 'game'>('game')
 
   // Pre-load config from localStorage so the wizard/office decision is instant
   useEffect(() => {
@@ -59,7 +61,7 @@ export default function App() {
   const handleSplashComplete = () => {
     setSplashDone(true)
     setBackendReady(true)
-    setScreen('office')
+    setScreen('game')
   }
 
   const handleRecover = async () => {
@@ -98,10 +100,43 @@ export default function App() {
   }
 
   return (
-    <div className="w-screen h-screen overflow-hidden bg-office-bg text-white">
+    <div className="w-screen h-screen overflow-hidden bg-[#030308] text-white">
       <AnimatePresence mode="wait">
         {!splashDone && (
           <SplashScreen key="splash" onComplete={handleSplashComplete} />
+        )}
+        {splashDone && screen === 'game' && (
+          <div key="game" className="w-full h-full flex flex-col">
+            <div className="flex items-center gap-3 px-4 py-2 bg-[#0a0a14] border-b border-gray-800 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center text-xs">
+                  HQ
+                </div>
+                <span className="font-bold text-white text-sm">AI Commerce HQ</span>
+              </div>
+              <div className="flex items-center gap-1 ml-4">
+                <button
+                  onClick={() => setViewMode('game')}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                    viewMode === 'game' ? 'bg-blue-600/30 text-blue-300' : 'text-gray-500 hover:text-gray-300'
+                  }`}
+                >
+                  3D Game View
+                </button>
+                <button
+                  onClick={() => setViewMode('office')}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                    viewMode === 'office' ? 'bg-blue-600/30 text-blue-300' : 'text-gray-500 hover:text-gray-300'
+                  }`}
+                >
+                  Office View
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 min-h-0">
+              {viewMode === 'game' ? <GameWorld /> : <OfficeLayout />}
+            </div>
+          </div>
         )}
         {splashDone && screen === 'office' && (
           <OfficeLayout key="office" />
