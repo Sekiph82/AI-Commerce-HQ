@@ -106,7 +106,7 @@ Implementation and verification entries will be appended chronologically. Failur
   - `H!veAI/docs/H!veAI/codex-logs/M02_UI_SHELL_AND_DESIGN_SYSTEM_CODEX_LOG.md`
   - `H!veAI/docs/H!veAI/codex-logs/M03_RUNTIME_ARCHITECTURE_REFACTOR_CODEX_LOG.md`
   - `H!veAI/docs/H!veAI/codex-logs/M04_SQLITE_AND_VERSIONED_MIGRATIONS_CODEX_LOG.md`
-- A final log-only verification commit will record the remote-visible M04 log itself.
+- Final log-only verification commit: `60c283d` (`docs(H!veAI): verify M04 publication`) pushed successfully; this M04 log is now remote-visible.
 - M05 was not started; no M05 prompt was created by Codex.
 
 PHASE STATUS: COMPLETE
