@@ -2,6 +2,20 @@
 
 You are working on the local H!veAI development folder previously used for M00 and M01.
 
+## Mandatory product naming rule
+
+The canonical product name is **H!veAI**.
+
+The second character is an exclamation mark.
+
+Use exactly `H!veAI` in all user-visible product copy, documentation headings, reports, UI labels, milestone summaries, and future branding.
+
+Do not use `HiveAI`, `Hive AI`, or `HIVEAI` as the display/product name.
+
+Technical slugs that cannot safely contain `!` may remain lowercase `hiveai`, including branch names, package identifiers, module names, and repository directories such as `docs/hiveai/`.
+
+During this milestone, identify any newly-created M00/M01 user-visible text that incorrectly names the product and correct it to `H!veAI` without renaming safe technical slugs unnecessarily.
+
 Do NOT start M02.
 
 This is a blocking integrity milestone whose purpose is to reconcile the local repository with the intended official GitHub repository:
@@ -164,7 +178,8 @@ This milestone ends after:
 - user changes are preserved,
 - AI/Codex logging directories are installed in the authoritative branch,
 - remote configuration is safe,
-- no incorrect remote has received a push.
+- no incorrect remote has received a push,
+- user-visible product naming uses `H!veAI` consistently.
 
 ## 8. Validation
 
@@ -177,6 +192,8 @@ Before finishing run and log:
 `git worktree list`
 
 If a new authoritative checkout was created, run the safe baseline build/test commands appropriate to that repository and record results.
+
+Also search the active H!veAI documentation and UI-facing text for incorrect display-name variants such as `HiveAI` and `Hive AI`, and correct them to `H!veAI` where they represent the product name.
 
 ## 9. Commit
 
@@ -201,15 +218,16 @@ Return exactly:
 5. CHOSEN RESOLUTION PATH
 6. PRESERVED M00/M01 COMMITS
 7. PRESERVED USER CHANGES
-8. AUTHORITATIVE H!VEAI LOCAL PATH
+8. AUTHORITATIVE H!veAI LOCAL PATH
 9. AUTHORITATIVE BRANCH
 10. REMOTE CONFIGURATION
 11. CODEX LOG PATH
 12. FILES TRANSFERRED OR CREATED
-13. BUILD / TEST RESULT
-14. PUSH STATUS
-15. BLOCKERS
-16. EXACT NEXT MILESTONE
+13. PRODUCT NAMING CORRECTIONS
+14. BUILD / TEST RESULT
+15. PUSH STATUS
+16. BLOCKERS
+17. EXACT NEXT MILESTONE
 
 The next milestone is M02 — H!veAI UI Shell and Design System.
 
