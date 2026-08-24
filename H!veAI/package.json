@@ -1,0 +1,9 @@
+{
+  "name": "hiveai",
+  "version": "0.0.0",
+  "private": true,
+  "description": "H!veAI dedicated application workspace",
+  "scripts": {
+    "verify:m00": "node -e \"const fs=require('fs'); const required=['README.md','AGENTS.md','CONSTITUTION.md','ARCHITECTURE.md','TASKS.md','CODEX_ROADMAP.md','docs/H!veAI/README.md','docs/H!veAI/prompts/M00_FRESH_START_CORRECT_ROOT_PROMPT.md','docs/H!veAI/audits/M00_FRESH_START_AUDIT.md','docs/H!veAI/codex-logs/M00_FRESH_START_CODEX_LOG.md','docs/migration/M00_AI_COMMERCE_HQ_BASELINE.md','docs/migration/M00_REUSE_MATRIX.md','docs/migration/M00_HIVEAI_APPLICATION_PLAN.md']; const missing=required.filter(p=>!fs.existsSync(p)); if(missing.length){console.error('Missing '+missing.join(', ')); process.exit(1)}; console.log('H!veAI M00 structure verified')\""
+  }
+}

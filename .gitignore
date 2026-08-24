@@ -1,7 +1,10 @@
 node_modules/
 dist/
+.next/
 .env
 *.env.local
+next-env.d.ts
+tsconfig.tsbuildinfo
 src-tauri/target/
 src-tauri/binaries/backend*
 build/
