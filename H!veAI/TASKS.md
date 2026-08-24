@@ -87,6 +87,13 @@ M06 COMPLETE. H!veAI has a registry-resolved, read-only local Git engine with a 
 
 M07 implementation is remediated by the M07.01 strict quality gate. Historical M07 completion claims are not evidence of acceptance; M07.01 owns the current gate result.
 
+## M07.02 Strict remediation continuation
+- [ ] independent strict-audit regression closure
+- [ ] manual-QA production launcher closure
+- [ ] user-confirmed visual and in-app restart acceptance
+
+M07.02 remains IN PROGRESS. The M07.02A launcher hotfix is implemented and locally smoke-tested; final milestone acceptance remains subject to the active strict gate.
+
 ## M08 Task Source Discovery
 - [ ] discover TASKS/tasks/PLANS/PROGRESS/ROADMAP/CLAUDE/AGENTS/handoffs
 - [ ] custom paths
