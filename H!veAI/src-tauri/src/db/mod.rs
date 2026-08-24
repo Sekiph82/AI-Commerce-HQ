@@ -151,5 +151,22 @@ mod tests {
         assert_eq!(status.schema_version, 5);
         assert!(status.foreign_keys_enabled);
         assert!(directory.path().join("hiveai.db").exists());
+        assert_eq!(status.journal_mode, "WAL");
+        assert_eq!(status.busy_timeout_ms, 5000);
+        assert_eq!(status.synchronous, "NORMAL");
+        assert_eq!(status.integrity_status, "ok");
+    }
+
+    #[test]
+    fn migration_backup_is_atomic_and_bounded_to_database_path() {
+        let directory = tempdir().expect("temp directory");
+        let database = directory.path().join("hiveai.db");
+        std::fs::write(&database, b"fixture").expect("fixture database");
+        create_migration_backup(&database).expect("backup should publish");
+        assert_eq!(
+            std::fs::read(database.with_extension("db.pre-migration.bak")).unwrap(),
+            b"fixture"
+        );
+        assert!(!database.with_extension("db.pre-migration.tmp").exists());
     }
 }
