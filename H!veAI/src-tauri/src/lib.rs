@@ -6,6 +6,7 @@ mod db;
 mod git_engine;
 mod projects;
 mod runtime;
+mod time;
 mod watcher;
 use db::{DatabaseState, DatabaseStatus};
 use projects::{

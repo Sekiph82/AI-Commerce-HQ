@@ -291,6 +291,20 @@ CREATE TABLE project_snapshots (
 CREATE INDEX idx_project_snapshots_project_time ON project_snapshots(project_id, evidence_generated_at);
 "#;
 
+const TIMESTAMP_STANDARDIZATION: &str = r#"
+UPDATE projects SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(created_at AS INTEGER), 'unixepoch') WHERE created_at GLOB '[0-9]*' AND created_at NOT GLOB '*[^0-9]*';
+UPDATE projects SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(updated_at AS INTEGER), 'unixepoch') WHERE updated_at GLOB '[0-9]*' AND updated_at NOT GLOB '*[^0-9]*';
+UPDATE projects SET registered_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(registered_at AS INTEGER), 'unixepoch') WHERE registered_at GLOB '[0-9]*' AND registered_at NOT GLOB '*[^0-9]*';
+UPDATE projects SET last_validated_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(last_validated_at AS INTEGER), 'unixepoch') WHERE last_validated_at GLOB '[0-9]*' AND last_validated_at NOT GLOB '*[^0-9]*';
+UPDATE projects SET archived_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(archived_at AS INTEGER), 'unixepoch') WHERE archived_at GLOB '[0-9]*' AND archived_at NOT GLOB '*[^0-9]*';
+UPDATE repositories SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(created_at AS INTEGER), 'unixepoch') WHERE created_at GLOB '[0-9]*' AND created_at NOT GLOB '*[^0-9]*';
+UPDATE repositories SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(updated_at AS INTEGER), 'unixepoch') WHERE updated_at GLOB '[0-9]*' AND updated_at NOT GLOB '*[^0-9]*';
+UPDATE git_snapshots SET captured_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(captured_at AS INTEGER), 'unixepoch') WHERE captured_at GLOB '[0-9]*' AND captured_at NOT GLOB '*[^0-9]*';
+UPDATE project_snapshots SET last_filesystem_event_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(last_filesystem_event_at AS INTEGER), 'unixepoch') WHERE last_filesystem_event_at GLOB '[0-9]*' AND last_filesystem_event_at NOT GLOB '*[^0-9]*';
+UPDATE project_snapshots SET last_watcher_refresh_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(last_watcher_refresh_at AS INTEGER), 'unixepoch') WHERE last_watcher_refresh_at GLOB '[0-9]*' AND last_watcher_refresh_at NOT GLOB '*[^0-9]*';
+UPDATE project_snapshots SET evidence_generated_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(evidence_generated_at AS INTEGER), 'unixepoch') WHERE evidence_generated_at GLOB '[0-9]*' AND evidence_generated_at NOT GLOB '*[^0-9]*';
+"#;
+
 pub fn migrations() -> &'static [Migration] {
     &[
         Migration {
@@ -312,6 +326,11 @@ pub fn migrations() -> &'static [Migration] {
             version: 4,
             name: "project_snapshot_fields",
             sql: PROJECT_SNAPSHOT_FIELDS,
+        },
+        Migration {
+            version: 5,
+            name: "timestamp_standardization",
+            sql: TIMESTAMP_STANDARDIZATION,
         },
     ]
 }
@@ -411,8 +430,8 @@ mod tests {
     fn fresh_database_reaches_latest_version() {
         let (_directory, mut connection) = temp_connection();
         let report = apply_migrations(&mut connection, migrations()).expect("migrations apply");
-        assert_eq!(report.schema_version, 4);
-        assert_eq!(report.migration_count, 4);
+        assert_eq!(report.schema_version, 5);
+        assert_eq!(report.migration_count, 5);
         assert_eq!(report.last_migration_status, "APPLIED");
     }
 
@@ -422,7 +441,7 @@ mod tests {
         apply_migrations(&mut connection, migrations()).expect("first apply");
         let report = apply_migrations(&mut connection, migrations()).expect("second apply");
         assert_eq!(report.last_migration_status, "ALREADY_CURRENT");
-        assert_eq!(report.migration_count, 4);
+        assert_eq!(report.migration_count, 5);
     }
 
     #[test]
@@ -442,7 +461,8 @@ mod tests {
                 (1, "initial_hiveai_schema".to_string()),
                 (2, "initial_lookup_indexes".to_string()),
                 (3, "project_registry_fields".to_string()),
-                (4, "project_snapshot_fields".to_string())
+                (4, "project_snapshot_fields".to_string()),
+                (5, "timestamp_standardization".to_string())
             ]
         );
     }

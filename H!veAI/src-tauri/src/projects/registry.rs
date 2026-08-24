@@ -200,23 +200,45 @@ pub fn repair_project_path(
         &validated.normalized_path,
         Some(&request.project_id),
     )?;
-    let existing_remote: Option<String> = connection
+    let existing_identity: Option<(i64, Option<String>, Option<String>)> = connection
         .query_row(
-            "SELECT remote_url FROM repositories WHERE project_id = ?1",
+            "SELECT is_git_repository, remote_url, head_sha FROM repositories WHERE project_id = ?1",
             [&request.project_id],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .optional()
-        .map_err(db_error)?
-        .flatten();
-    if let (Some(old), Some(new)) = (
-        existing_remote.as_deref(),
-        git.preferred_remote_url.as_deref(),
-    ) {
-        if old != new {
-            return Err(
-                "new path repository identity does not match the registered project".to_string(),
-            );
+        .map_err(db_error)?;
+    if let Some((old_is_git, old_remote, old_head)) = existing_identity {
+        if (old_is_git == 1) != git.is_git_repository {
+            return Err("repository type changed while repairing project path".to_string());
+        }
+        if git.is_git_repository {
+            match (old_remote.as_deref(), git.preferred_remote_url.as_deref()) {
+                (Some(old), Some(new)) if old != new => {
+                    return Err(
+                        "new path repository remote identity does not match the registered project"
+                            .to_string(),
+                    );
+                }
+                (None, Some(_)) | (Some(_), None) => {
+                    return Err("repository remote identity is ambiguous; repair requires an explicit matching remote".to_string());
+                }
+                _ => {}
+            }
+            if let (Some(old), Some(new)) = (old_head.as_deref(), git.head_sha.as_deref()) {
+                if old != new {
+                    return Err(
+                        "new path repository HEAD identity does not match the registered project"
+                            .to_string(),
+                    );
+                }
+            }
+            if old_remote.is_none()
+                && git.preferred_remote_url.is_none()
+                && old_head != git.head_sha
+            {
+                return Err("repository identity is ambiguous; matching remote or HEAD evidence is required".to_string());
+            }
         }
     }
     let now = timestamp();
@@ -328,10 +350,7 @@ fn non_empty(value: String) -> Option<String> {
     (!value.is_empty()).then_some(value)
 }
 fn timestamp() -> String {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_secs().to_string())
-        .unwrap_or_else(|_| "0".to_string())
+    crate::time::utc_timestamp()
 }
 fn db_error(error: rusqlite::Error) -> String {
     format!("project registry database error: {error}")

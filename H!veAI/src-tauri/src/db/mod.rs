@@ -16,6 +16,10 @@ pub struct DatabaseStatus {
     pub database_path: String,
     pub foreign_keys_enabled: bool,
     pub last_migration_status: String,
+    pub journal_mode: String,
+    pub busy_timeout_ms: i64,
+    pub synchronous: String,
+    pub integrity_status: String,
 }
 
 #[derive(Debug, Clone)]
@@ -31,6 +35,34 @@ impl DatabaseState {
         let database_path = app_data_dir.join("hiveai.db");
         let mut connection = Connection::open(&database_path)
             .map_err(|error| format!("open H!veAI database: {error}"))?;
+        configure_connection(&connection)?;
+        let integrity: String = connection
+            .query_row("PRAGMA quick_check(1)", [], |row| row.get(0))
+            .map_err(|error| format!("check H!veAI database integrity: {error}"))?;
+        if integrity != "ok" {
+            return Err(format!(
+                "H!veAI database integrity check failed: {integrity}"
+            ));
+        }
+        let current_version = connection
+            .query_row(
+                "SELECT COALESCE(MAX(version), 0) FROM migrations",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0);
+        let latest_version = migrations::migrations()
+            .last()
+            .map(|migration| migration.version)
+            .unwrap_or(0);
+        if database_path
+            .metadata()
+            .map(|metadata| metadata.len() > 0)
+            .unwrap_or(false)
+            && current_version < latest_version
+        {
+            create_migration_backup(&database_path)?;
+        }
         let report = migrations::apply_migrations(&mut connection, migrations::migrations())
             .map_err(|error| format!("run H!veAI database migrations: {error}"))?;
         let foreign_keys_enabled = connection
@@ -38,7 +70,7 @@ impl DatabaseState {
             .map_err(|error| format!("inspect H!veAI database safety pragmas: {error}"))?
             == 1;
         Ok(Self {
-            status: status_from_report(report, foreign_keys_enabled),
+            status: status_from_report(report, foreign_keys_enabled, integrity),
             database_path,
         })
     }
@@ -50,14 +82,44 @@ impl DatabaseState {
     pub(crate) fn open_connection(&self) -> Result<Connection, String> {
         let connection = Connection::open(&self.database_path)
             .map_err(|error| format!("open H!veAI database connection: {error}"))?;
-        connection
-            .pragma_update(None, "foreign_keys", true)
-            .map_err(|error| format!("enable H!veAI database foreign keys: {error}"))?;
+        configure_connection(&connection)?;
         Ok(connection)
     }
 }
 
-fn status_from_report(report: MigrationReport, foreign_keys_enabled: bool) -> DatabaseStatus {
+fn configure_connection(connection: &Connection) -> Result<(), String> {
+    connection
+        .pragma_update(None, "foreign_keys", true)
+        .map_err(|e| format!("enable H!veAI database foreign keys: {e}"))?;
+    connection
+        .pragma_update(None, "journal_mode", "WAL")
+        .map_err(|e| format!("enable H!veAI database WAL mode: {e}"))?;
+    connection
+        .pragma_update(None, "busy_timeout", 5000i64)
+        .map_err(|e| format!("set H!veAI database busy timeout: {e}"))?;
+    connection
+        .pragma_update(None, "synchronous", "NORMAL")
+        .map_err(|e| format!("set H!veAI database synchronous mode: {e}"))?;
+    Ok(())
+}
+
+fn create_migration_backup(database_path: &PathBuf) -> Result<(), String> {
+    let backup = database_path.with_extension("db.pre-migration.bak");
+    let temporary = database_path.with_extension("db.pre-migration.tmp");
+    fs::copy(database_path, &temporary)
+        .map_err(|error| format!("backup H!veAI database before migration: {error}"))?;
+    if let Err(error) = fs::rename(&temporary, &backup) {
+        let _ = fs::remove_file(&temporary);
+        return Err(format!("publish H!veAI database migration backup: {error}"));
+    }
+    Ok(())
+}
+
+fn status_from_report(
+    report: MigrationReport,
+    foreign_keys_enabled: bool,
+    integrity_status: String,
+) -> DatabaseStatus {
     DatabaseStatus {
         initialized: true,
         engine: "SQLite".to_string(),
@@ -66,6 +128,10 @@ fn status_from_report(report: MigrationReport, foreign_keys_enabled: bool) -> Da
         database_path: "hiveai.db".to_string(),
         foreign_keys_enabled,
         last_migration_status: report.last_migration_status.to_string(),
+        journal_mode: "WAL".to_string(),
+        busy_timeout_ms: 5000,
+        synchronous: "NORMAL".to_string(),
+        integrity_status,
     }
 }
 
@@ -82,7 +148,7 @@ mod tests {
         let status = state.status();
         assert!(status.initialized);
         assert_eq!(status.database_path, "hiveai.db");
-        assert_eq!(status.schema_version, 4);
+        assert_eq!(status.schema_version, 5);
         assert!(status.foreign_keys_enabled);
         assert!(directory.path().join("hiveai.db").exists());
     }

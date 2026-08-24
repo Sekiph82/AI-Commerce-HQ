@@ -85,7 +85,7 @@ M06 COMPLETE. H!veAI has a registry-resolved, read-only local Git engine with a 
 - [x] trigger task/git refresh
 - [x] large-repo protections
 
-M07 COMPLETE. H!veAI has a registry-scoped Rust filesystem watcher with bounded event handling and project evidence snapshots. Do not begin M08 in this session.
+M07 implementation is remediated by the M07.01 strict quality gate. Historical M07 completion claims are not evidence of acceptance; M07.01 owns the current gate result.
 
 ## M08 Task Source Discovery
 - [ ] discover TASKS/tasks/PLANS/PROGRESS/ROADMAP/CLAUDE/AGENTS/handoffs

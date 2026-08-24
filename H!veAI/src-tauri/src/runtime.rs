@@ -1,7 +1,4 @@
-#![allow(dead_code)]
-
 use serde::Serialize;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -153,10 +150,7 @@ pub fn sanitize_error(error: &str) -> String {
 }
 
 fn unix_timestamp() -> String {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs().to_string())
-        .unwrap_or_else(|_| "unknown".into())
+    crate::time::utc_timestamp()
 }
 
 #[cfg(test)]

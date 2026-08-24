@@ -6,4 +6,8 @@ export type DatabaseStatus = {
   databasePath: string;
   foreignKeysEnabled: boolean;
   lastMigrationStatus: string;
+  journalMode: string;
+  busyTimeoutMs: number;
+  synchronous: string;
+  integrityStatus: string;
 };

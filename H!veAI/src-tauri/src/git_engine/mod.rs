@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime};
 use uuid::Uuid;
 
 pub use mutation::{mutation_status, MutationStatus};
@@ -152,8 +152,8 @@ pub fn snapshot(
 pub fn diff(database: &DatabaseState, request: GitDiffRequest) -> Result<GitDiff, String> {
     let (_, repository_path) = resolve_repository(database, &request.project_id)?;
     let args = match request.scope {
-        GitDiffScope::Staged => vec!["diff", "--no-ext-diff", "--binary", "--cached", "--"],
-        GitDiffScope::WorkingTree => vec!["diff", "--no-ext-diff", "--binary", "--"],
+        GitDiffScope::Staged => vec!["diff", "--no-ext-diff", "--cached", "--"],
+        GitDiffScope::WorkingTree => vec!["diff", "--no-ext-diff", "--"],
     };
     let output = run_git(&repository_path, &args)?;
     let raw = output_text(&output.stdout)?;
@@ -557,11 +557,7 @@ fn bound_text(text: &str, byte_limit: usize, line_limit: usize) -> (String, bool
     (output, truncated)
 }
 fn timestamp() -> String {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
-        .to_string()
+    crate::time::utc_timestamp()
 }
 
 #[cfg(test)]

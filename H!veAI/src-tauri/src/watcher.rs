@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TryRecvError, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime};
 use uuid::Uuid;
 
 const CHANNEL_CAPACITY: usize = 512;
@@ -475,7 +475,9 @@ fn refresh_project_snapshot(
             status.watcher_health = health.to_string();
             status.last_refresh_at = Some(now.clone());
             status.evidence_generated_at = Some(now);
-            status.rescan_required = false;
+            if explicit {
+                status.rescan_required = false;
+            }
         }
         if !available {
             state.watches.remove(project_id);
@@ -523,6 +525,14 @@ fn normalize_event(project_id: &str, root: &Path, event: &Event) -> Vec<Normaliz
             category_hint: EventCategory::Other,
         }];
     }
+    if kind == NormalizedEventKind::Rename
+        && event
+            .paths
+            .iter()
+            .any(|path| relative_path(path, root).is_none())
+    {
+        return Vec::new();
+    }
     let paths = event
         .paths
         .iter()
@@ -567,7 +577,7 @@ fn make_event(
     }
 }
 fn relative_path(path: &Path, root: &Path) -> Option<String> {
-    let relative = path.strip_prefix(root).unwrap_or(path);
+    let relative = path.strip_prefix(root).ok()?;
     let value = relative.to_string_lossy().replace('\\', "/");
     if value.is_empty() || value == "." || value.split('/').any(|part| part == "..") {
         None
@@ -624,11 +634,7 @@ fn mark_rescan(inner: &Arc<Mutex<Inner>>, project_id: &str) {
     }
 }
 fn timestamp() -> String {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
-        .to_string()
+    crate::time::utc_timestamp()
 }
 
 #[cfg(test)]
@@ -762,6 +768,61 @@ mod tests {
             );
         }
         assert!(state.lock().unwrap().statuses["p"].rescan_required);
+    }
+
+    #[test]
+    fn outside_root_paths_are_rejected_fail_closed() {
+        let root = PathBuf::from("C:\\repo");
+        assert_eq!(
+            relative_path(Path::new("C:\\repo\\src\\main.rs"), &root),
+            Some("src/main.rs".into())
+        );
+        assert_eq!(
+            relative_path(Path::new("C:\\repository-sibling\\secret.txt"), &root),
+            None
+        );
+        assert_eq!(
+            relative_path(Path::new("C:\\repo\\..\\secret.txt"), &root),
+            None
+        );
+        let rename = Event::new(EventKind::Modify(ModifyKind::Name(RenameMode::Both)))
+            .add_path(PathBuf::from("C:\\repo\\old.txt"))
+            .add_path(PathBuf::from("C:\\outside\\new.txt"));
+        assert!(normalize_event("p", &root, &rename).is_empty());
+    }
+
+    #[test]
+    fn ordinary_refresh_preserves_overflow_until_explicit_rescan() {
+        let app_data = tempdir().unwrap();
+        let project_root = tempdir().unwrap();
+        let database = DatabaseState::initialize(app_data.path().to_path_buf()).unwrap();
+        let project = crate::projects::register_project(
+            &database,
+            crate::projects::RegisterProjectRequest {
+                path: project_root.path().to_string_lossy().into_owned(),
+                name: Some("Rescan Fixture".into()),
+            },
+        )
+        .unwrap();
+        let state = inner();
+        state.lock().unwrap().statuses.insert(
+            project.id.clone(),
+            ProjectWatcherStatus {
+                project_id: project.id.clone(),
+                state: "DEGRADED".into(),
+                watcher_health: "OVERFLOW".into(),
+                available: true,
+                last_event_at: None,
+                last_refresh_at: None,
+                evidence_generated_at: None,
+                changed_path_count: 1,
+                rescan_required: true,
+            },
+        );
+        refresh_project_snapshot(&database, &state, &project.id, Vec::new(), false).unwrap();
+        assert!(state.lock().unwrap().statuses[&project.id].rescan_required);
+        refresh_project_snapshot(&database, &state, &project.id, Vec::new(), true).unwrap();
+        assert!(!state.lock().unwrap().statuses[&project.id].rescan_required);
     }
     #[test]
     fn git_and_task_categories_are_hints_only() {
