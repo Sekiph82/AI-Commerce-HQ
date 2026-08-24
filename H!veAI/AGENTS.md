@@ -69,13 +69,31 @@ The `.ico` derivative must preserve the source logo and should include standard 
 Launcher rules:
 
 - `H!veAI.lnk` must target the stable `H!veAI.exe` directly.
-- The shortcut must never target `.bat`, `cmd.exe`, PowerShell, npm, cargo, Vite, or an installer.
+- The shortcut must never target `.bat`, `cmd.exe`, PowerShell, npm, cargo, Vite, a browser, or an installer.
 - After each future milestone passes its required full verification, publish the new validated desktop executable to the same stable path using the repository's safe development-QA publication helper.
 - Publish through staging/validation so a failed build never overwrites the last known-good executable.
 - Keep the Desktop shortcut target and icon location stable across milestones.
 - If the canonical shortcut icon source PNG changes, regenerate the `.ico` derivative from that source before validating the shortcut.
 - Do not require setup or reinstallation during active development.
 - The final Windows installer, Program Files installation, Start Menu shortcut, uninstaller, and release packaging remain a final-release/M20 concern, not the active development launcher model.
+
+### Development Browser Preference
+
+H!veAI itself is a native Tauri desktop application and the Desktop `H!veAI.lnk` must continue to launch `H!veAI.exe` directly. Do not replace the native launcher with a browser shortcut.
+
+When H!veAI development, QA, documentation, preview tooling, or an explicit product action needs to open an external web URL or a local browser-viewable file, use **Google Chrome**, not Microsoft Edge.
+
+Canonical behavior:
+
+- Prefer an installed Google Chrome executable and launch it explicitly when browser choice is under H!veAI or development-helper control.
+- Do not intentionally launch Microsoft Edge for H!veAI-managed browser opens.
+- Do not change the user's global Windows default-browser setting merely to enforce this project preference.
+- If Google Chrome cannot be found, fail clearly or mark the browser-open check `UNVERIFIED`; do not silently fall back to Edge.
+- Browser-opening helpers must use argument-safe process invocation and must not construct shell command strings.
+- The native H!veAI desktop window may use the Windows WebView runtime required by Tauri internally; this must not create or expose a standalone Microsoft Edge browser window to the user.
+- Manual QA evidence that intentionally requires a browser should record that Google Chrome was the browser used.
+
+Preserve this Chrome preference across future milestones unless the user explicitly changes it.
 
 ## Mandatory Fetch-Before-Prompt Preflight
 
