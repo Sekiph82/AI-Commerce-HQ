@@ -2,7 +2,9 @@ use serde::Serialize;
 use tauri::{Emitter, Manager};
 use tauri_plugin_log::{Target, TargetKind};
 
+mod db;
 mod runtime;
+use db::{DatabaseState, DatabaseStatus};
 use runtime::{RuntimeStatus, RuntimeSupervisor};
 
 #[derive(Debug, Serialize)]
@@ -59,6 +61,12 @@ fn hiveai_runtime_status(supervisor: tauri::State<'_, RuntimeSupervisor>) -> Run
     supervisor.status()
 }
 
+#[tauri::command]
+fn hiveai_database_status(database: tauri::State<'_, DatabaseState>) -> DatabaseStatus {
+    log::info!("H!veAI database status requested.");
+    database.status()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -73,17 +81,25 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             hiveai_native_status,
             hiveai_request_restart,
-            hiveai_runtime_status
+            hiveai_runtime_status,
+            hiveai_database_status
         ])
         .setup(|app| {
             app.manage(RuntimeSupervisor::new());
             let app_data_dir = app
                 .path()
                 .app_data_dir()
-                .map(|path| path.to_string_lossy().into_owned())
-                .unwrap_or_else(|error| format!("unavailable: {error}"));
+                .map_err(|error| format!("resolve H!veAI app-data directory: {error}"))?;
+            let database = DatabaseState::initialize(app_data_dir.clone())
+                .map_err(|error| format!("H!veAI persistence initialization failed: {error}"))?;
+            let database_status = database.status();
+            app.manage(database);
 
-            log::info!("H!veAI Tauri 2 foundation started; app_data_dir={app_data_dir}");
+            log::info!(
+                "H!veAI Tauri 2 foundation started; app_data_dir={}; schema_version={}",
+                app_data_dir.to_string_lossy(),
+                database_status.schema_version
+            );
             Ok(())
         })
         .run(tauri::generate_context!())

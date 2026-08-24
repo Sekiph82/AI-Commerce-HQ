@@ -14,3 +14,8 @@ commands.allow = ["hiveai_request_restart"]
 identifier = "allow-runtime-status"
 description = "Allows the main window to read structured H!veAI runtime state."
 commands.allow = ["hiveai_runtime_status"]
+
+[[permission]]
+identifier = "allow-database-status"
+description = "Allows the main window to read non-sensitive H!veAI database status."
+commands.allow = ["hiveai_database_status"]

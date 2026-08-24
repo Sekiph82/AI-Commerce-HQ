@@ -49,14 +49,16 @@ M02 COMPLETE. Frontend, Rust/Tauri regression, bounded desktop smoke, and child-
 M03 COMPLETE. H!veAI uses a Rust-native runtime with no always-on Python sidecar. Do not begin M04 in this session.
 
 ## M04 SQLite + migrations
-- [ ] Versioned migration framework
-- [ ] projects/repositories/sources/snapshots
-- [ ] tasks/dependencies/events
-- [ ] prompts/versions
-- [ ] agent sessions/events/tool calls/permissions
-- [ ] audits/findings/test_runs/alerts/decisions
-- [ ] GitHub cache/settings
-- [ ] migration tests and failure recovery
+- [x] Versioned migration framework
+- [x] projects/repositories/sources/snapshots
+- [x] tasks/dependencies/events
+- [x] prompts/versions
+- [x] agent sessions/events/tool calls/permissions
+- [x] audits/findings/test_runs/alerts/decisions
+- [x] GitHub cache/settings
+- [x] migration tests and failure recovery
+
+M04 COMPLETE. H!veAI owns a Rust-native SQLite schema with versioned migrations, transactional failure recovery, and read-only database status IPC. Do not begin M05 in this session.
 
 ## M05 Project Registry
 - [ ] Add existing folder without mutation
