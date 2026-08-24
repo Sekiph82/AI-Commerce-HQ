@@ -9,6 +9,14 @@ html,body,#root{height:100%;min-height:0}
 @media(max-width:1100px){.command-layout{grid-template-columns:minmax(170px,.65fr) minmax(360px,1.7fr) minmax(190px,.8fr)}.command-kpis{grid-template-columns:repeat(3,1fr)}.main-command .page-frame{padding:14px}.main-command .content-scroll{overflow:auto}.app-shell{height:auto;min-height:100vh;overflow:auto}.sidebar{min-height:100vh}.command-center{min-height:760px}}@media(max-width:760px){.main-command .content-scroll{overflow:auto}.command-layout{grid-template-columns:1fr}.command-right-rail{grid-template-rows:auto}.command-cockpit{min-height:580px}.command-projects{max-height:300px}.command-kpis{grid-template-columns:repeat(2,1fr)}.topbar{padding:0 14px}.search-trigger{min-width:0}.search-trigger span{display:none}.page-frame{padding:20px 14px 50px}.brand-wordmark img{max-width:112px}}
 /* M07.05 bounded layout and live-surface corrections. */
 .sidebar{flex-basis:220px}
+.project-rail-row{justify-content:flex-start}
+.project-rail-row strong{color:var(--text-secondary);font-size:.68rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.project-rail-row-selected{background:#1b2140;border-color:#4d4680;box-shadow:inset 3px 0 0 var(--accent)}
+.project-rail-row-selected strong{color:var(--text)}
+.cockpit-title{gap:10px}
+.cockpit-title>div:first-child{flex:1;min-width:0}
+.cockpit-open{flex:0 0 auto;font-size:.58rem;padding:6px 8px}
+.workflow-empty{color:var(--text-muted);font-size:.62rem;padding:12px 0}
 .cockpit-inline-label{align-items:baseline;display:flex;gap:9px}
 .cockpit-inline-label .eyebrow{margin:0}
 .current-task,.workflow-mini,.compact-activity,.system-compact{overflow:hidden}

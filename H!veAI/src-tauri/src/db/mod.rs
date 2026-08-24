@@ -207,4 +207,64 @@ mod tests {
         );
         assert!(!database.with_extension("db.pre-migration.tmp").exists());
     }
+
+    #[test]
+    fn sqlite_committed_wal_data_survives_repeated_bounded_backup() {
+        let directory = tempdir().expect("temp directory");
+        let database = directory.path().join("hiveai.db");
+        let source = Connection::open(&database).expect("open fixture database");
+        configure_connection(&source).expect("configure fixture database");
+        source
+            .execute("CREATE TABLE fixture (value TEXT)", [])
+            .unwrap();
+        source
+            .execute("INSERT INTO fixture VALUES ('first')", [])
+            .unwrap();
+        create_migration_backup(&source, &database).unwrap();
+        source
+            .execute("INSERT INTO fixture VALUES ('second')", [])
+            .unwrap();
+        create_migration_backup(&source, &database).unwrap();
+        drop(source);
+        let backup = Connection::open(database.with_extension("db.pre-migration.bak")).unwrap();
+        let count: i64 = backup
+            .query_row("SELECT COUNT(*) FROM fixture", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 2);
+        assert!(database
+            .with_extension("db.pre-migration.bak.prev")
+            .exists());
+    }
+
+    #[test]
+    fn sqlite_healthy_quick_check_and_per_connection_safety_policy() {
+        let directory = tempdir().expect("temp directory");
+        let state = DatabaseState::initialize(directory.path().to_path_buf()).unwrap();
+        let connection = state.open_connection().unwrap();
+        assert_eq!(
+            connection
+                .query_row("PRAGMA foreign_keys", [], |row| row.get::<_, i64>(0))
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            connection
+                .query_row("PRAGMA journal_mode", [], |row| row.get::<_, String>(0))
+                .unwrap()
+                .to_ascii_lowercase(),
+            "wal"
+        );
+        assert_eq!(
+            connection
+                .query_row("PRAGMA busy_timeout", [], |row| row.get::<_, i64>(0))
+                .unwrap(),
+            5000
+        );
+        assert_eq!(
+            connection
+                .query_row("PRAGMA quick_check(1)", [], |row| row.get::<_, String>(0))
+                .unwrap(),
+            "ok"
+        );
+    }
 }

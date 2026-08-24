@@ -6,6 +6,11 @@ description = "Allows the main window to read minimal H!veAI native shell metada
 commands.allow = ["hiveai_native_status"]
 
 [[permission]]
+identifier = "allow-frontend-ready"
+description = "Allows the mounted H!veAI frontend to emit its bounded readiness signal."
+commands.allow = ["hiveai_frontend_ready"]
+
+[[permission]]
 identifier = "allow-request-restart"
 description = "Allows the main window to request an application restart through Tauri."
 commands.allow = ["hiveai_request_restart"]

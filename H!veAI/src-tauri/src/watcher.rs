@@ -720,6 +720,62 @@ mod tests {
     }
 
     #[test]
+    fn watcher_r01_r02_production_rescan_and_persistence_matrix() {
+        let database_dir = tempdir().unwrap();
+        let project_dir = tempdir().unwrap();
+        let database = DatabaseState::initialize(database_dir.path().to_path_buf()).unwrap();
+        let project = crate::projects::register_project(
+            &database,
+            crate::projects::RegisterProjectRequest {
+                path: project_dir.path().to_string_lossy().into_owned(),
+                name: Some("Watcher Matrix".into()),
+            },
+        )
+        .unwrap();
+        let state = inner();
+        state.lock().unwrap().statuses.insert(
+            project.id.clone(),
+            ProjectWatcherStatus {
+                project_id: project.id.clone(),
+                state: "WATCHING".into(),
+                watcher_health: "OVERFLOW".into(),
+                available: true,
+                last_event_at: None,
+                last_refresh_at: None,
+                evidence_generated_at: None,
+                changed_path_count: 1,
+                rescan_required: true,
+            },
+        );
+        let event = NormalizedEvent {
+            event_id: Uuid::new_v4().to_string(),
+            project_id: project.id.clone(),
+            kind: NormalizedEventKind::Modify,
+            relative_path: "src/lib.rs".into(),
+            old_relative_path: None,
+            timestamp: timestamp(),
+            source: "test".into(),
+            category_hint: EventCategory::Source,
+        };
+        refresh_project_snapshot(&database, &state, &project.id, vec![event], false).unwrap();
+        assert!(state.lock().unwrap().statuses[&project.id].rescan_required);
+        refresh_project_snapshot(&database, &state, &project.id, Vec::new(), false).unwrap();
+        assert!(state.lock().unwrap().statuses[&project.id].rescan_required);
+        refresh_project_snapshot(&database, &state, &project.id, Vec::new(), true).unwrap();
+        assert!(!state.lock().unwrap().statuses[&project.id].rescan_required);
+        let newest: i64 = database
+            .open_connection()
+            .unwrap()
+            .query_row(
+                "SELECT rescan_required FROM project_snapshots WHERE project_id = ?1 ORDER BY created_at DESC LIMIT 1",
+                [&project.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(newest, 0);
+    }
+
+    #[test]
     fn create_modify_remove_events_normalize() {
         let state = inner();
         let mut pending = HashMap::new();

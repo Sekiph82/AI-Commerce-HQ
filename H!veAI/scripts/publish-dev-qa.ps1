@@ -14,6 +14,10 @@ function Assert-Pe([string]$Path) {
     $bytes = [System.IO.File]::ReadAllBytes($Path)
     if ($bytes.Length -lt 2 -or [Text.Encoding]::ASCII.GetString($bytes, 0, 2) -ne 'MZ') { throw "Not a Windows PE executable: $Path" }
 }
+function Get-Sha256([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path)) { throw "Cannot hash missing file: $Path" }
+    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
+}
 function Assert-NoH1vePorts {
     $ports = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -in @(5173, 8765) })
     if ($ports.Count -gt 0) { throw 'H!veAI candidate opened a forbidden development port.' }
@@ -79,6 +83,8 @@ Assert-NoH1vePorts
 Assert-Shortcut $stable
 Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue
 Copy-Item -LiteralPath $Candidate -Destination $staged
+$priorStableHash = if (Test-Path -LiteralPath $stable) { Get-Sha256 $stable } else { $null }
+$candidateHash = Get-Sha256 $staged
 try {
     Assert-Pe $staged
     Invoke-ReadySmoke $staged
@@ -89,11 +95,21 @@ try {
         Assert-Pe $stable
         Assert-Shortcut $stable
         Invoke-ReadySmoke $stable
+        if ((Get-Sha256 $stable) -ne $candidateHash) { throw 'Stable executable hash does not match the smoke-tested candidate.' }
         Remove-Item -LiteralPath $rollback -Force -ErrorAction SilentlyContinue
     } catch {
-        Remove-Item -LiteralPath $stable -Force -ErrorAction SilentlyContinue
-        if (Test-Path -LiteralPath $rollback) { Move-Item -LiteralPath $rollback -Destination $stable }
-        throw
+        $postSwapFailure = $_
+        try {
+            if (Test-Path -LiteralPath $stable) { Remove-Item -LiteralPath $stable -Force }
+            if (Test-Path -LiteralPath $rollback) { Move-Item -LiteralPath $rollback -Destination $stable }
+            if ($priorStableHash) {
+                $restoredHash = Get-Sha256 $stable
+                if ($restoredHash -ne $priorStableHash) { throw "Rollback SHA-256 mismatch: expected $priorStableHash, got $restoredHash" }
+            }
+        } catch {
+            throw "H!veAI stable rollback could not be proven: $($_.Exception.Message)"
+        }
+        throw $postSwapFailure
     }
 } finally { Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue }
 Write-Output "Published smoke-tested Tauri production executable: $stable"

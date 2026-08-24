@@ -12,6 +12,8 @@ type RegistryContextValue = {
   projects: Project[];
   loading: boolean;
   error: string | null;
+  selectedProjectId: string | null;
+  selectProject: (projectId: string | null) => void;
   refresh: () => Promise<void>;
 };
 
@@ -61,6 +63,12 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
   const [records, setRecords] = React.useState<ProjectRecord[]>([]);
   const [loading, setLoading] = React.useState(live);
   const [error, setError] = React.useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = React.useState<
+    string | null
+  >(live ? null : (fixtureProjects[0]?.id ?? null));
+  const selectProject = React.useCallback((projectId: string | null) => {
+    setSelectedProjectId(projectId);
+  }, []);
   const refresh = React.useCallback(async () => {
     if (!live) {
       setLoading(false);
@@ -79,15 +87,27 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     void refresh();
   }, [refresh]);
+  React.useEffect(() => {
+    if (!live) return;
+    if (
+      selectedProjectId &&
+      records.some((record) => record.id === selectedProjectId)
+    ) {
+      return;
+    }
+    setSelectedProjectId(records[0]?.id ?? null);
+  }, [live, records, selectedProjectId]);
   const value = React.useMemo(
     () => ({
       records,
       projects: live ? records.map(toProject) : fixtureProjects,
       loading,
       error,
+      selectedProjectId,
+      selectProject,
       refresh,
     }),
-    [error, live, loading, records, refresh],
+    [error, live, loading, records, refresh, selectProject, selectedProjectId],
   );
   return (
     <RegistryContext.Provider value={value}>

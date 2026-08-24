@@ -96,9 +96,13 @@ export function CommandCenter() {
     projects: registryProjects,
     records,
     loading: registryLoading,
+    selectedProjectId,
+    selectProject,
   } = useProjectRegistry();
   const liveProjects = isTauriDesktop() ? registryProjects : projects;
-  const current = liveProjects[0];
+  const current =
+    liveProjects.find((project) => project.id === selectedProjectId) ??
+    liveProjects[0];
   return (
     <div className="command-center" aria-label="Command Center overview">
       {notice ? (
@@ -199,30 +203,18 @@ export function CommandCenter() {
           <div className="project-rail">
             {liveProjects.map((project) => (
               <button
-                className="project-rail-row"
+                className={
+                  project.id === selectedProjectId
+                    ? "project-rail-row project-rail-row-selected"
+                    : "project-rail-row"
+                }
                 type="button"
                 key={project.id}
-                onClick={() => navigate(`/projects/${project.id}`)}
+                aria-pressed={project.id === selectedProjectId}
+                title={project.name}
+                onClick={() => selectProject(project.id)}
               >
-                <span className="project-mark">{project.code}</span>
-                <span className="project-rail-copy">
-                  <strong>{project.name}</strong>
-                  <small>{project.phase}</small>
-                  <span className="rail-progress">
-                    <i style={{ width: `${project.progress}%` }} />
-                  </span>
-                </span>
-                <b>
-                  {isTauriDesktop()
-                    ? (records.find((record) => record.id === project.id)
-                        ?.status ?? "—")
-                    : `${project.progress}%`}
-                </b>
-                <span
-                  className={`rail-health health-${project.health.toLowerCase()}`}
-                >
-                  {project.health}
-                </span>
+                <strong>{project.name}</strong>
               </button>
             ))}
             {!registryLoading && !liveProjects.length ? (
@@ -252,6 +244,14 @@ export function CommandCenter() {
               <span>{current?.phase ?? "Registered project identity"}</span>
             </div>
             <StatusBadge state={current?.state ?? "WAITING_OWNER"} />
+            <button
+              className="secondary-button cockpit-open"
+              type="button"
+              disabled={!current}
+              onClick={() => current && navigate(`/projects/${current.id}`)}
+            >
+              Open cockpit <ArrowUpRight size={14} />
+            </button>
           </div>
           <div className="cockpit-tabs">
             <span className="tab-active">Cockpit</span>
@@ -263,7 +263,7 @@ export function CommandCenter() {
           <div className="cockpit-body">
             <div className="current-task">
               <div className="task-kicker">
-                CURRENT TASK <span>12 / 28</span>
+                CURRENT TASK <span>{isTauriDesktop() ? "—" : "12 / 28"}</span>
               </div>
               <h3>{current?.task ?? "No parsed task data yet"}</h3>
               <p>
@@ -272,11 +272,17 @@ export function CommandCenter() {
                   : "Intelligent form field suggestions based on user input and context analysis."}
               </p>
               <div className="task-meta">
-                <span>
-                  Priority: <b>High</b>
-                </span>
-                <span>Type: Feature</span>
-                <span>Est: 3h</span>
+                {isTauriDesktop() ? (
+                  <span>Task evidence unavailable</span>
+                ) : (
+                  <>
+                    <span>
+                      Priority: <b>High</b>
+                    </span>
+                    <span>Type: Feature</span>
+                    <span>Est: 3h</span>
+                  </>
+                )}
               </div>
               <div className="subtask-list">
                 {isTauriDesktop() ? (
@@ -305,30 +311,36 @@ export function CommandCenter() {
             </div>
             <div className="workflow-mini">
               <div className="task-kicker">WORKFLOW STATUS</div>
-              {[
-                "Prompt Preparation",
-                "Claude Code Execution",
-                "GPT Audit",
-                "Review & Approval",
-                "Deploy / Complete",
-              ].map((step, index) => (
-                <div
-                  className={`workflow-step ${index === 1 ? "workflow-active" : index === 0 ? "workflow-done" : ""}`}
-                  key={step}
-                >
-                  <span>{index + 1}</span>
-                  <div>
-                    <strong>{step}</strong>
-                    <small>
-                      {index === 0
-                        ? "Prepared by GPT"
-                        : index === 1
-                          ? "Claude is writing code..."
-                          : "Waiting for next gate"}
-                    </small>
-                  </div>
+              {isTauriDesktop() ? (
+                <div className="workflow-empty">
+                  Workflow state unavailable.
                 </div>
-              ))}
+              ) : (
+                [
+                  "Prompt Preparation",
+                  "Claude Code Execution",
+                  "GPT Audit",
+                  "Review & Approval",
+                  "Deploy / Complete",
+                ].map((step, index) => (
+                  <div
+                    className={`workflow-step ${index === 1 ? "workflow-active" : index === 0 ? "workflow-done" : ""}`}
+                    key={step}
+                  >
+                    <span>{index + 1}</span>
+                    <div>
+                      <strong>{step}</strong>
+                      <small>
+                        {index === 0
+                          ? "Prepared by GPT"
+                          : index === 1
+                            ? "Claude is writing code..."
+                            : "Waiting for next gate"}
+                      </small>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
           <div className="cockpit-bottom">
@@ -379,7 +391,11 @@ export function CommandCenter() {
             </div>
             <div className="brief-line">
               <ShieldCheck size={15} />
-              <strong>12 tasks completed</strong>
+              <strong>
+                {isTauriDesktop()
+                  ? "Task evidence unavailable"
+                  : "12 tasks completed"}
+              </strong>
             </div>
             <div className="brief-line attention-line">
               <ShieldCheck size={15} />
@@ -509,7 +525,7 @@ function WorkQueue() {
 
 export function Projects() {
   const navigate = useNavigate();
-  const { refresh: refreshRegistry } = useProjectRegistry();
+  const { refresh: refreshRegistry, selectProject } = useProjectRegistry();
   const [records, setRecords] = React.useState<ProjectRecord[]>([]);
   const [search, setSearch] = React.useState("");
   const [status, setStatus] = React.useState("");
@@ -626,7 +642,10 @@ export function Projects() {
                 <ProjectRegistryCard
                   key={project.id}
                   project={project}
-                  onOpen={() => navigate(`/projects/${project.id}`)}
+                  onOpen={() => {
+                    selectProject(project.id);
+                    navigate(`/projects/${project.id}`);
+                  }}
                   onArchive={() => {
                     if (
                       window.confirm(
@@ -843,6 +862,7 @@ function ProjectRegistryDialog({
 
 export function ProjectCockpit() {
   const { id } = useParams();
+  const { selectProject } = useProjectRegistry();
   const project = projects.find((item) => item.id === id);
   const [registered, setRegistered] = React.useState<ProjectRecord | null>(
     null,
@@ -872,6 +892,7 @@ export function ProjectCockpit() {
       .then((value) => {
         if (active) {
           setRegistered(value);
+          selectProject(value.id);
           setRouteState("ready");
         }
       })
@@ -881,7 +902,7 @@ export function ProjectCockpit() {
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [id, selectProject]);
   if (registered)
     return (
       <>

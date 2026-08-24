@@ -8,6 +8,7 @@
     "log:default",
     "notification:default",
     "allow-native-status",
+    "allow-frontend-ready",
     "allow-request-restart",
     "allow-runtime-status",
     "allow-database-status",

@@ -242,3 +242,18 @@ VISUAL ACCEPTANCE. M08 is unstarted.
 - [ ] user/security/privacy docs
 - [ ] release audit
 - [ ] H!veAI v1.0.0
+## M07.06 Focused evidence and runtime truth closure
+- [x] Deterministic Git diff boundary with no-textconv and real binary paths
+- [x] Dedicated frontend-ready IPC command, ACL, and post-mount call
+- [x] SHA-256-proven publisher rollback and isolated temp-only failure harness
+- [x] Direct Git diff, migration, SQLite, watcher, and Registry focused fixtures
+- [x] Live selected-project session state and name-only in-place project rail
+- [x] Live Tauri task/workflow/brief placeholders are neutral and truthful
+- [x] Frontend focused Command Center and topbar-surface matrix
+- [x] Full frontend/Rust regression, audit, build, and no-bundle publication gates
+- [ ] User visual acceptance of refreshed Desktop H!veAI.lnk
+- [ ] M01 actual in-app restart acceptance
+
+M07.06 automated gates pass. Final status remains PENDING HUMAN ACCEPTANCE until
+the user inspects the refreshed stable shortcut and confirms the visual/manual
+restart gates. M08 remains unstarted.

@@ -37,7 +37,7 @@ const navigation = [
 type Surface = "palette" | "assistant" | "notifications" | null;
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { records } = useProjectRegistry();
+  const { records, selectProject } = useProjectRegistry();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [surface, setSurface] = useState<Surface>(null);
   const navigate = useNavigate();
@@ -127,7 +127,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <button
                 type="button"
                 key={record.id}
-                onClick={() => go(`/projects/${record.id}`)}
+                onClick={() => {
+                  selectProject(record.id);
+                  go(`/projects/${record.id}`);
+                }}
               >
                 <span className="shortcut-mark">
                   {record.name
@@ -147,7 +150,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="status-pulse" />
             Local foundation online
           </div>
-          <span className="version">H!veAI 0.1.0 · M07.05</span>
+          <span className="version">H!veAI 0.1.0 · M07.06</span>
         </div>
       </aside>
       <main

@@ -481,6 +481,80 @@ mod tests {
     }
 
     #[test]
+    fn migration_v7_converts_numeric_snapshot_timestamp_from_v6_fixture() {
+        let (_directory, mut connection) = temp_connection();
+        apply_migrations(&mut connection, &migrations()[..6]).expect("v1-v6 apply");
+        connection
+            .execute(
+                "INSERT INTO projects (id, name, created_at, updated_at) VALUES ('p7', 'P7', 'now', 'now')",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO project_snapshots (id, project_id, availability, evidence_generated_at, watcher_health, created_at) VALUES ('s7', 'p7', 'AVAILABLE', 'now', 'HEALTHY', '1700000000')",
+                [],
+            )
+            .unwrap();
+        apply_migrations(&mut connection, migrations()).expect("v7 apply");
+        let value: String = connection
+            .query_row(
+                "SELECT created_at FROM project_snapshots WHERE id = 's7'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(value.starts_with("2023-11-14T22:13:20."));
+    }
+
+    #[test]
+    fn migration_v7_preserves_valid_and_malformed_snapshot_timestamps() {
+        let (_directory, mut connection) = temp_connection();
+        apply_migrations(&mut connection, &migrations()[..6]).expect("v1-v6 apply");
+        connection
+            .execute(
+                "INSERT INTO projects (id, name, created_at, updated_at) VALUES ('p8', 'P8', 'now', 'now')",
+                [],
+            )
+            .unwrap();
+        for (id, value) in [
+            ("valid", "2024-01-01T00:00:00.123Z"),
+            ("bad", "not-a-timestamp"),
+        ] {
+            connection
+                .execute(
+                    "INSERT INTO project_snapshots (id, project_id, availability, evidence_generated_at, watcher_health, created_at) VALUES (?1, 'p8', 'AVAILABLE', 'now', 'HEALTHY', ?2)",
+                    params![id, value],
+                )
+                .unwrap();
+        }
+        apply_migrations(&mut connection, migrations()).expect("v7 apply");
+        let values: Vec<String> = connection
+            .prepare("SELECT created_at FROM project_snapshots ORDER BY id")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<Vec<_>>>()
+            .unwrap();
+        assert_eq!(values, vec!["not-a-timestamp", "2024-01-01T00:00:00.123Z"]);
+    }
+
+    #[test]
+    fn migration_v7_real_fixture_is_idempotent_and_history_safe() {
+        let (_directory, mut connection) = temp_connection();
+        let first = apply_migrations(&mut connection, migrations()).expect("first apply");
+        let second = apply_migrations(&mut connection, migrations()).expect("rerun");
+        assert_eq!(first.schema_version, 7);
+        assert_eq!(second.last_migration_status, "ALREADY_CURRENT");
+        let mismatch = [Migration {
+            version: 1,
+            name: "wrong",
+            sql: "",
+        }];
+        assert!(apply_migrations(&mut connection, &mismatch).is_err());
+    }
+
+    #[test]
     fn migration_history_is_inspectable() {
         let (_directory, mut connection) = temp_connection();
         apply_migrations(&mut connection, migrations()).expect("migrations apply");

@@ -376,12 +376,98 @@ fn db_error(error: rusqlite::Error) -> String {
 mod tests {
     use super::*;
     use crate::db::DatabaseState;
+    use std::process::Command;
     use tempfile::tempdir;
 
     fn database() -> (tempfile::TempDir, DatabaseState) {
         let directory = tempdir().unwrap();
         let path = directory.path().to_path_buf();
         (directory, DatabaseState::initialize(path).unwrap())
+    }
+
+    fn git(path: &Path, args: &[&str]) {
+        assert!(Command::new("git")
+            .args(args)
+            .current_dir(path)
+            .output()
+            .unwrap()
+            .status
+            .success());
+    }
+
+    #[test]
+    fn repair_project_path_r03_identity_matrix() {
+        let (_db_dir, database) = database();
+        let non_git = tempdir().unwrap();
+        let moved_non_git = tempdir().unwrap();
+        let non_git_project = register_project(
+            &database,
+            RegisterProjectRequest {
+                path: non_git.path().to_string_lossy().into_owned(),
+                name: Some("Legacy non Git".into()),
+            },
+        )
+        .unwrap();
+        database
+            .open_connection()
+            .unwrap()
+            .execute(
+                "DELETE FROM repositories WHERE project_id = ?1",
+                [&non_git_project.id],
+            )
+            .unwrap();
+        assert!(repair_project_path(
+            &database,
+            RepairProjectPathRequest {
+                project_id: non_git_project.id.clone(),
+                path: moved_non_git.path().to_string_lossy().into_owned(),
+            },
+        )
+        .is_ok());
+        let git_project_dir = tempdir().unwrap();
+        git(git_project_dir.path(), &["init", "-q"]);
+        git(git_project_dir.path(), &["config", "user.name", "Test"]);
+        git(
+            git_project_dir.path(),
+            &["config", "user.email", "test@example.com"],
+        );
+        std::fs::write(git_project_dir.path().join("README.md"), "one").unwrap();
+        git(git_project_dir.path(), &["add", "README.md"]);
+        git(git_project_dir.path(), &["commit", "-qm", "initial"]);
+        let git_project = register_project(
+            &database,
+            RegisterProjectRequest {
+                path: git_project_dir.path().to_string_lossy().into_owned(),
+                name: Some("Git identity".into()),
+            },
+        )
+        .unwrap();
+        let other_git = tempdir().unwrap();
+        git(other_git.path(), &["init", "-q"]);
+        git(other_git.path(), &["config", "user.name", "Other"]);
+        git(
+            other_git.path(),
+            &["config", "user.email", "other@example.com"],
+        );
+        std::fs::write(other_git.path().join("OTHER"), "other").unwrap();
+        git(other_git.path(), &["add", "OTHER"]);
+        git(other_git.path(), &["commit", "-qm", "other"]);
+        assert!(repair_project_path(
+            &database,
+            RepairProjectPathRequest {
+                project_id: git_project.id.clone(),
+                path: other_git.path().to_string_lossy().into_owned(),
+            },
+        )
+        .is_err());
+        assert!(repair_project_path(
+            &database,
+            RepairProjectPathRequest {
+                project_id: "unknown-project".into(),
+                path: moved_non_git.path().to_string_lossy().into_owned(),
+            },
+        )
+        .is_err());
     }
 
     #[test]

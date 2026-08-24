@@ -152,52 +152,39 @@ pub fn snapshot(
 pub fn diff(database: &DatabaseState, request: GitDiffRequest) -> Result<GitDiff, String> {
     let (_, repository_path) = resolve_repository(database, &request.project_id)?;
     let args = match request.scope {
-        GitDiffScope::Staged => vec!["diff", "--no-ext-diff", "--cached", "--"],
-        GitDiffScope::WorkingTree => vec!["diff", "--no-ext-diff", "--"],
+        GitDiffScope::Staged => vec!["diff", "--no-ext-diff", "--no-textconv", "--cached", "--"],
+        GitDiffScope::WorkingTree => vec!["diff", "--no-ext-diff", "--no-textconv", "--"],
     };
     let output = run_git(&repository_path, &args)?;
     let raw = output_text(&output.stdout)?;
     let numstat_args = match request.scope {
-        GitDiffScope::Staged => vec!["diff", "--no-ext-diff", "--cached", "--numstat", "--"],
-        GitDiffScope::WorkingTree => vec!["diff", "--no-ext-diff", "--numstat", "--"],
+        GitDiffScope::Staged => vec![
+            "diff",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--cached",
+            "--numstat",
+            "--",
+        ],
+        GitDiffScope::WorkingTree => {
+            vec!["diff", "--no-ext-diff", "--no-textconv", "--numstat", "--"]
+        }
     };
     let numstat = output_text(&run_git(&repository_path, &numstat_args)?.stdout)?;
-    let binary_files = raw
+    let mut binary_files = numstat
         .lines()
         .filter_map(|line| {
-            line.strip_prefix("Binary files ")
-                .and_then(|value| value.split(" and ").next())
-        })
-        .map(|value| value.trim_start_matches("a/").to_string())
-        .collect::<Vec<_>>();
-    let mut binary_files = binary_files;
-    binary_files.extend(numstat.lines().filter_map(|line| {
-        let mut fields = line.splitn(3, '\t');
-        if fields.next()? == "-" && fields.next()? == "-" {
-            fields
-                .next()
-                .map(|path| path.trim_matches('"').replace('\\', "/"))
-        } else {
-            None
-        }
-    }));
-    if raw.contains("GIT binary patch") {
-        let mut current_path: Option<String> = None;
-        for line in raw.lines() {
-            if let Some(path) = line
-                .strip_prefix("diff --git ")
-                .and_then(|value| value.split_whitespace().last())
-            {
-                current_path = Some(path.trim_start_matches("b/").to_string());
-            } else if line == "GIT binary patch" {
-                if let Some(path) = current_path.take() {
-                    binary_files.push(path);
-                }
+            let mut fields = line.splitn(3, '\t');
+            if fields.next()? == "-" && fields.next()? == "-" {
+                fields.next().map(normalize_binary_path)
+            } else {
+                None
             }
-        }
-        binary_files.sort();
-        binary_files.dedup();
-    }
+        })
+        .filter(|path| path != "/dev/null" && !path.contains('\0'))
+        .collect::<Vec<_>>();
+    binary_files.sort();
+    binary_files.dedup();
     let text = sanitize_binary_payloads(&raw);
     let (text, truncated) = bound_text(&text, MAX_DIFF_BYTES, MAX_DIFF_LINES);
     Ok(GitDiff {
@@ -209,6 +196,13 @@ pub fn diff(database: &DatabaseState, request: GitDiffRequest) -> Result<GitDiff
         byte_limit: MAX_DIFF_BYTES,
         line_limit: MAX_DIFF_LINES,
     })
+}
+
+fn normalize_binary_path(path: &str) -> String {
+    path.trim_matches('"')
+        .replace('\\', "/")
+        .trim_start_matches("./")
+        .to_string()
 }
 
 fn sanitize_binary_payloads(raw: &str) -> String {
@@ -624,6 +618,123 @@ mod tests {
         git(dir.path(), &["add", "tracked.txt"]);
         git(dir.path(), &["commit", "-qm", "initial"]);
         dir
+    }
+
+    fn registered_fixture() -> (tempfile::TempDir, tempfile::TempDir, DatabaseState, String) {
+        let database_dir = tempdir().unwrap();
+        let database = DatabaseState::initialize(database_dir.path().to_path_buf()).unwrap();
+        let repository = fixture();
+        let project = crate::projects::register_project(
+            &database,
+            crate::projects::RegisterProjectRequest {
+                path: repository.path().to_string_lossy().into_owned(),
+                name: Some("Diff Boundary".into()),
+            },
+        )
+        .unwrap();
+        (database_dir, repository, database, project.id)
+    }
+
+    fn product_diff(database: &DatabaseState, project_id: &str, scope: GitDiffScope) -> GitDiff {
+        diff(
+            database,
+            GitDiffRequest {
+                project_id: project_id.into(),
+                scope,
+            },
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn diff_text_working_tree_product_boundary() {
+        let (_database_dir, repository, database, project_id) = registered_fixture();
+        fs::write(repository.path().join("tracked.txt"), "working change\n").unwrap();
+        let result = product_diff(&database, &project_id, GitDiffScope::WorkingTree);
+        assert!(result.text.contains("working change"));
+        assert!(result.binary_files.is_empty());
+    }
+
+    #[test]
+    fn diff_text_staged_product_boundary() {
+        let (_database_dir, repository, database, project_id) = registered_fixture();
+        fs::write(repository.path().join("tracked.txt"), "staged change\n").unwrap();
+        git(repository.path(), &["add", "tracked.txt"]);
+        let result = product_diff(&database, &project_id, GitDiffScope::Staged);
+        assert!(result.text.contains("staged change"));
+        assert!(result.binary_files.is_empty());
+    }
+
+    fn commit_binary(repository: &Path) {
+        fs::write(repository.join(".gitattributes"), "*.bin binary\n").unwrap();
+        fs::write(repository.join("image.bin"), [0_u8; 1024]).unwrap();
+        git(repository, &["add", ".gitattributes"]);
+        git(repository, &["add", "image.bin"]);
+        git(repository, &["commit", "-qm", "binary"]);
+    }
+
+    #[test]
+    fn diff_binary_working_tree_metadata_only() {
+        let (_database_dir, repository, database, project_id) = registered_fixture();
+        commit_binary(repository.path());
+        fs::write(repository.path().join("image.bin"), [1_u8; 1024]).unwrap();
+        let result = product_diff(&database, &project_id, GitDiffScope::WorkingTree);
+        assert_eq!(result.binary_files, vec!["image.bin"]);
+        assert!(!result.text.contains("GIT binary patch"));
+    }
+
+    #[test]
+    fn diff_new_binary_staged_returns_real_path_not_dev_null() {
+        let (_database_dir, repository, database, project_id) = registered_fixture();
+        fs::write(repository.path().join(".gitattributes"), "*.bin binary\n").unwrap();
+        fs::write(repository.path().join("new.bin"), [2_u8; 1024]).unwrap();
+        git(repository.path(), &["add", ".gitattributes", "new.bin"]);
+        let result = product_diff(&database, &project_id, GitDiffScope::Staged);
+        assert_eq!(result.binary_files, vec!["new.bin"]);
+        assert!(!result.binary_files.iter().any(|path| path == "/dev/null"));
+    }
+
+    #[test]
+    fn diff_mixed_working_tree_keeps_text_and_binary_metadata() {
+        let (_database_dir, repository, database, project_id) = registered_fixture();
+        commit_binary(repository.path());
+        fs::write(repository.path().join("image.bin"), [3_u8; 1024]).unwrap();
+        fs::write(repository.path().join("tracked.txt"), "mixed working\n").unwrap();
+        let result = product_diff(&database, &project_id, GitDiffScope::WorkingTree);
+        assert!(result.text.contains("mixed working"));
+        assert_eq!(result.binary_files, vec!["image.bin"]);
+    }
+
+    #[test]
+    fn diff_mixed_staged_keeps_text_and_binary_metadata() {
+        let (_database_dir, repository, database, project_id) = registered_fixture();
+        commit_binary(repository.path());
+        fs::write(repository.path().join("image.bin"), [4_u8; 1024]).unwrap();
+        fs::write(repository.path().join("tracked.txt"), "mixed staged\n").unwrap();
+        git(repository.path(), &["add", "."]);
+        let result = product_diff(&database, &project_id, GitDiffScope::Staged);
+        assert!(result.text.contains("mixed staged"));
+        assert_eq!(result.binary_files, vec!["image.bin"]);
+    }
+
+    #[test]
+    fn diff_return_never_contains_nul_or_binary_patch_payload() {
+        let (_database_dir, repository, database, project_id) = registered_fixture();
+        commit_binary(repository.path());
+        fs::write(repository.path().join("image.bin"), [5_u8; 1024]).unwrap();
+        let result = product_diff(&database, &project_id, GitDiffScope::WorkingTree);
+        assert!(!result.text.as_bytes().contains(&0));
+        assert!(!result.text.contains("GIT binary patch"));
+        assert!(!result.text.contains("/dev/null"));
+    }
+
+    #[test]
+    fn diff_truncation_is_after_sanitization() {
+        let (_database_dir, repository, database, project_id) = registered_fixture();
+        fs::write(repository.path().join("tracked.txt"), "line\n".repeat(5000)).unwrap();
+        let result = product_diff(&database, &project_id, GitDiffScope::WorkingTree);
+        assert!(result.truncated);
+        assert!(!result.text.contains("GIT binary patch"));
     }
 
     #[test]
