@@ -35,6 +35,7 @@ Read completely before coding:
 - `H!veAI/docs/H!veAI/README.md`
 - `H!veAI/docs/H!veAI/audits/M00_FRESH_START_AUDIT_APPROVAL.md`
 - `H!veAI/docs/H!veAI/codex-logs/README.md`
+- `H!veAI/docs/H!veAI/codex-logs/M00_FRESH_START_CODEX_LOG.md`
 - this prompt
 
 ## Mandatory repository preflight
@@ -76,23 +77,44 @@ M01 must not repair, modernize, or refactor the legacy parent application.
 
 The parent app's broken local `npm run build` and Tauri 1 `dist` dependency are legacy baseline issues, not M01 targets.
 
-## Durable Codex log — mandatory local + GitHub persistence
+## Codex logs — TWO separate durable GitHub records are mandatory
+
+M00 and M01 logs are separate historical records and MUST remain separate files.
+
+### A. Previous M00 log — preserve and verify
+
+Canonical file:
+
+`H!veAI/docs/H!veAI/codex-logs/M00_FRESH_START_CODEX_LOG.md`
+
+Canonical GitHub destination:
+
+`https://github.com/Sekiph82/AI-Commerce-HQ/blob/H!veAI/H!veAI/docs/H!veAI/codex-logs/M00_FRESH_START_CODEX_LOG.md`
+
+Rules:
+
+- Do NOT merge M00 content into the M01 log.
+- Do NOT rename the M00 log.
+- Do NOT rewrite or clean up its historical entries.
+- Verify the M00 log exists locally.
+- Verify the M00 log exists on GitHub branch `H!veAI`.
+- If the local M00 log differs from GitHub unexpectedly, STOP and report the discrepancy instead of overwriting either copy.
+
+### B. Current M01 log — create separately
 
 Create or continue before code changes:
 
 `H!veAI/docs/H!veAI/codex-logs/M01_TAURI2_FOUNDATION_CODEX_LOG.md`
 
-This log is part of the milestone deliverable and MUST be committed and pushed to the official GitHub repository branch `H!veAI`.
-
-Canonical GitHub destination:
+Canonical GitHub destination directory:
 
 `https://github.com/Sekiph82/AI-Commerce-HQ/tree/H!veAI/H!veAI/docs/H!veAI/codex-logs`
 
-The expected GitHub file after M01 is:
+Expected GitHub file after M01:
 
 `H!veAI/docs/H!veAI/codex-logs/M01_TAURI2_FOUNDATION_CODEX_LOG.md`
 
-Record chronologically:
+The M01 log must record chronologically:
 
 - timestamps,
 - commands,
@@ -109,12 +131,14 @@ Record chronologically:
 Never erase failures after fixing them.
 Never record secrets or token values.
 
-Before finishing M01, verify BOTH:
+Before finishing M01, verify ALL FOUR conditions:
 
-1. the log file exists locally under `H!veAI/docs/H!veAI/codex-logs/`, and
-2. after the normal push, the same log file exists on GitHub branch `H!veAI` under `H!veAI/docs/H!veAI/codex-logs/`.
+1. M00 log exists locally at `H!veAI/docs/H!veAI/codex-logs/M00_FRESH_START_CODEX_LOG.md`.
+2. M00 log exists separately on GitHub branch `H!veAI`.
+3. M01 log exists locally at `H!veAI/docs/H!veAI/codex-logs/M01_TAURI2_FOUNDATION_CODEX_LOG.md`.
+4. M01 log has been committed, pushed, and exists separately on GitHub branch `H!veAI`.
 
-If the GitHub log cannot be verified after push, M01 must not be reported as fully complete. Report the push/log verification failure explicitly.
+If either log is missing from GitHub, M01 must not be reported as fully complete.
 
 ## M01 objective
 
@@ -317,9 +341,13 @@ If M01 is genuinely complete, create one focused commit:
 
 `feat(H!veAI): establish Tauri 2 desktop foundation`
 
-The commit MUST include:
+The milestone commit MUST include the separate M01 log:
 
 `H!veAI/docs/H!veAI/codex-logs/M01_TAURI2_FOUNDATION_CODEX_LOG.md`
+
+The existing M00 log must remain independently tracked at:
+
+`H!veAI/docs/H!veAI/codex-logs/M00_FRESH_START_CODEX_LOG.md`
 
 Push normally to:
 
@@ -327,11 +355,12 @@ Push normally to:
 
 Do not force push.
 
-After push, explicitly verify that the Codex log is visible in the GitHub repository under:
+After push, explicitly verify that BOTH files are visible separately on GitHub:
 
-`H!veAI/docs/H!veAI/codex-logs/`
+- `H!veAI/docs/H!veAI/codex-logs/M00_FRESH_START_CODEX_LOG.md`
+- `H!veAI/docs/H!veAI/codex-logs/M01_TAURI2_FOUNDATION_CODEX_LOG.md`
 
-Record this verification in the final section of the Codex log itself before the final milestone report. If a final log update is needed after the first push, create a small follow-up documentation commit and push normally.
+Record both verification results in the final section of the M01 log itself. If a final M01 log update is needed after the first push, create a small follow-up documentation commit and push normally.
 
 ## M01 acceptance criteria
 
@@ -351,8 +380,8 @@ M01 is complete only if:
 12. No legacy commerce runtime starts.
 13. Parent app source/package files are not modified.
 14. The preserved stash remains untouched.
-15. Codex log is committed.
-16. Codex log is pushed and verified on GitHub branch `H!veAI` under `H!veAI/docs/H!veAI/codex-logs/`.
+15. M00 Codex log remains a separate historical file and is verified on GitHub.
+16. M01 Codex log is a separate file, committed, pushed, and verified on GitHub.
 17. M01 migration document exists.
 18. TASKS.md reflects verified state only.
 
@@ -377,14 +406,15 @@ Return exactly:
 15. RUST / TAURI RESULTS
 16. WINDOWS SMOKE TEST RESULT
 17. RESTART VERIFICATION STATUS
-18. CODEX LOG LOCAL PATH
-19. CODEX LOG GITHUB PATH / VERIFICATION
-20. MIGRATION DOC PATH
-21. PRESERVED STASH STATUS
-22. COMMIT / PUSH STATUS
-23. BLOCKERS / OPEN DECISIONS
-24. EXACT NEXT MILESTONE
-25. RECOMMENDED NEXT CODEX PROMPT
+18. M00 CODEX LOG LOCAL/GITHUB VERIFICATION
+19. M01 CODEX LOG LOCAL PATH
+20. M01 CODEX LOG GITHUB PATH / VERIFICATION
+21. MIGRATION DOC PATH
+22. PRESERVED STASH STATUS
+23. COMMIT / PUSH STATUS
+24. BLOCKERS / OPEN DECISIONS
+25. EXACT NEXT MILESTONE
+26. RECOMMENDED NEXT CODEX PROMPT
 
 The exact next milestone is:
 
