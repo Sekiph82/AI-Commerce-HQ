@@ -102,6 +102,7 @@ struct PendingEvent {
 struct Inner {
     statuses: HashMap<String, ProjectWatcherStatus>,
     watches: HashMap<String, RecommendedWatcher>,
+    watch_roots: HashMap<String, PathBuf>,
     pending_count: usize,
     running: bool,
     last_refresh_mono: HashMap<String, SystemTime>,
@@ -120,6 +121,7 @@ impl WatcherManager {
         let inner = Arc::new(Mutex::new(Inner {
             statuses: HashMap::new(),
             watches: HashMap::new(),
+            watch_roots: HashMap::new(),
             pending_count: 0,
             running: true,
             last_refresh_mono: HashMap::new(),
@@ -189,6 +191,7 @@ impl WatcherManager {
         for project_id in existing {
             if !desired.contains(&project_id) {
                 inner.watches.remove(&project_id);
+                inner.watch_roots.remove(&project_id);
                 inner.statuses.remove(&project_id);
             }
         }
@@ -226,9 +229,15 @@ impl WatcherManager {
                 current.available = status.available;
             })
             .or_insert(status);
+        let root = PathBuf::from(&project.normalized_path);
+        if inner.watch_roots.get(&project.id) != Some(&root) {
+            inner.watches.remove(&project.id);
+            inner.watch_roots.remove(&project.id);
+        }
         if !available || inner.watches.contains_key(&project.id) {
             if !available {
                 inner.watches.remove(&project.id);
+                inner.watch_roots.remove(&project.id);
             }
             return Ok(());
         }
@@ -265,7 +274,11 @@ impl WatcherManager {
                     status.state = "DEGRADED".to_string();
                     status.watcher_health = "DEGRADED".to_string();
                 }
-                return Ok(());
+                return if available {
+                    Err("watcher backend failed to initialize".to_string())
+                } else {
+                    Ok(())
+                };
             }
         };
         if watcher
@@ -279,9 +292,13 @@ impl WatcherManager {
                 status.state = "DEGRADED".to_string();
                 status.watcher_health = "DEGRADED".to_string();
             }
+            if available {
+                return Err("watcher failed to attach to registered root".to_string());
+            }
             return Ok(());
         }
-        inner.watches.insert(project.id, watcher);
+        inner.watches.insert(project.id.clone(), watcher);
+        inner.watch_roots.insert(project.id, root);
         Ok(())
     }
 }
@@ -291,6 +308,7 @@ impl Drop for WatcherManager {
         if let Ok(mut inner) = self.inner.lock() {
             inner.running = false;
             inner.watches.clear();
+            inner.watch_roots.clear();
         }
         let _ = self.sender.try_send(RawInput {
             project_id: String::new(),
@@ -459,7 +477,7 @@ fn refresh_project_snapshot(
         .get(project_id)
         .map(|status| status.rescan_required)
         .unwrap_or(false);
-    let successful_reconciliation = available && (explicit || !events.is_empty());
+    let successful_reconciliation = available && explicit;
     let rescan_required = if successful_reconciliation {
         false
     } else {
@@ -694,6 +712,7 @@ mod tests {
                 },
             )]),
             watches: HashMap::new(),
+            watch_roots: HashMap::new(),
             pending_count: 0,
             running: true,
             last_refresh_mono: HashMap::new(),
@@ -846,7 +865,20 @@ mod tests {
                 rescan_required: true,
             },
         );
-        refresh_project_snapshot(&database, &state, &project.id, Vec::new(), false).unwrap();
+        refresh_project_snapshot(
+            &database,
+            &state,
+            &project.id,
+            vec![make_event(
+                &project.id,
+                NormalizedEventKind::Modify,
+                "src/main.rs".into(),
+                None,
+                EventCategory::Source,
+            )],
+            false,
+        )
+        .unwrap();
         assert!(state.lock().unwrap().statuses[&project.id].rescan_required);
         refresh_project_snapshot(&database, &state, &project.id, Vec::new(), true).unwrap();
         assert!(!state.lock().unwrap().statuses[&project.id].rescan_required);

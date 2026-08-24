@@ -303,7 +303,6 @@ UPDATE git_snapshots SET captured_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(captu
 UPDATE project_snapshots SET last_filesystem_event_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(last_filesystem_event_at AS INTEGER), 'unixepoch') WHERE last_filesystem_event_at GLOB '[0-9]*' AND last_filesystem_event_at NOT GLOB '*[^0-9]*';
 UPDATE project_snapshots SET last_watcher_refresh_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(last_watcher_refresh_at AS INTEGER), 'unixepoch') WHERE last_watcher_refresh_at GLOB '[0-9]*' AND last_watcher_refresh_at NOT GLOB '*[^0-9]*';
 UPDATE project_snapshots SET evidence_generated_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(evidence_generated_at AS INTEGER), 'unixepoch') WHERE evidence_generated_at GLOB '[0-9]*' AND evidence_generated_at NOT GLOB '*[^0-9]*';
-UPDATE project_snapshots SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(created_at AS INTEGER), 'unixepoch') WHERE created_at GLOB '[0-9]*' AND created_at NOT GLOB '*[^0-9]*';
 "#;
 
 const RESIDUAL_TIMESTAMP_STANDARDIZATION: &str = r#"

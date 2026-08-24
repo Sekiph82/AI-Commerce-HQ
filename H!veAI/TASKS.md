@@ -111,6 +111,23 @@ M07.03 was reopened as FAILED by the independent strict audit and is superseded 
 
 M07.04 remains ACTIVE until independent audit. Aggregate tests alone do not establish automated closure. Do not start or create later milestone work.
 
+## M07.05 Bounded correctness and evidence remediation
+- [x] Correct watcher ordinary-refresh and attachment-gated rescan semantics
+- [x] Track watcher roots and reattach when a registered path changes
+- [x] Close legacy rowless Git repair path and sanitize binary diff evidence
+- [x] Restore historical migration v5 body and add stable migration v7
+- [x] Make Project Registry the live Tauri UI identity source with explicit route states
+- [x] Apply bounded single-viewport UI corrections without redesigning the dashboard
+- [x] Maintain production no-bundle publication, readiness, rollback, and shortcut checks
+- [ ] Complete the independent focused R01-R15 evidence matrix
+- [ ] User visual acceptance of refreshed Desktop H!veAI.lnk
+- [ ] M01 actual in-app restart acceptance
+
+M07.05 is the active strict remediation gate. Automated frontend, Rust, formatting,
+production build, and publisher smoke gates pass; the milestone remains FAIL until
+the required focused evidence matrix is complete. Final UI status is PENDING USER
+VISUAL ACCEPTANCE. M08 is unstarted.
+
 ## M08 Task Source Discovery
 - [ ] discover TASKS/tasks/PLANS/PROGRESS/ROADMAP/CLAUDE/AGENTS/handoffs
 - [ ] custom paths

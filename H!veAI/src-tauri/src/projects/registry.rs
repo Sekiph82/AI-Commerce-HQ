@@ -208,6 +208,9 @@ pub fn repair_project_path(
         )
         .optional()
         .map_err(db_error)?;
+    if existing_identity.is_none() && git.is_git_repository {
+        return Err("legacy registered project has no repository identity; Git repair is rejected until identity is explicitly recovered".to_string());
+    }
     if let Some((old_is_git, old_remote, old_head)) = existing_identity {
         if (old_is_git == 1) != git.is_git_repository {
             return Err("repository type changed while repairing project path".to_string());

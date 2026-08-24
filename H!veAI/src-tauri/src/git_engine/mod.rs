@@ -157,6 +157,11 @@ pub fn diff(database: &DatabaseState, request: GitDiffRequest) -> Result<GitDiff
     };
     let output = run_git(&repository_path, &args)?;
     let raw = output_text(&output.stdout)?;
+    let numstat_args = match request.scope {
+        GitDiffScope::Staged => vec!["diff", "--no-ext-diff", "--cached", "--numstat", "--"],
+        GitDiffScope::WorkingTree => vec!["diff", "--no-ext-diff", "--numstat", "--"],
+    };
+    let numstat = output_text(&run_git(&repository_path, &numstat_args)?.stdout)?;
     let binary_files = raw
         .lines()
         .filter_map(|line| {
@@ -166,6 +171,16 @@ pub fn diff(database: &DatabaseState, request: GitDiffRequest) -> Result<GitDiff
         .map(|value| value.trim_start_matches("a/").to_string())
         .collect::<Vec<_>>();
     let mut binary_files = binary_files;
+    binary_files.extend(numstat.lines().filter_map(|line| {
+        let mut fields = line.splitn(3, '\t');
+        if fields.next()? == "-" && fields.next()? == "-" {
+            fields
+                .next()
+                .map(|path| path.trim_matches('"').replace('\\', "/"))
+        } else {
+            None
+        }
+    }));
     if raw.contains("GIT binary patch") {
         let mut current_path: Option<String> = None;
         for line in raw.lines() {
