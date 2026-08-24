@@ -2,6 +2,15 @@
 
 This directory is the canonical, version-controlled operational record for AI-assisted H!veAI development.
 
+## Product naming rule
+
+The canonical product name is **H!veAI**.
+
+- User-visible product copy, documentation headings, reports, prompts, UI labels, release notes, and branding must use exactly `H!veAI`.
+- `HiveAI`, `Hive AI`, `HIVEAI`, or other display-name variants are not the product name unless quoted as historical/error text.
+- Technical slugs and identifiers that cannot safely contain `!` may use lowercase `hiveai`, for example branch names, package identifiers, directory names such as `docs/hiveai/`, database identifiers, and Rust/TypeScript module names.
+- The exclamation mark is the second character of the display name: `H!veAI`.
+
 ## Directory structure
 
 - `docs/hiveai/prompts/` — prompts authored by ChatGPT for Codex/Claude or other builders.
@@ -40,6 +49,6 @@ A chat response alone is not a durable project record. Important prompts, audits
 ## Safety
 
 - Never commit secrets, tokens, private keys, local databases, or raw credential-bearing environment dumps into logs.
-- Redact sensitive paths or values when necessary.
+- Redact sensitive values when necessary.
 - Do not rewrite old logs to make history cleaner.
 - Corrections are appended as new dated entries.
