@@ -95,3 +95,20 @@ Implementation and verification entries will be appended chronologically. Failur
 - No production database, temporary database, `node_modules`, `dist`, `target`, runtime log, secret, or `.env` artifact was staged.
 - M00, M01, M02 and M03 Codex logs remain unchanged.
 - The pre-M00 stash and untracked parent `start-demo.bat` and `task.md` remain preserved.
+
+### 2026-08-24 - commit, push and GitHub verification
+
+- Implementation commit: `dc28df3` (`feat(H!veAI): add SQLite persistence and migrations`).
+- `git push origin H!veAI`: passed; remote advanced from `6b1d395` to `dc28df3`.
+- Verified separate GitHub log paths on branch `H!veAI`:
+  - `H!veAI/docs/H!veAI/codex-logs/M00_FRESH_START_CODEX_LOG.md`
+  - `H!veAI/docs/H!veAI/codex-logs/M01_TAURI2_FOUNDATION_CODEX_LOG.md`
+  - `H!veAI/docs/H!veAI/codex-logs/M02_UI_SHELL_AND_DESIGN_SYSTEM_CODEX_LOG.md`
+  - `H!veAI/docs/H!veAI/codex-logs/M03_RUNTIME_ARCHITECTURE_REFACTOR_CODEX_LOG.md`
+  - `H!veAI/docs/H!veAI/codex-logs/M04_SQLITE_AND_VERSIONED_MIGRATIONS_CODEX_LOG.md`
+- A final log-only verification commit will record the remote-visible M04 log itself.
+- M05 was not started; no M05 prompt was created by Codex.
+
+PHASE STATUS: COMPLETE
+
+Exact next milestone: `M05 — Project Registry`.
