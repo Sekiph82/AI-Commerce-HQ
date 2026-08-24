@@ -167,13 +167,19 @@ pub fn diff(database: &DatabaseState, request: GitDiffRequest) -> Result<GitDiff
         .collect::<Vec<_>>();
     let mut binary_files = binary_files;
     if raw.contains("GIT binary patch") {
-        binary_files.extend(raw.lines().filter_map(|line| {
-            let path = line
-                .strip_prefix("diff --git ")?
-                .split_whitespace()
-                .last()?;
-            Some(path.trim_start_matches("b/").to_string())
-        }));
+        let mut current_path: Option<String> = None;
+        for line in raw.lines() {
+            if let Some(path) = line
+                .strip_prefix("diff --git ")
+                .and_then(|value| value.split_whitespace().last())
+            {
+                current_path = Some(path.trim_start_matches("b/").to_string());
+            } else if line == "GIT binary patch" {
+                if let Some(path) = current_path.take() {
+                    binary_files.push(path);
+                }
+            }
+        }
         binary_files.sort();
         binary_files.dedup();
     }
@@ -723,7 +729,7 @@ mod tests {
     }
 
     #[test]
-    fn binary_diff_is_metadata_only() {
+    fn raw_binary_diff_fixture_is_sanitized_at_the_product_boundary() {
         let dir = fixture();
         fs::write(dir.path().join("image.bin"), [0_u8; 1024]).unwrap();
         fs::write(dir.path().join(".gitattributes"), "image.bin binary\n").unwrap();
@@ -734,6 +740,8 @@ mod tests {
         let output = run_git(dir.path(), &["diff", "--binary", "--", "image.bin"]).unwrap();
         let text = output_text(&output.stdout).unwrap();
         assert!(text.contains("Binary files") || text.contains("GIT binary patch"));
+        let sanitized = sanitize_binary_payloads(&text);
+        assert!(!sanitized.contains("GIT binary patch"));
         assert!(!text.as_bytes().contains(&0));
     }
 

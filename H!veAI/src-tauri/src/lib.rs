@@ -32,6 +32,7 @@ struct NativeStatus {
 #[tauri::command]
 fn hiveai_native_status(app: tauri::AppHandle) -> NativeStatus {
     log::info!("H!veAI native status requested.");
+    log::info!("HIVEAI_FRONTEND_READY");
 
     let config = app.config();
     let package = app.package_info();
@@ -60,6 +61,11 @@ fn hiveai_native_status(app: tauri::AppHandle) -> NativeStatus {
 }
 
 #[tauri::command]
+fn hiveai_frontend_ready() {
+    log::info!("HIVEAI_FRONTEND_READY");
+}
+
+#[tauri::command]
 fn hiveai_request_restart(app: tauri::AppHandle) {
     log::info!("H!veAI restart requested through native foundation command.");
     let _ = app.emit("hiveai-restart-requested", ());
@@ -75,6 +81,7 @@ fn hiveai_runtime_status(supervisor: tauri::State<'_, RuntimeSupervisor>) -> Run
 #[tauri::command]
 fn hiveai_database_status(database: tauri::State<'_, DatabaseState>) -> DatabaseStatus {
     log::info!("H!veAI database status requested.");
+    log::info!("HIVEAI_FRONTEND_READY");
     database.status()
 }
 
@@ -196,6 +203,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             hiveai_native_status,
+            hiveai_frontend_ready,
             hiveai_request_restart,
             hiveai_runtime_status,
             hiveai_database_status,

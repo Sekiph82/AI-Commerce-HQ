@@ -100,7 +100,16 @@ M07.02 remains IN PROGRESS. The M07.02A launcher hotfix is implemented and local
 - [ ] Maintain canonical single-viewport UI composition and UI governance compliance
 - [ ] User visual acceptance of refreshed Desktop `H!veAI.lnk`
 
-M07.03 automated remediation is implemented and locally verified. Final UI status remains PENDING USER VISUAL ACCEPTANCE until the user inspects the refreshed Desktop shortcut build. Do not advance the active milestone gate from this state.
+M07.03 was reopened as FAILED by the independent strict audit and is superseded by the active M07.04 automated remediation. Final UI status remains PENDING USER VISUAL ACCEPTANCE until the user inspects the refreshed Desktop shortcut build.
+
+## M07.04 Automated closure remediation
+- [ ] Rescan, watcher, registry, migration, SQLite, diff, and launcher strict findings
+- [ ] Focused production-path evidence matrix
+- [ ] Independent M07.04 audit closure
+- [ ] User visual acceptance of refreshed Desktop `H!veAI.lnk`
+- [ ] M01 actual in-app restart acceptance
+
+M07.04 remains ACTIVE until independent audit. Aggregate tests alone do not establish automated closure. Do not start or create later milestone work.
 
 ## M08 Task Source Discovery
 - [ ] discover TASKS/tasks/PLANS/PROGRESS/ROADMAP/CLAUDE/AGENTS/handoffs

@@ -452,13 +452,19 @@ fn refresh_project_snapshot(
     };
     let now = timestamp();
     let last_event = events.iter().map(|event| event.timestamp.clone()).max();
-    let rescan_required = inner
+    let prior_rescan_required = inner
         .lock()
         .expect("watcher state lock")
         .statuses
         .get(project_id)
         .map(|status| status.rescan_required)
         .unwrap_or(false);
+    let successful_reconciliation = available && (explicit || !events.is_empty());
+    let rescan_required = if successful_reconciliation {
+        false
+    } else {
+        prior_rescan_required
+    };
     let health = if !available {
         "MISSING"
     } else if rescan_required {
@@ -475,9 +481,7 @@ fn refresh_project_snapshot(
             status.watcher_health = health.to_string();
             status.last_refresh_at = Some(now.clone());
             status.evidence_generated_at = Some(now);
-            if explicit {
-                status.rescan_required = false;
-            }
+            status.rescan_required = rescan_required;
         }
         if !available {
             state.watches.remove(project_id);

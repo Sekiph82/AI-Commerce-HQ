@@ -228,11 +228,17 @@ pub fn repair_project_path(
             // A matching sanitized remote is the durable repository identity; a moved
             // checkout may legitimately advance its HEAD between registry observations.
             // When no remote exists, the commit remains the only strong identity signal.
-            if old_remote.is_none()
-                && git.preferred_remote_url.is_none()
-                && old_head != git.head_sha
-            {
-                return Err("repository identity is ambiguous; matching remote or HEAD evidence is required".to_string());
+            if old_remote.is_none() && git.preferred_remote_url.is_none() {
+                let old = old_head.as_deref().ok_or_else(|| {
+                    "repository identity is ambiguous; stored HEAD evidence is required".to_string()
+                })?;
+                let new = git.head_sha.as_deref().ok_or_else(|| {
+                    "repository identity is ambiguous; replacement HEAD evidence is required"
+                        .to_string()
+                })?;
+                if old != new && !is_ancestor(&validated.canonical_path, old, new) {
+                    return Err("repository identity is unrelated; stored HEAD is not an ancestor of replacement HEAD".to_string());
+                }
             }
         }
     }
@@ -324,13 +330,25 @@ fn insert_repository(
     git: &GitMetadata,
     now: &str,
 ) -> Result<(), String> {
-    if !git.is_git_repository {
-        return Ok(());
-    }
     let remotes = serde_json::to_string(&git.remotes)
         .map_err(|error| format!("serialize sanitized remote metadata: {error}"))?;
     connection.execute("INSERT INTO repositories (id, project_id, remote_url, github_owner, github_repo, default_branch, created_at, updated_at, repository_root, is_git_repository, current_branch, head_sha, remote_urls_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?8, ?9, ?10, ?11, ?12)", params![Uuid::new_v4().to_string(), project_id, git.preferred_remote_url, git.github_owner, git.github_repo, git.default_branch, now, git.repository_root, if git.is_git_repository { 1 } else { 0 }, git.current_branch, git.head_sha, remotes]).map_err(db_error)?;
     Ok(())
+}
+
+fn is_ancestor(repository: &Path, old: &str, new: &str) -> bool {
+    std::process::Command::new("git")
+        .args([
+            "-C",
+            &repository.to_string_lossy(),
+            "merge-base",
+            "--is-ancestor",
+            old,
+            new,
+        ])
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
 }
 
 fn folder_name(path: &Path) -> String {
@@ -373,7 +391,13 @@ mod tests {
         };
         let project = register_project(&database, request.clone()).unwrap();
         assert_eq!(project.name, "Fixture Project");
-        assert!(project.repository.is_none());
+        assert_eq!(
+            project
+                .repository
+                .as_ref()
+                .map(|repo| repo.is_git_repository),
+            Some(false)
+        );
         assert!(register_project(&database, request).is_err());
     }
 

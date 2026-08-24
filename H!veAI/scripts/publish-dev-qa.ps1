@@ -1,7 +1,4 @@
-param(
-    [switch]$SkipBuild,
-    [string]$Candidate = (Join-Path $PSScriptRoot '..\src-tauri\target\release\hiveai-desktop.exe')
-)
+param()
 
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -29,13 +26,54 @@ function Assert-Shortcut([string]$Target) {
     if ($resolvedTarget -ne [IO.Path]::GetFullPath($Target)) { throw "Shortcut target mismatch: $resolvedTarget" }
     if ($shortcut.IconLocation -notlike "$expectedIcon,*") { throw "Shortcut icon mismatch: $($shortcut.IconLocation)" }
 }
+function Get-LogBaseline {
+    $baseline = @{}
+    $logDir = Join-Path $env:LOCALAPPDATA 'ai.hiveai.desktop\logs'
+    Get-ChildItem -LiteralPath $logDir -Filter '*.log' -ErrorAction SilentlyContinue | ForEach-Object { $baseline[$_.FullName] = $_.Length }
+    return $baseline
+}
+function Wait-FrontendReady([hashtable]$Baseline, [int]$TimeoutSeconds = 15) {
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    do {
+        $logs = Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'ai.hiveai.desktop\logs') -Filter '*.log' -ErrorAction SilentlyContinue
+        foreach ($log in $logs) {
+            $text = Get-Content -LiteralPath $log.FullName -Raw -ErrorAction SilentlyContinue
+            $offset = if ($Baseline.ContainsKey($log.FullName)) { [Math]::Min([int64]$Baseline[$log.FullName], $text.Length) } else { 0 }
+            if ($text.Substring($offset).Contains('HIVEAI_FRONTEND_READY')) { return }
+        }
+        Start-Sleep -Milliseconds 250
+    } while ((Get-Date) -lt $deadline)
+    throw 'Embedded frontend readiness marker was not emitted by the candidate.'
+}
+function Stop-SmokeProcess([System.Diagnostics.Process]$Process) {
+    if ($null -eq $Process) { return }
+    $Process.Refresh()
+    if (-not $Process.HasExited) { [void]$Process.CloseMainWindow(); if (-not $Process.WaitForExit(5000)) { $Process.Kill(); [void]$Process.WaitForExit(5000) } }
+    if (-not $Process.HasExited) { throw 'Candidate process could not be terminated within the bounded cleanup timeout.' }
+}
+function Invoke-ReadySmoke([string]$Path) {
+    $baseline = Get-LogBaseline
+    $beforeConhost = @(Get-Process conhost -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id)
+    $process = $null
+    try {
+        $process = Start-Process -FilePath $Path -PassThru
+        Start-Sleep -Seconds 2
+        if ($process.HasExited) { throw "Candidate exited during production smoke: $($process.ExitCode)" }
+        $process.Refresh()
+        if ($process.MainWindowTitle -ne 'H!veAI') { throw "Unexpected candidate window title: $($process.MainWindowTitle)" }
+        Assert-NoH1vePorts
+        Wait-FrontendReady $baseline
+        $afterConhost = @(Get-Process conhost -ErrorAction SilentlyContinue)
+        $newVisibleConhost = @($afterConhost | Where-Object { $_.Id -notin $beforeConhost -and $_.MainWindowTitle })
+        if ($newVisibleConhost.Count -gt 0) { throw 'Candidate created a visible console host.' }
+    } finally { Stop-SmokeProcess $process }
+}
 
 New-Item -ItemType Directory -Force -Path $stableDir | Out-Null
-if (-not $SkipBuild) {
-    Push-Location $root
-    try { & npm run tauri:build -- --no-bundle; if ($LASTEXITCODE -ne 0) { throw "Tauri production build failed: $LASTEXITCODE" } }
-    finally { Pop-Location }
-}
+$Candidate = Join-Path $root 'src-tauri\target\release\hiveai-desktop.exe'
+Push-Location $root
+try { & npm run tauri:build -- --no-bundle; if ($LASTEXITCODE -ne 0) { throw "Tauri production build failed: $LASTEXITCODE" } }
+finally { Pop-Location }
 Assert-Pe $Candidate
 Assert-NoH1vePorts
 Assert-Shortcut $stable
@@ -43,24 +81,14 @@ Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue
 Copy-Item -LiteralPath $Candidate -Destination $staged
 try {
     Assert-Pe $staged
-    $beforeConhost = @(Get-Process conhost -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id)
-    $process = Start-Process -FilePath $staged -PassThru
-    Start-Sleep -Seconds 5
-    if ($process.HasExited) { throw "Candidate exited during production smoke: $($process.ExitCode)" }
-    $process.Refresh()
-    if ($process.MainWindowTitle -ne 'H!veAI') { throw "Unexpected candidate window title: $($process.MainWindowTitle)" }
-    Assert-NoH1vePorts
-    $afterConhost = @(Get-Process conhost -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id)
-    if (@($afterConhost | Where-Object { $_ -notin $beforeConhost }).Count -gt 0) { throw 'Candidate created a visible console host.' }
-    if (-not $process.CloseMainWindow()) { $process.Kill() }
-    $process.WaitForExit(5000)
-    Assert-NoH1vePorts
+    Invoke-ReadySmoke $staged
     Remove-Item -LiteralPath $rollback -Force -ErrorAction SilentlyContinue
     if (Test-Path -LiteralPath $stable) { Move-Item -LiteralPath $stable -Destination $rollback }
     try {
         Move-Item -LiteralPath $staged -Destination $stable
         Assert-Pe $stable
         Assert-Shortcut $stable
+        Invoke-ReadySmoke $stable
         Remove-Item -LiteralPath $rollback -Force -ErrorAction SilentlyContinue
     } catch {
         Remove-Item -LiteralPath $stable -Force -ErrorAction SilentlyContinue

@@ -106,6 +106,7 @@ fn configure_connection(connection: &Connection) -> Result<(), String> {
 
 fn create_migration_backup(connection: &Connection, database_path: &PathBuf) -> Result<(), String> {
     let backup = database_path.with_extension("db.pre-migration.bak");
+    let previous = database_path.with_extension("db.pre-migration.bak.prev");
     let temporary = database_path.with_extension("db.pre-migration.tmp");
     let _ = fs::remove_file(&temporary);
     let mut destination = Connection::open(&temporary)
@@ -121,8 +122,19 @@ fn create_migration_backup(connection: &Connection, database_path: &PathBuf) -> 
         .close()
         .map_err(|(_, error)| format!("close H!veAI migration backup: {error}"))?;
     backup_result?;
+    let had_backup = backup.exists();
+    if had_backup {
+        let _ = fs::remove_file(&previous);
+        if let Err(error) = fs::rename(&backup, &previous) {
+            let _ = fs::remove_file(&temporary);
+            return Err(format!("rotate H!veAI database migration backup: {error}"));
+        }
+    }
     if let Err(error) = fs::rename(&temporary, &backup) {
         let _ = fs::remove_file(&temporary);
+        if had_backup {
+            let _ = fs::rename(&previous, &backup);
+        }
         return Err(format!("publish H!veAI database migration backup: {error}"));
     }
     Ok(())
@@ -161,7 +173,7 @@ mod tests {
         let status = state.status();
         assert!(status.initialized);
         assert_eq!(status.database_path, "hiveai.db");
-        assert_eq!(status.schema_version, 6);
+        assert_eq!(status.schema_version, 7);
         assert!(status.foreign_keys_enabled);
         assert!(directory.path().join("hiveai.db").exists());
         assert_eq!(status.journal_mode, "WAL");
