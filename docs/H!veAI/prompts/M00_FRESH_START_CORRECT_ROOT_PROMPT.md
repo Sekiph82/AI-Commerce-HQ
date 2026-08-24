@@ -1,34 +1,52 @@
-# M00 — H!veAI Fresh Start from Correct Local Root
+# M00 — H!veAI Fresh Start with Dedicated Application Root
 
-You are restarting H!veAI development from the correct repository.
+You are restarting H!veAI development from the correct local repository and the correct H!veAI application folder.
 
 Do NOT reuse prior M00/M01 conclusions blindly.
 
-## Canonical repository
+## Canonical locations
 
-GitHub:
+GitHub repository:
 `https://github.com/Sekiph82/AI-Commerce-HQ`
 
 Canonical development branch:
 `H!veAI`
 
-Canonical local Git repository root:
+Canonical LOCAL GIT repository root:
 `C:\Users\sekip\Desktop\AI-Commerce-HQ files\AI-Commerce-HQ`
 
-The nested folder:
+Canonical H!veAI APPLICATION root:
 `C:\Users\sekip\Desktop\AI-Commerce-HQ files\AI-Commerce-HQ\H!veAI`
 
-is NOT the repository root. It may contain reference files only.
+These are intentionally different.
 
-## Mandatory stop condition
+- Git operations belong to the parent repository root.
+- All NEW H!veAI application code, H!veAI product documentation, prompts, audits, Codex logs, tests, desktop shell and application configuration belong under the child `H!veAI\` directory unless a root-level Git compatibility file is strictly necessary.
+- The child `H!veAI\` directory is NOT a separate Git repository and must not contain its own `.git` directory.
 
-Your FIRST command must establish the actual Git root:
+The canonical product name is **H!veAI**. The second character is `!`.
 
+## Mandatory stop conditions
+
+Your FIRST command must be run from:
+`C:\Users\sekip\Desktop\AI-Commerce-HQ files\AI-Commerce-HQ`
+
+Run:
 `git rev-parse --show-toplevel`
 
-Normalize Windows path separators/casing for comparison if needed.
+Normalize Windows path separators/casing if needed.
 
-If the result is not exactly the canonical root above, STOP. Do not modify files. Report the detected root.
+If the result is not:
+`C:\Users\sekip\Desktop\AI-Commerce-HQ files\AI-Commerce-HQ`
+
+STOP. Do not modify files.
+
+Then verify:
+`Test-Path .\H!veAI`
+
+If the H!veAI application directory does not exist, STOP and report.
+
+If `.\H!veAI\.git` exists, STOP and report the nested repository conflict. Do not delete it automatically.
 
 ## Read authoritative control files first
 
@@ -39,19 +57,37 @@ From branch `H!veAI`, read:
 - `docs/H!veAI/codex-logs/README.md`
 - this prompt
 
-The canonical product name is **H!veAI**. The second character is `!`.
+Also inspect all files currently present under local:
+`C:\Users\sekip\Desktop\AI-Commerce-HQ files\AI-Commerce-HQ\H!veAI`
 
-## Start durable Codex log before changes
+Do not assume they are authoritative until compared with this prompt and the current GitHub branch.
 
-Create or continue:
+## Logging rule
 
-`docs/H!veAI/codex-logs/M00_FRESH_START_CODEX_LOG.md`
+Create the durable Codex log INSIDE the H!veAI application root:
 
-Record all meaningful commands, results, decisions, failures, fixes, tests, commits and push status chronologically.
+`H!veAI/docs/H!veAI/codex-logs/M00_FRESH_START_CODEX_LOG.md`
 
-## Step 1 — Prove local repository identity
+Create it before making H!veAI code changes.
 
-Run and log:
+Record chronologically:
+- timestamps
+- commands
+- results
+- files inspected
+- architectural decisions
+- failures
+- fixes
+- tests
+- commits
+- push status
+
+Do not erase failures after they are fixed.
+Do not record secrets/tokens.
+
+## Step 1 — Prove repository identity
+
+From the parent Git root, run and log:
 
 - `git rev-parse --show-toplevel`
 - `git status --short`
@@ -62,160 +98,249 @@ Run and log:
 - `git tag --list`
 - `git worktree list`
 
-Verify that the official repository remote is or can safely become:
-
+Verify the official remote:
 `https://github.com/Sekiph82/AI-Commerce-HQ.git`
 
 Do not push to `iamlukethedev/Claw3D` or any unrelated remote.
 
-If `origin` is wrong, do not overwrite it blindly. Inspect first, preserve evidence, then correct only if safe.
+If origin is wrong, inspect before changing it. Preserve evidence. Correct only if safe.
 
-## Step 2 — Verify official main ancestry
+## Step 2 — Verify the official H!veAI branch
 
 Fetch official GitHub state safely.
 
-Prove that the local repository contains the official AI-Commerce-HQ history and representative files from official main.
+Verify that the local development branch is or can safely become:
+`H!veAI`
 
-At minimum inspect:
+Do not create `hiveai-rebuild`.
+Do not use `hiveai-control-plane` as the active development branch.
+Do not force-reset or force-push.
 
-- `src/App.tsx`
-- `src-tauri/` if present
-- `backend/main.py` if present
-- `backend/agents/base_agent.py` if present
-- `backend/orchestrator/` if present
-- `package.json`
-- `TASKS.md`
-- `README.md`
+Verify that official `main` history is present and that branch `H!veAI` descends from the intended AI-Commerce-HQ repository.
 
-Do not assume architecture from old reports. Inspect actual files.
+## Step 3 — Audit the ACTUAL old AI-Commerce-HQ project
 
-## Step 3 — Inspect nested H!veAI reference folder
+The parent repository contains the old AI-Commerce-HQ application.
 
-Inspect:
+Inspect it as SOURCE MATERIAL only.
 
-`C:\Users\sekip\Desktop\AI-Commerce-HQ files\AI-Commerce-HQ\H!veAI`
-
-List and read its foundation/reference files.
-
-Do NOT treat it as a separate Git repository unless evidence proves it actually contains a nested `.git` directory.
-
-Do NOT run development commands from that child folder.
-
-Use it only as an input/reference source during M00.
-
-## Step 4 — Full fresh baseline audit
-
-Audit the ACTUAL official AI-Commerce-HQ repository from scratch.
-
-Map:
+Audit the actual parent application:
 
 Frontend:
 - framework
 - entry points
-- routing
 - state management
 - styling
-- 3D/UI systems
+- 3D/game UI
+- reusable component patterns
 
 Desktop/Tauri:
 - whether Tauri exists
 - version
-- Rust structure
-- lifecycle
-- packaging
+- Rust lifecycle/process code
+- packaging knowledge
 
 Backend:
-- Python/FastAPI presence
-- API/WebSocket architecture
-- agent/orchestrator structure
+- Python/FastAPI
+- WebSocket
+- agent abstraction
+- orchestrators
+- state layer
 
 Database:
-- technology
-- models
-- migrations
-- local data paths
+- SQLite/SQLAlchemy
+- schema
+- migration behavior
+- local data locations
 
 Build/test:
 - scripts
-- current build
+- build
 - typecheck
 - lint
 - tests
-- Rust/Python checks where applicable
+- Rust/Python checks
 
 Security:
-- tokens/secrets handling
-- local HTTP/CORS
-- shell/process permissions
+- tokens/secrets
+- CORS
+- process permissions
+- local HTTP
 - risky inherited defaults
 
-## Step 5 — Reuse classification
+Do NOT convert the old parent application in place.
+Do NOT delete old AI-Commerce-HQ runtime code during M00.
 
-Create or update a fresh reuse matrix using exactly:
+## Step 4 — Audit the H!veAI child directory
 
-A. REUSE WITH MINOR CHANGES
-B. REUSE AFTER REFACTOR
-C. ARCHIVE / REFERENCE ONLY
-D. REMOVE FROM ACTIVE H!veAI RUNTIME
+Inspect the existing contents of:
+`H!veAI\`
 
-Do not inherit previous classifications without re-verifying actual source files.
+Classify every existing file as:
 
-## Step 6 — Install canonical H!veAI foundation docs
+A. KEEP AS H!veAI FOUNDATION
+B. UPDATE / REPLACE
+C. REFERENCE ONLY
+D. REMOVE LATER
 
-Use the nested `H!veAI` folder only as a reference source.
+Do not delete blindly.
 
-At the official repository root, establish canonical H!veAI documents such as:
+If foundation files exist there, inspect them fully.
 
+## Step 5 — Establish H!veAI as an independent application workspace inside the repo
+
+H!veAI is a new dashboard/product that lives under:
+`H!veAI\`
+
+The target application structure should become approximately:
+
+`H!veAI/`
+- `package.json`
+- `AGENTS.md`
 - `CONSTITUTION.md`
 - `ARCHITECTURE.md`
 - `TASKS.md`
 - `CODEX_ROADMAP.md`
+- `README.md`
+- `src/`
+- `src-tauri/`
+- `docs/`
+- `tests/`
+
+Do NOT build actual product features in M00.
+
+M00 only establishes the clean application workspace and authoritative docs.
+
+Do not copy old AI-Commerce-HQ code wholesale into H!veAI.
+Only document reusable patterns for later milestones.
+
+## Step 6 — Move/copy canonical AI-development control files into H!veAI
+
+The long-term canonical AI-assisted-development locations must be inside the application root:
+
+- `H!veAI/docs/H!veAI/README.md`
+- `H!veAI/docs/H!veAI/prompts/`
+- `H!veAI/docs/H!veAI/audits/`
+- `H!veAI/docs/H!veAI/codex-logs/`
+
+Copy the current control-plane documents from branch `H!veAI` into these locations where appropriate.
+
+Do not destroy the GitHub branch-level originals during M00 unless instructed later.
+
+From this milestone onward:
+- ChatGPT prompts live under `H!veAI/docs/H!veAI/prompts/`
+- ChatGPT audits live under `H!veAI/docs/H!veAI/audits/`
+- Codex logs live under `H!veAI/docs/H!veAI/codex-logs/`
+
+## Step 7 — Install H!veAI foundation docs in the application root
+
+Ensure these exist under `H!veAI\`:
+
+- `README.md`
 - `AGENTS.md`
+- `CONSTITUTION.md`
+- `ARCHITECTURE.md`
+- `TASKS.md`
+- `CODEX_ROADMAP.md`
 
-Preserve any existing AI-Commerce-HQ planning docs before replacing conflicting root files.
+Use the previously prepared H!veAI foundation material where valid, but re-check it against the actual old repo audit.
 
-Archive old planning docs under `docs/archive/` when appropriate.
+All prose must use the product spelling **H!veAI**.
 
-Do not delete old runtime code in M00.
+Technical slugs may use `hiveai` only when punctuation is unsafe or invalid, for example package IDs, Rust crate IDs, internal identifiers, or filesystem-safe technical keys.
 
-## Step 7 — M00 documentation
+## Step 8 — Create fresh M00 migration docs inside H!veAI
 
 Create:
 
-- `docs/migration/M00_AI_COMMERCE_HQ_BASELINE.md`
-- `docs/migration/M00_REUSE_MATRIX.md`
-- `docs/migration/M00_HIVEAI_MIGRATION_PLAN.md`
-- `docs/migration/M00_TECHNICAL_DEBT.md` if useful
+- `H!veAI/docs/migration/M00_AI_COMMERCE_HQ_BASELINE.md`
+- `H!veAI/docs/migration/M00_REUSE_MATRIX.md`
+- `H!veAI/docs/migration/M00_HIVEAI_APPLICATION_PLAN.md`
+- `H!veAI/docs/migration/M00_TECHNICAL_DEBT.md` if useful
 
-All product naming in prose must use **H!veAI**.
+The application plan must explicitly state:
 
-## Step 8 — Build/test baseline
+Git root:
+`...\AI-Commerce-HQ`
 
-Run safe baseline checks based on the ACTUAL repository architecture.
+Application root:
+`...\AI-Commerce-HQ\H!veAI`
 
-Do not trigger real external commerce operations.
+and explain why this monorepo-style separation is intentional.
 
-Record exact commands, pass/fail, warnings and pre-existing failures.
+## Step 9 — Reuse matrix
 
-M00 is baseline capture and foundation setup, not mass cleanup.
+Classify relevant old AI-Commerce-HQ components using exactly:
 
-## Step 9 — Branch discipline
+A. REUSE WITH MINOR CHANGES
+B. REUSE AFTER REFACTOR
+C. ARCHIVE / REFERENCE ONLY
+D. DO NOT COPY INTO H!veAI
 
-Work only on branch:
+Evaluate at minimum:
+- React/Vite tooling
+- Tailwind
+- Zustand
+- Framer Motion
+- Tauri shell concepts
+- Rust lifecycle/process management
+- FastAPI backend
+- WebSocket manager
+- BaseAgent
+- async SQLite
+- migrations
+- 3D UI
+- commerce orchestrators
+- revenue/XP/gamification
+- installer/build scripts
 
+## Step 10 — Baseline validation
+
+Run safe baseline validation of the OLD parent AI-Commerce-HQ application without triggering real external commerce activity.
+
+Also validate the H!veAI child directory for structural correctness.
+
+M00 is not the milestone to install the final Tauri/React application stack unless needed only to establish minimal project metadata.
+
+Do not implement dashboard screens yet.
+
+## Step 11 — Parent repo modification rule
+
+Minimize edits outside `H!veAI\`.
+
+Allowed parent-root modifications in M00 only when needed:
+- `.gitignore` entries required for H!veAI build/user data
+- a small root README pointer if truly useful
+- repository-level CI/workspace configuration if absolutely necessary
+
+Do not replace the old parent `package.json`, `TASKS.md`, `README.md`, `src/`, `src-tauri/`, or backend with H!veAI equivalents.
+
+H!veAI owns its own application files under `H!veAI\`.
+
+## Step 12 — Branch discipline
+
+All M00 changes must be committed on branch:
 `H!veAI`
 
-If local branch does not exist, fetch/check out the official `H!veAI` branch safely.
-
-Do not create `hiveai-rebuild`.
-
-Do not use `hiveai-control-plane` as the development branch.
+Do not create another H!veAI development branch.
 
 Do not force-push.
 
-## Step 10 — Final verification
+## Step 13 — TASKS state
 
-Run and log:
+Update:
+`H!veAI/TASKS.md`
+
+Mark M00 complete only when evidence supports it.
+
+Do not begin M01.
+
+The exact next milestone remains:
+`M01 — Tauri 2 Foundation`
+
+## Step 14 — Final verification
+
+From the Git root run and log:
 
 - `git status`
 - `git branch --show-current`
@@ -225,17 +350,24 @@ Run and log:
 - `git diff --check`
 - `git worktree list`
 
-Ensure no secrets, local DBs, user-specific dumps, build artifacts or unrelated files are accidentally committed.
+Verify specifically:
+
+- H!veAI is NOT a nested Git repository
+- new H!veAI files live under `H!veAI\`
+- old AI-Commerce-HQ runtime remains intact
+- no secrets/local DB/build junk were committed
+- product spelling is H!veAI in user-facing content
 
 ## Commit
 
 If corrected M00 is genuinely complete, create one focused commit:
 
-`chore(H!veAI): establish fresh baseline from official repository`
+`chore(H!veAI): establish dedicated application workspace`
 
 Push only to:
-
-`Sekiph82/AI-Commerce-HQ` branch `H!veAI`
+`Sekiph82/AI-Commerce-HQ`
+branch:
+`H!veAI`
 
 using a normal non-force push.
 
@@ -244,28 +376,26 @@ using a normal non-force push.
 Return exactly:
 
 1. M00 RESULT
-2. VERIFIED LOCAL REPOSITORY ROOT
-3. VERIFIED GITHUB REPOSITORY
-4. CURRENT BRANCH / HEAD
-5. REMOTE STATUS
-6. NESTED H!veAI FOLDER FINDINGS
-7. ACTUAL FRONTEND ARCHITECTURE
-8. ACTUAL TAURI ARCHITECTURE
-9. ACTUAL BACKEND ARCHITECTURE
-10. DATABASE FINDINGS
-11. REUSE MATRIX SUMMARY
-12. FILES ADDED
-13. FILES MODIFIED
-14. FILES ARCHIVED
-15. BUILD / TEST RESULTS
-16. SECURITY FINDINGS
-17. CODEX LOG PATH
-18. COMMIT / PUSH STATUS
-19. BLOCKERS OR OPEN DECISIONS
-20. EXACT NEXT MILESTONE
+2. VERIFIED GIT ROOT
+3. VERIFIED H!veAI APPLICATION ROOT
+4. VERIFIED GITHUB REPOSITORY / BRANCH
+5. CURRENT HEAD
+6. REMOTE STATUS
+7. OLD AI-COMMERCE-HQ ARCHITECTURE SUMMARY
+8. H!veAI CHILD FOLDER INITIAL FINDINGS
+9. H!veAI FOUNDATION STRUCTURE CREATED
+10. REUSE MATRIX SUMMARY
+11. FILES ADDED UNDER H!veAI
+12. FILES MODIFIED OUTSIDE H!veAI
+13. BUILD / TEST RESULTS
+14. SECURITY FINDINGS
+15. CODEX LOG PATH
+16. COMMIT / PUSH STATUS
+17. BLOCKERS OR OPEN DECISIONS
+18. EXACT NEXT MILESTONE
+19. RECOMMENDED NEXT CODEX PROMPT
 
 The exact next milestone is:
-
 `M01 — Tauri 2 Foundation`
 
 Do NOT start M01.
