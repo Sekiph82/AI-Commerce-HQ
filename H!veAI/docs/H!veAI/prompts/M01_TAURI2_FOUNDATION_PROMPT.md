@@ -76,9 +76,19 @@ M01 must not repair, modernize, or refactor the legacy parent application.
 
 The parent app's broken local `npm run build` and Tauri 1 `dist` dependency are legacy baseline issues, not M01 targets.
 
-## Durable Codex log
+## Durable Codex log — mandatory local + GitHub persistence
 
 Create or continue before code changes:
+
+`H!veAI/docs/H!veAI/codex-logs/M01_TAURI2_FOUNDATION_CODEX_LOG.md`
+
+This log is part of the milestone deliverable and MUST be committed and pushed to the official GitHub repository branch `H!veAI`.
+
+Canonical GitHub destination:
+
+`https://github.com/Sekiph82/AI-Commerce-HQ/tree/H!veAI/H!veAI/docs/H!veAI/codex-logs`
+
+The expected GitHub file after M01 is:
 
 `H!veAI/docs/H!veAI/codex-logs/M01_TAURI2_FOUNDATION_CODEX_LOG.md`
 
@@ -98,6 +108,13 @@ Record chronologically:
 
 Never erase failures after fixing them.
 Never record secrets or token values.
+
+Before finishing M01, verify BOTH:
+
+1. the log file exists locally under `H!veAI/docs/H!veAI/codex-logs/`, and
+2. after the normal push, the same log file exists on GitHub branch `H!veAI` under `H!veAI/docs/H!veAI/codex-logs/`.
+
+If the GitHub log cannot be verified after push, M01 must not be reported as fully complete. Report the push/log verification failure explicitly.
 
 ## M01 objective
 
@@ -300,11 +317,21 @@ If M01 is genuinely complete, create one focused commit:
 
 `feat(H!veAI): establish Tauri 2 desktop foundation`
 
+The commit MUST include:
+
+`H!veAI/docs/H!veAI/codex-logs/M01_TAURI2_FOUNDATION_CODEX_LOG.md`
+
 Push normally to:
 
 `origin/H!veAI`
 
 Do not force push.
+
+After push, explicitly verify that the Codex log is visible in the GitHub repository under:
+
+`H!veAI/docs/H!veAI/codex-logs/`
+
+Record this verification in the final section of the Codex log itself before the final milestone report. If a final log update is needed after the first push, create a small follow-up documentation commit and push normally.
 
 ## M01 acceptance criteria
 
@@ -325,8 +352,9 @@ M01 is complete only if:
 13. Parent app source/package files are not modified.
 14. The preserved stash remains untouched.
 15. Codex log is committed.
-16. M01 migration document exists.
-17. TASKS.md reflects verified state only.
+16. Codex log is pushed and verified on GitHub branch `H!veAI` under `H!veAI/docs/H!veAI/codex-logs/`.
+17. M01 migration document exists.
+18. TASKS.md reflects verified state only.
 
 ## Final response
 
@@ -349,13 +377,14 @@ Return exactly:
 15. RUST / TAURI RESULTS
 16. WINDOWS SMOKE TEST RESULT
 17. RESTART VERIFICATION STATUS
-18. CODEX LOG PATH
-19. MIGRATION DOC PATH
-20. PRESERVED STASH STATUS
-21. COMMIT / PUSH STATUS
-22. BLOCKERS / OPEN DECISIONS
-23. EXACT NEXT MILESTONE
-24. RECOMMENDED NEXT CODEX PROMPT
+18. CODEX LOG LOCAL PATH
+19. CODEX LOG GITHUB PATH / VERIFICATION
+20. MIGRATION DOC PATH
+21. PRESERVED STASH STATUS
+22. COMMIT / PUSH STATUS
+23. BLOCKERS / OPEN DECISIONS
+24. EXACT NEXT MILESTONE
+25. RECOMMENDED NEXT CODEX PROMPT
 
 The exact next milestone is:
 
