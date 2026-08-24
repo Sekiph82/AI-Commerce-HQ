@@ -69,3 +69,24 @@ This section is appended chronologically during implementation. Prior failures r
 - Parent application source/package files were not changed.
 - Ignored generated `dist/`, `src-tauri/target/`, and `node_modules/` were not staged.
 - Preserved untracked parent files `start-demo.bat` and `task.md`; preserved the pre-M00 stash.
+
+### 2026-08-24 - commit
+
+- Focused commit created: `a1f23f7 feat(H!veAI): build command center UI shell`.
+- Commit contains the new M02 Codex log, migration document, frontend shell, fixtures, tests, dependency updates, and M02 task updates.
+- No parent source/package files or generated artifacts were staged.
+- Push to `origin/H!veAI` is the remaining publication step before final GitHub verification.
+
+### 2026-08-24 - GitHub verification
+
+- Initial implementation push succeeded: `3a291a5..a1f23f7 H!veAI -> H!veAI`.
+- GitHub branch verification returned `a1f23f7d8e75cb2cf1e5e130607dc6dae77a7b06` for `refs/heads/H!veAI`.
+- Verified separate GitHub files under `H!veAI/docs/H!veAI/codex-logs/`:
+  - `M00_FRESH_START_CODEX_LOG.md` visible.
+  - `M01_TAURI2_FOUNDATION_CODEX_LOG.md` visible.
+  - `M02_UI_SHELL_AND_DESIGN_SYSTEM_CODEX_LOG.md` visible.
+- M00 and M01 historical files remained unchanged throughout M02.
+
+PHASE STATUS: COMPLETE
+
+Final verification state before the log-only follow-up: M02 acceptance criteria passed; M03 was not started and no M03 prompt was created or recommended.
