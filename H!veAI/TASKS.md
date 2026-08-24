@@ -61,11 +61,13 @@ M03 COMPLETE. H!veAI uses a Rust-native runtime with no always-on Python sidecar
 M04 COMPLETE. H!veAI owns a Rust-native SQLite schema with versioned migrations, transactional failure recovery, and read-only database status IPC. Do not begin M05 in this session.
 
 ## M05 Project Registry
-- [ ] Add existing folder without mutation
-- [ ] Detect git/remotes/default branch/GitHub identity
-- [ ] Priority/builder/auditor/task-source settings
-- [ ] Path repair/archive/remove-from-registry
-- [ ] Search/sort/filter
+- [x] Add existing folder without mutation
+- [x] Detect git/remotes/default branch/GitHub identity
+- [x] Priority/builder/auditor/task-source settings
+- [x] Path repair/archive/remove-from-registry
+- [x] Search/sort/filter
+
+M05 COMPLETE. H!veAI supports explicit, read-only project registration backed by the M04 SQLite layer. Do not begin M06 in this session.
 
 ## M06 Local Git Engine
 - [ ] branch/HEAD/status/staged/unstaged/untracked

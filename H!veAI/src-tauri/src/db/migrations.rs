@@ -258,6 +258,22 @@ CREATE INDEX idx_github_sync_project ON github_sync_state(project_id, last_synce
 CREATE INDEX idx_settings_scope ON settings(scope);
 "#;
 
+const PROJECT_REGISTRY_FIELDS: &str = r#"
+ALTER TABLE projects ADD COLUMN original_path TEXT;
+ALTER TABLE projects ADD COLUMN normalized_path TEXT;
+ALTER TABLE projects ADD COLUMN registered_at TEXT;
+ALTER TABLE projects ADD COLUMN last_validated_at TEXT;
+ALTER TABLE projects ADD COLUMN preferred_builder TEXT;
+ALTER TABLE projects ADD COLUMN preferred_auditor TEXT;
+ALTER TABLE projects ADD COLUMN task_source_policy TEXT;
+ALTER TABLE projects ADD COLUMN archived_at TEXT;
+ALTER TABLE repositories ADD COLUMN repository_root TEXT;
+ALTER TABLE repositories ADD COLUMN is_git_repository INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE repositories ADD COLUMN current_branch TEXT;
+ALTER TABLE repositories ADD COLUMN head_sha TEXT;
+ALTER TABLE repositories ADD COLUMN remote_urls_json TEXT;
+"#;
+
 pub fn migrations() -> &'static [Migration] {
     &[
         Migration {
@@ -269,6 +285,11 @@ pub fn migrations() -> &'static [Migration] {
             version: 2,
             name: "initial_lookup_indexes",
             sql: INITIAL_INDEXES,
+        },
+        Migration {
+            version: 3,
+            name: "project_registry_fields",
+            sql: PROJECT_REGISTRY_FIELDS,
         },
     ]
 }
@@ -368,8 +389,8 @@ mod tests {
     fn fresh_database_reaches_latest_version() {
         let (_directory, mut connection) = temp_connection();
         let report = apply_migrations(&mut connection, migrations()).expect("migrations apply");
-        assert_eq!(report.schema_version, 2);
-        assert_eq!(report.migration_count, 2);
+        assert_eq!(report.schema_version, 3);
+        assert_eq!(report.migration_count, 3);
         assert_eq!(report.last_migration_status, "APPLIED");
     }
 
@@ -379,7 +400,7 @@ mod tests {
         apply_migrations(&mut connection, migrations()).expect("first apply");
         let report = apply_migrations(&mut connection, migrations()).expect("second apply");
         assert_eq!(report.last_migration_status, "ALREADY_CURRENT");
-        assert_eq!(report.migration_count, 2);
+        assert_eq!(report.migration_count, 3);
     }
 
     #[test]
@@ -397,7 +418,8 @@ mod tests {
             rows,
             vec![
                 (1, "initial_hiveai_schema".to_string()),
-                (2, "initial_lookup_indexes".to_string())
+                (2, "initial_lookup_indexes".to_string()),
+                (3, "project_registry_fields".to_string())
             ]
         );
     }

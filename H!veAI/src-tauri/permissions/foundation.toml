@@ -19,3 +19,8 @@ commands.allow = ["hiveai_runtime_status"]
 identifier = "allow-database-status"
 description = "Allows the main window to read non-sensitive H!veAI database status."
 commands.allow = ["hiveai_database_status"]
+
+[[permission]]
+identifier = "allow-project-registry"
+description = "Allows the main window to use bounded, explicit H!veAI project registry operations."
+commands.allow = ["hiveai_projects_list", "hiveai_project_register", "hiveai_project_get", "hiveai_project_update_settings", "hiveai_project_archive", "hiveai_project_remove_from_registry", "hiveai_project_repair_path"]

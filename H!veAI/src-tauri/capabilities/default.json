@@ -10,6 +10,7 @@
     "allow-native-status",
     "allow-request-restart",
     "allow-runtime-status",
-    "allow-database-status"
+    "allow-database-status",
+    "allow-project-registry"
   ]
 }

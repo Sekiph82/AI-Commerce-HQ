@@ -3,8 +3,13 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_log::{Target, TargetKind};
 
 mod db;
+mod projects;
 mod runtime;
 use db::{DatabaseState, DatabaseStatus};
+use projects::{
+    ProjectListQuery, ProjectRecord, RegisterProjectRequest, RepairProjectPathRequest,
+    UpdateProjectSettingsRequest,
+};
 use runtime::{RuntimeStatus, RuntimeSupervisor};
 
 #[derive(Debug, Serialize)]
@@ -67,6 +72,62 @@ fn hiveai_database_status(database: tauri::State<'_, DatabaseState>) -> Database
     database.status()
 }
 
+#[tauri::command]
+fn hiveai_projects_list(
+    database: tauri::State<'_, DatabaseState>,
+    query: Option<ProjectListQuery>,
+) -> Result<Vec<ProjectRecord>, String> {
+    projects::list_projects(&database, query.unwrap_or_default())
+}
+
+#[tauri::command]
+fn hiveai_project_register(
+    database: tauri::State<'_, DatabaseState>,
+    request: RegisterProjectRequest,
+) -> Result<ProjectRecord, String> {
+    projects::register_project(&database, request)
+}
+
+#[tauri::command]
+fn hiveai_project_get(
+    database: tauri::State<'_, DatabaseState>,
+    project_id: String,
+) -> Result<ProjectRecord, String> {
+    projects::fetch_project(&database, &project_id)
+}
+
+#[tauri::command]
+fn hiveai_project_update_settings(
+    database: tauri::State<'_, DatabaseState>,
+    request: UpdateProjectSettingsRequest,
+) -> Result<ProjectRecord, String> {
+    projects::update_project_settings(&database, request)
+}
+
+#[tauri::command]
+fn hiveai_project_archive(
+    database: tauri::State<'_, DatabaseState>,
+    project_id: String,
+) -> Result<ProjectRecord, String> {
+    projects::archive_project(&database, &project_id)
+}
+
+#[tauri::command]
+fn hiveai_project_remove_from_registry(
+    database: tauri::State<'_, DatabaseState>,
+    project_id: String,
+) -> Result<(), String> {
+    projects::remove_project(&database, &project_id)
+}
+
+#[tauri::command]
+fn hiveai_project_repair_path(
+    database: tauri::State<'_, DatabaseState>,
+    request: RepairProjectPathRequest,
+) -> Result<ProjectRecord, String> {
+    projects::repair_project_path(&database, request)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -82,7 +143,14 @@ pub fn run() {
             hiveai_native_status,
             hiveai_request_restart,
             hiveai_runtime_status,
-            hiveai_database_status
+            hiveai_database_status,
+            hiveai_projects_list,
+            hiveai_project_register,
+            hiveai_project_get,
+            hiveai_project_update_settings,
+            hiveai_project_archive,
+            hiveai_project_remove_from_registry,
+            hiveai_project_repair_path
         ])
         .setup(|app| {
             app.manage(RuntimeSupervisor::new());

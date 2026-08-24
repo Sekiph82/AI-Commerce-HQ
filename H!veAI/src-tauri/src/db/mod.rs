@@ -21,6 +21,7 @@ pub struct DatabaseStatus {
 #[derive(Debug, Clone)]
 pub struct DatabaseState {
     status: DatabaseStatus,
+    database_path: PathBuf,
 }
 
 impl DatabaseState {
@@ -38,11 +39,21 @@ impl DatabaseState {
             == 1;
         Ok(Self {
             status: status_from_report(report, foreign_keys_enabled),
+            database_path,
         })
     }
 
     pub fn status(&self) -> DatabaseStatus {
         self.status.clone()
+    }
+
+    pub(crate) fn open_connection(&self) -> Result<Connection, String> {
+        let connection = Connection::open(&self.database_path)
+            .map_err(|error| format!("open H!veAI database connection: {error}"))?;
+        connection
+            .pragma_update(None, "foreign_keys", true)
+            .map_err(|error| format!("enable H!veAI database foreign keys: {error}"))?;
+        Ok(connection)
     }
 }
 
@@ -71,7 +82,7 @@ mod tests {
         let status = state.status();
         assert!(status.initialized);
         assert_eq!(status.database_path, "hiveai.db");
-        assert_eq!(status.schema_version, 2);
+        assert_eq!(status.schema_version, 3);
         assert!(status.foreign_keys_enabled);
         assert!(directory.path().join("hiveai.db").exists());
     }
