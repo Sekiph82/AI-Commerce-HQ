@@ -42,6 +42,41 @@ Use the Akilta logo in the footer with:
 
 Preserve these UI rules across future milestones unless the user explicitly changes them.
 
+## Development Manual QA Launcher
+
+During active development, the user must be able to launch the latest validated H!veAI desktop build by double-clicking one stable Windows shortcut without reinstalling the application.
+
+Canonical stable development executable:
+
+`C:\Users\sekip\Desktop\AI-Commerce-HQ files\AI-Commerce-HQ\H!veAI\dev-bin\H!veAI.exe`
+
+Canonical Desktop shortcut:
+
+`Desktop\H!veAI.lnk`
+
+Canonical shortcut icon source image:
+
+`C:\Users\sekip\Desktop\AI-Commerce-HQ files\H!veAI\H!veAI small logo.png`
+
+Use this exact image as the authoritative visual source for the Desktop shortcut icon. Do not substitute, redesign, recolor, crop, or replace it unless the user explicitly changes this rule.
+
+Because Windows `.lnk` icon locations should use a Windows-compatible icon resource rather than depend directly on PNG rendering, create or refresh a deterministic `.ico` derivative from this exact PNG when needed. Prefer the stable local derivative:
+
+`C:\Users\sekip\Desktop\AI-Commerce-HQ files\AI-Commerce-HQ\H!veAI\dev-bin\H!veAI.ico`
+
+The `.ico` derivative must preserve the source logo and should include standard Windows icon sizes where tooling permits, including 16, 32, 48, 64, 128, and 256 pixels. The Desktop `H!veAI.lnk` IconLocation must point to this stable `.ico` derivative, or to an equivalent Windows icon resource generated from the same canonical PNG if technically required.
+
+Launcher rules:
+
+- `H!veAI.lnk` must target the stable `H!veAI.exe` directly.
+- The shortcut must never target `.bat`, `cmd.exe`, PowerShell, npm, cargo, Vite, or an installer.
+- After each future milestone passes its required full verification, publish the new validated desktop executable to the same stable path using the repository's safe development-QA publication helper.
+- Publish through staging/validation so a failed build never overwrites the last known-good executable.
+- Keep the Desktop shortcut target and icon location stable across milestones.
+- If the canonical shortcut icon source PNG changes, regenerate the `.ico` derivative from that source before validating the shortcut.
+- Do not require setup or reinstallation during active development.
+- The final Windows installer, Program Files installation, Start Menu shortcut, uninstaller, and release packaging remain a final-release/M20 concern, not the active development launcher model.
+
 ## Mandatory Fetch-Before-Prompt Preflight
 
 Before reading milestone prompt files:
