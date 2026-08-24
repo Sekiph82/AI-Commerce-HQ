@@ -111,15 +111,37 @@ The central selected-project workspace must provide a distinct action such as `O
 
 The selected row must have a clear but restrained active visual state matching the canonical dark/violet language. Selection must also be keyboard-accessible.
 
+### Projects rail row content
+
+The Global Overview Projects rail is a fast project picker, not a miniature status dashboard.
+
+Each project row must show **only the registered project name**.
+
+Do not show in these rows:
+
+- logo, initials badge, or square project mark;
+- ACTIVE/MISSING/ARCHIVED status text;
+- Healthy/Watch/Blocked health text;
+- progress percentage or progress bar;
+- phase/milestone text;
+- `Registered...` or other subtitle;
+- actor or secondary metadata.
+
+Use compact single-line name rows so the fixed-height selector can display materially more projects at once. The selected row may have a restrained background, border, or accent marker without reintroducing status clutter. Long names may truncate visually only when needed, while retaining the complete name through accessible/title semantics.
+
+The full Projects page is allowed to show richer registry/Git/status metadata. This name-only rule is specific to the Global Overview project-selection rail.
+
 Required QA behavior:
 
 1. start on Command Center with AI-Commerce-HQ selected;
-2. click Bulk-Edit in the Command Center project rail;
-3. URL remains the Command Center route;
-4. central Current Project changes to Bulk-Edit without reload/restart;
-5. click AI-Commerce-HQ and central Current Project changes back;
-6. click `Open cockpit` and only then navigate to the currently selected project's cockpit;
-7. no stale asynchronous response may revert the selected central project to a previous project.
+2. confirm project rail rows display project names only;
+3. confirm no row contains logo/initial badge, status, health, percentage, progress bar, phase, or registration subtitle;
+4. click Bulk-Edit in the Command Center project rail;
+5. URL remains the Command Center route;
+6. central Current Project changes to Bulk-Edit without reload/restart;
+7. click AI-Commerce-HQ and central Current Project changes back;
+8. click `Open cockpit` and only then navigate to the currently selected project's cockpit;
+9. no stale asynchronous response may revert the selected central project to a previous project.
 
 ## Project Cockpit route identity contract
 
@@ -226,18 +248,19 @@ Before claiming visual PASS:
 9. Confirm the sidebar is slightly narrower while remaining usable.
 10. Confirm `Global Overview` is visible without a visible `WORKSPACE OVERVIEW` eyebrow.
 11. Confirm the central current-project header is compact and project identity is live Registry data.
-12. Confirm clicking a project in the Command Center project rail updates the central Current Project in place without leaving Global Overview.
-13. Confirm the selected project row is visibly active and `Open cockpit` navigates to exactly that selected project.
-14. Confirm a newly registered project appears in the Command Center project rail and sidebar project shortcuts without app restart.
-15. Confirm opening that newly registered project's cockpit never flashes FormuLab or any unrelated fixture project.
-16. Confirm Command, Assistant, and Notifications topbar icons open distinct surfaces.
-17. Confirm the footer is bottom-center/global, heart is red, and the sidebar no longer contains the old footer block.
-18. Confirm no giant Runtime/Database/Watcher blocks force the main dashboard downward.
-19. Confirm the Projects rail, center Cockpit, and right AI/System column are visible together.
-20. If the user has not personally approved the visual result, record `PENDING USER VISUAL ACCEPTANCE`; do not fabricate final visual PASS.
+12. Confirm Command Center project rail rows display project names only, with no logo/initial badge, status, health, percentage/progress, phase, or registration subtitle.
+13. Confirm clicking a project in the Command Center project rail updates the central Current Project in place without leaving Global Overview.
+14. Confirm the selected project row is visibly active and `Open cockpit` navigates to exactly that selected project.
+15. Confirm a newly registered project appears in the Command Center project rail and sidebar project shortcuts without app restart.
+16. Confirm opening that newly registered project's cockpit never flashes FormuLab or any unrelated fixture project.
+17. Confirm Command, Assistant, and Notifications topbar icons open distinct surfaces.
+18. Confirm the footer is bottom-center/global, heart is red, and the sidebar no longer contains the old footer block.
+19. Confirm no giant Runtime/Database/Watcher blocks force the main dashboard downward.
+20. Confirm the Projects rail, center Cockpit, and right AI/System column are visible together.
+21. If the user has not personally approved the visual result, record `PENDING USER VISUAL ACCEPTANCE`; do not fabricate final visual PASS.
 
 ## Future milestones
 
-M11/M12 will add richer Global Command Center and Project Cockpit functionality, but they must preserve this single-viewport composition, live-project identity contract, selection behavior, and canonical layout unless the user explicitly changes them.
+M11/M12 will add richer Global Command Center and Project Cockpit functionality, but they must preserve this single-viewport composition, live-project identity contract, selection behavior, project-rail name-only density rule, and canonical layout unless the user explicitly changes them.
 
 Future milestones may replace task/workflow placeholders with real data. They must not regress project identity back to fixtures or turn the dashboard back into a long vertically stacked page.
