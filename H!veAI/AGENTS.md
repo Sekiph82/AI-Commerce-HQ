@@ -86,6 +86,85 @@ At the start of each milestone:
    `H!veAI/docs/H!veAI/codex-logs/`.
 6. Work only on the active milestone.
 
+## Strict Audit Governance Standard
+
+H!veAI milestone closure uses an evidence-first audit model inspired by the strict
+FormuLab audit workflow. A builder/Codex completion statement is never sufficient
+proof of milestone completion.
+
+The independent auditor must recover the real milestone contract from the prompt,
+architecture, TASKS, prior audits, migration docs, and acceptance criteria, then
+verify repository truth against that contract.
+
+Every milestone audit must include these sections:
+
+1. `VERDICT` — exactly one of `PASS`, `CONDITIONAL`, or `FAIL`.
+2. `CONTRACT RECOVERY` — what the milestone was actually required to deliver.
+3. `BRANCH / HEAD / DIFF SCOPE` — audited branch, commit range, final HEAD, and changed-file scope.
+4. `ACCEPTANCE CRITERIA MATRIX` — every acceptance criterion marked individually as `PASS`, `PARTIAL`, `FAIL`, or `UNVERIFIED`.
+5. `BUILDER CLAIMS VS REPOSITORY TRUTH` — compare Codex-log claims against actual implementation.
+6. `FILE / SYMBOL EVIDENCE` — inspect the real implementation paths, symbols, configuration, permissions, and runtime boundaries.
+7. `FOCUSED TEST EVIDENCE` — verify tests that directly exercise the changed behavior.
+8. `REGRESSION EVIDENCE` — verify relevant previously completed behavior still works.
+9. `SECURITY / SAFETY REVIEW` — permissions, secrets, filesystem/process/network boundaries, destructive actions, and unsafe fallbacks.
+10. `ARCHITECTURE CONSISTENCY` — check the implementation against H!veAI architectural decisions and cross-milestone contracts.
+11. `TRACKER / LOG / DOCUMENTATION TRUTHFULNESS` — TASKS, milestone log, migration docs, and final report must match repository reality.
+12. `FINAL REPOSITORY STATE` — verify final commit/push state, remote visibility, historical-log preservation, and user-state preservation.
+13. `OPEN CROSS-MILESTONE FINDINGS` — carry forward defects or technical debt discovered in earlier milestones; do not silently forget them.
+14. `DEFECTS BY SEVERITY` — classify findings as `BLOCKER`, `MAJOR`, `MINOR`, or `NOTE`.
+15. `TECHNICAL DEBT / UPGRADE OPPORTUNITIES` — production-hardening or maintainability improvements even when not blocking.
+16. `UNVERIFIED ITEMS` — anything lacking sufficient evidence must remain explicitly unverified; never convert missing evidence into PASS.
+17. `REGRESSION RISK` — `LOW`, `MEDIUM`, or `HIGH`, with rationale.
+18. `AUDIT CONFIDENCE` — `LOW`, `MEDIUM`, or `HIGH`, with rationale.
+19. `FINAL VERDICT` — concise closure statement.
+20. `REQUIRED REMEDIATION` — exact fixes required before progression when verdict is not an unconditional PASS.
+
+### Audit evidence rules
+
+- Treat Codex logs as claims to verify, not as proof.
+- Prefer source code, configuration, tests, committed artifacts, Git history, and runtime evidence over summaries.
+- A passing test suite does not override a direct specification violation.
+- A feature that exists only in a mock/test path but not in production code is not complete.
+- If a manual acceptance step is required and was not performed, mark it `UNVERIFIED` or `PENDING MANUAL ACCEPTANCE`; never fabricate a PASS.
+- If environment limitations prevent verification, record the limitation explicitly.
+- Cross-milestone regressions or previously missed defects may reopen an earlier milestone finding.
+- Historical milestone logs must remain immutable; corrections belong in new audit/remediation files.
+- Do not approve solely because implementation compiles, tests pass, or Codex reports `COMPLETE`.
+
+### Verdict semantics
+
+- `PASS`: all blocking requirements are satisfied with sufficient evidence; only clearly non-blocking notes may remain.
+- `CONDITIONAL`: core implementation is substantially correct, but one or more bounded required follow-ups remain before the next quality gate or release boundary.
+- `FAIL`: any blocker, specification violation, unsafe behavior, missing required evidence, or materially incomplete acceptance criterion exists.
+
+### Remediation prompt rule
+
+When an audit finds required fixes, create a bounded remediation prompt rather than a vague cleanup request.
+
+A remediation prompt must enumerate every finding separately and, for each one, specify:
+
+- originating milestone/finding
+- severity
+- exact file/symbol or subsystem where known
+- current incorrect behavior
+- required target behavior
+- required code/config/documentation changes
+- focused tests to add or update
+- regression tests that must remain green
+- security/safety constraints
+- acceptance criteria for closure
+- prohibited shortcuts or scope expansion
+
+For cross-milestone remediation after M07, use milestone code `M07.01` and include:
+
+- every finding from the strict M07 audit
+- every still-open finding carried from M01-M06
+- regression verification across M01-M07
+- final tracker/log/documentation truthfulness review
+- final local/remote HEAD verification
+
+Do not start the next normal milestone until required remediation has been audited and closed when the audit verdict or explicit project governance requires that gate.
+
 ## Safety
 
 - Do not overwrite user changes.
