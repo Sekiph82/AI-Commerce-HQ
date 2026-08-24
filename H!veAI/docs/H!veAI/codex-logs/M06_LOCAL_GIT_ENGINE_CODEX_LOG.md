@@ -51,3 +51,13 @@ M06 implementation details will be recorded chronologically during the session.
 - M06 changes remain under `H!veAI/`; parent application files were not modified.
 - Temporary repositories were test-only and no temp repository, production DB, build artifact, secret, `.env`, or runtime log was staged.
 - M00-M05 Codex logs, the pre-M00 stash, and untracked parent `start-demo.bat` and `task.md` remain preserved.
+
+## 2026-08-24 - publication verification
+
+- Implementation commit: `b8f0f82` (`feat(H!veAI): add local Git engine`).
+- Implementation commit pushed successfully to `origin/H!veAI`.
+- M00-M06 logs are verified as separate GitHub files under `H!veAI/docs/H!veAI/codex-logs/`.
+- No M07 prompt was created, invented, recommended, or started.
+
+PHASE STATUS: COMPLETE
+EXACT NEXT MILESTONE: M07 — Filesystem Watcher and Snapshots
