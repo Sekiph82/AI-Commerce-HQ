@@ -93,3 +93,13 @@ Implementation and verification entries will be appended chronologically. Failur
 - No user project `.git` metadata, production DB, temp repo, `node_modules`, `dist`, `target`, runtime log, secret, or `.env` artifact was staged.
 - M00, M01, M02, M03 and M04 Codex logs remain unchanged.
 - The pre-M00 stash and untracked parent `start-demo.bat` and `task.md` remain preserved.
+
+### 2026-08-24 - publication verification
+
+- Implementation commit: `85c4002` (`feat(H!veAI): add Project Registry`).
+- Implementation commit pushed successfully to `origin/H!veAI`.
+- M00-M05 logs verified as separate files on GitHub under `H!veAI/docs/H!veAI/codex-logs/`.
+- No M06 prompt was created or recommended, and M06 was not started.
+
+PHASE STATUS: COMPLETE
+EXACT NEXT MILESTONE: M06 — Local Git Engine
