@@ -153,9 +153,24 @@ preflight ordering defect. Superseded by M07.07 surgical remediation.
 - [ ] User visual acceptance of refreshed Desktop H!veAI.lnk
 - [ ] M01 actual in-app restart acceptance
 
-M07.07 automated gates all pass: Rust 98/98, frontend 31/31, publisher 9/9, cargo fmt clean,
-TypeScript clean, production no-bundle build published. Status: PENDING USER VISUAL + M01
-RESTART ACCEPTANCE. M08 remains unstarted until M07.07 passes independent audit.
+M07.07 strict audit = FAIL because several named failure-path tests were state-only
+or simulated without exercising the claimed failure. M07.07 historical implementation
+and log remain immutable. M07.07A is the active evidence-integrity closure. M08 remains
+unstarted and blocked.
+
+## M07.07A Evidence integrity closure
+- [~] Replace misleading SQLite contention and backup tests with real DB paths and private cfg(test) failpoints
+- [~] Replace watcher name-only tests with real failpoint, lifecycle, root, event, Git, and persistence evidence
+- [~] Replace frontend pre-baked states with mounted-app Registry transitions and same-instance route race
+- [~] Replace publisher smoke placeholder with an actual spawned child-process cleanup assertion
+- [ ] Independent M07.07A strict audit
+- [ ] User visual acceptance of refreshed Desktop H!veAI.lnk
+- [ ] M01 actual in-app restart acceptance
+
+M07.07A remains ACTIVE until its independent audit. The Windows symlink containment
+case is UNVERIFIED because link creation was denied by the environment with OS error
+1314. Do not claim human-only pending status before independent audit. M08 remains
+unstarted and blocked.
 
 ## M08 Task Source Discovery
 - [ ] discover TASKS/tasks/PLANS/PROGRESS/ROADMAP/CLAUDE/AGENTS/handoffs

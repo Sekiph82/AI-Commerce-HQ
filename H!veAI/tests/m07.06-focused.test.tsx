@@ -54,11 +54,12 @@ const records = [
 ];
 
 const invoke = vi.hoisted(() => vi.fn());
+let liveRecords = records;
 
 function defaultInvoke(command: string, args?: { projectId?: string }) {
-  if (command === "hiveai_projects_list") return Promise.resolve(records);
+  if (command === "hiveai_projects_list") return Promise.resolve(liveRecords);
   if (command === "hiveai_project_get") {
-    const found = records.find((record) => record.id === args?.projectId);
+    const found = liveRecords.find((record) => record.id === args?.projectId);
     if (!found) return Promise.reject(new Error("project is not registered"));
     return Promise.resolve(found);
   }
@@ -135,6 +136,8 @@ function renderLive(path = "/") {
 }
 
 beforeEach(() => {
+  liveRecords = records;
+  vi.stubGlobal("confirm", () => true);
   invoke.mockClear();
   invoke.mockImplementation(defaultInvoke);
 });
@@ -252,7 +255,7 @@ describe("M07.06 live Registry and Command Center boundary", () => {
     renderLive();
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: "AI-Commerce-HQ" }),
+        screen.getByRole("heading", { name: "AI-Commerce-HQ" }),
       ).toBeInTheDocument(),
     );
     expect(
@@ -307,18 +310,28 @@ describe("M07.06 live Registry and Command Center boundary", () => {
 
 describe("M07.07 live-Registry / route-race boundary", () => {
   it("newly_registered_project_refresh_appears_in_rail", async () => {
-    renderLive();
+    liveRecords = records.slice(0, 2);
+    invoke.mockImplementation((command: string, args?: { projectId?: string; request?: { path?: string; name?: string | null } }) => {
+      if (command === "hiveai_project_register") {
+        liveRecords = [...liveRecords, records[2]];
+        return Promise.resolve(records[2]);
+      }
+      return defaultInvoke(command, args);
+    });
+    renderLive("/projects");
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: "AI-Commerce-HQ" }),
+        screen.getByRole("heading", { name: "AI-Commerce-HQ" }),
       ).toBeInTheDocument(),
     );
-    expect(
-      screen.getByRole("button", { name: "Bulk-Edit" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "fmcg-erp-system" }),
-    ).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "fmcg-erp-system" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add project" }));
+    fireEvent.change(screen.getByLabelText("Folder path"), { target: { value: "C:\\Projects\\fmcg-erp-system" } });
+    fireEvent.change(screen.getByLabelText(/Display name/), { target: { value: "fmcg-erp-system" } });
+    fireEvent.click(screen.getByRole("button", { name: /Register folder/ }));
+    await waitFor(() => expect(liveRecords).toHaveLength(3));
+    fireEvent.click(screen.getByRole("link", { name: "Command Center" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "fmcg-erp-system" })).toBeInTheDocument());
   });
 
   it("sidebar_shortcuts_derive_from_live_registry_ids", async () => {
@@ -338,28 +351,25 @@ describe("M07.07 live-Registry / route-race boundary", () => {
   });
 
   it("archive_remove_refresh_removes_from_rail_and_shortcuts", async () => {
-    const reduced = records.slice(0, 2);
-    invoke.mockImplementation(
-      (command: string, args?: { projectId?: string }) => {
-        if (command === "hiveai_projects_list") return Promise.resolve(reduced);
-        if (command === "hiveai_project_get") {
-          const found = reduced.find((r) => r.id === args?.projectId);
-          if (!found) return Promise.reject(new Error("project is not registered"));
-          return Promise.resolve(found);
-        }
-        if (command === "hiveai_frontend_ready") return Promise.resolve(undefined);
-        return defaultInvoke(command, args);
-      },
-    );
-    renderLive();
+    invoke.mockImplementation((command: string, args?: { projectId?: string }) => {
+      if (command === "hiveai_project_archive" && args?.projectId === "fmcg") {
+        liveRecords = liveRecords.filter((record) => record.id !== "fmcg");
+        return Promise.resolve(records[2]);
+      }
+      return defaultInvoke(command, args);
+    });
+    renderLive("/projects");
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: "AI-Commerce-HQ" }),
+        screen.getByRole("button", { name: "Archive fmcg-erp-system" }),
       ).toBeInTheDocument(),
     );
-    expect(
-      screen.queryByRole("button", { name: "fmcg-erp-system" }),
-    ).not.toBeInTheDocument();
+    expect(screen.getAllByText("fmcg-erp-system").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Archive fmcg-erp-system" }));
+    await waitFor(() => expect(screen.queryAllByText("fmcg-erp-system")).toHaveLength(0));
+    fireEvent.click(screen.getByRole("link", { name: "Command Center" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "fmcg-erp-system" })).not.toBeInTheDocument());
+    expect(screen.queryAllByText("fmcg-erp-system")).toHaveLength(0);
   });
 
   it("pending_project_lookup_renders_loading_without_unrelated_identity", async () => {
@@ -438,14 +448,14 @@ describe("M07.07 live-Registry / route-race boundary", () => {
         return defaultInvoke(command, args);
       },
     );
-    const { unmount } = renderLive("/projects/ai-commerce-hq");
+    renderLive("/projects/ai-commerce-hq");
     await waitFor(() =>
       expect(
         screen.getByText(/Resolving registered project identity/),
       ).toBeInTheDocument(),
     );
-    unmount();
-    renderLive("/projects/bulk-edit");
+    window.history.pushState({}, "", "/projects/bulk-edit");
+    fireEvent(window, new PopStateEvent("popstate"));
     await waitFor(() =>
       expect(
         screen.getByRole("heading", { name: "Bulk-Edit" }),
@@ -519,6 +529,9 @@ describe("M07.07 live-Registry / route-race boundary", () => {
     window.history.pushState({}, "", "/");
     const { container } = render(<App />);
     expect(container).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "FormuLab" })).toBeInTheDocument();
+    expect(invoke).not.toHaveBeenCalledWith("hiveai_projects_list", expect.anything());
+    expect(screen.queryByRole("heading", { name: "AI-Commerce-HQ" })).not.toBeInTheDocument();
     expect(screen.queryByText("Resolving registered project identity")).not.toBeInTheDocument();
   });
 });

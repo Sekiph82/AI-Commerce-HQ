@@ -7,6 +7,11 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
 
+#[cfg(test)]
+thread_local! {
+    static FAIL_NEXT_BACKUP_PUBLICATION: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DatabaseStatus {
@@ -138,6 +143,11 @@ fn create_migration_backup(connection: &Connection, database_path: &PathBuf) -> 
         .close()
         .map_err(|(_, error)| format!("close H!veAI migration backup: {error}"))?;
     backup_result?;
+    #[cfg(test)]
+    if FAIL_NEXT_BACKUP_PUBLICATION.with(|failpoint| failpoint.replace(false)) {
+        let _ = fs::remove_file(&temporary);
+        return Err("test-only backup publication failpoint".to_string());
+    }
     let had_backup = backup.exists();
     if had_backup {
         let _ = fs::remove_file(&previous);
@@ -301,11 +311,30 @@ mod tests {
     fn sqlite_busy_locked_contention_respects_configured_bounds() {
         let directory = tempdir().expect("temp directory");
         let state = DatabaseState::initialize(directory.path().to_path_buf()).unwrap();
-        let connection = state.open_connection().unwrap();
-        let timeout: i64 = connection
-            .query_row("PRAGMA busy_timeout", [], |row| row.get(0))
-            .unwrap();
-        assert_eq!(timeout, 5000, "busy timeout must be 5000ms");
+        let holder = state.open_connection().unwrap();
+        holder.execute_batch("BEGIN IMMEDIATE").unwrap();
+        let contender = state.open_connection().unwrap();
+        let started = std::time::Instant::now();
+        let result = contender.execute(
+            "INSERT INTO projects (id, name, created_at, updated_at) VALUES ('busy', 'busy', 'now', 'now')",
+            [],
+        );
+        let elapsed = started.elapsed();
+        assert!(result.is_err(), "contending write must return BUSY/LOCKED");
+        let message = result.unwrap_err().to_string().to_ascii_uppercase();
+        assert!(
+            message.contains("BUSY") || message.contains("LOCKED"),
+            "unexpected SQLite error: {message}"
+        );
+        assert!(
+            elapsed >= Duration::from_millis(4500),
+            "contention returned before configured bound: {elapsed:?}"
+        );
+        assert!(
+            elapsed <= Duration::from_millis(7000),
+            "contention exceeded bounded timeout: {elapsed:?}"
+        );
+        holder.execute_batch("ROLLBACK").unwrap();
     }
 
     #[test]
@@ -326,24 +355,30 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM fixture", [], |r| r.get(0))
             .unwrap();
         assert_eq!(first_count, 1);
+        let before_source = fs::read(&db_path).unwrap();
+        let before_backup = fs::read(&bak).unwrap();
         source
             .execute("INSERT INTO fixture VALUES ('second')", [])
             .unwrap();
-        create_migration_backup(&source, &db_path).unwrap();
-        let prev = db_path.with_extension("db.pre-migration.bak.prev");
-        assert!(prev.exists(), "prev backup must exist after rotation");
-        let prev_count: i64 = Connection::open(&prev)
-            .unwrap()
-            .query_row("SELECT COUNT(*) FROM fixture", [], |r| r.get(0))
-            .unwrap();
-        assert_eq!(prev_count, 1, "prev must have the first backup content");
-        let bak_count: i64 = Connection::open(&bak)
-            .unwrap()
-            .query_row("SELECT COUNT(*) FROM fixture", [], |r| r.get(0))
-            .unwrap();
+        FAIL_NEXT_BACKUP_PUBLICATION.with(|failpoint| failpoint.set(true));
+        let result = create_migration_backup(&source, &db_path);
+        assert!(
+            result.is_err(),
+            "publication failpoint must return an error"
+        );
         assert_eq!(
-            bak_count, 2,
-            "current backup must have the second backup content"
+            fs::read(&db_path).unwrap(),
+            before_source,
+            "source bytes changed"
+        );
+        assert_eq!(
+            fs::read(&bak).unwrap(),
+            before_backup,
+            "prior good backup changed"
+        );
+        assert!(
+            !db_path.with_extension("db.pre-migration.tmp").exists(),
+            "temporary backup artifact remained"
         );
         drop(source);
         assert!(db_path.exists(), "source database must be preserved");
@@ -353,31 +388,44 @@ mod tests {
     fn sqlite_backup_failure_prevents_migration_mutation() {
         let directory = tempdir().expect("temp directory");
         let db_path = directory.path().join("hiveai.db");
-        let source = Connection::open(&db_path).unwrap();
-        source.execute_batch("CREATE TABLE migrations (id TEXT PRIMARY KEY, version INTEGER NOT NULL, name TEXT NOT NULL, applied_at TEXT NOT NULL)").unwrap();
-        source
-            .execute(
-                "INSERT INTO migrations VALUES ('m1', 1, 'v1', '2024-01-01')",
+        let mut source = Connection::open(&db_path).unwrap();
+        migrations::apply_migrations(&mut source, &migrations::migrations()[..6]).unwrap();
+        source.execute("INSERT INTO projects (id, name, created_at, updated_at) VALUES ('p6', 'P6', 'now', 'now')", []).unwrap();
+        source.execute("INSERT INTO project_snapshots (id, project_id, availability, evidence_generated_at, watcher_health, created_at) VALUES ('s6', 'p6', 'AVAILABLE', 'now', 'HEALTHY', '1700000000')", []).unwrap();
+        create_migration_backup(&source, &db_path).unwrap();
+        drop(source);
+        FAIL_NEXT_BACKUP_PUBLICATION.with(|failpoint| failpoint.set(true));
+        let state_result = DatabaseState::initialize(directory.path().to_path_buf());
+        assert!(
+            state_result.is_err(),
+            "injected backup failure must block initialization"
+        );
+        let reopened = Connection::open(&db_path).unwrap();
+        let version: i64 = reopened
+            .query_row("SELECT MAX(version) FROM migrations", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 6, "v7 must not be committed after backup failure");
+        let created_at: String = reopened
+            .query_row(
+                "SELECT created_at FROM project_snapshots WHERE id = 's6'",
                 [],
+                |row| row.get(0),
             )
             .unwrap();
-        configure_connection(&source).unwrap();
-        drop(source);
-        let _pre_bytes = fs::read(&db_path).unwrap();
-        let bak_dir = directory.path().join("readonly_sub");
-        fs::create_dir(&bak_dir).unwrap();
-        let state_result = DatabaseState::initialize(directory.path().to_path_buf());
-        if let Ok(state) = &state_result {
-            let conn = state.open_connection().unwrap();
-            let version: i64 = conn
-                .query_row(
-                    "SELECT COALESCE(MAX(version), 0) FROM migrations",
+        assert_eq!(
+            created_at, "1700000000",
+            "v7 timestamp conversion must not run"
+        );
+        assert_eq!(
+            reopened
+                .query_row::<i64, _, _>(
+                    "SELECT COUNT(*) FROM migrations WHERE version = 7",
                     [],
-                    |row| row.get(0),
+                    |row| row.get(0)
                 )
-                .unwrap();
-            assert!(version >= 1, "migration must have run or stayed at 1");
-        }
+                .unwrap(),
+            0
+        );
     }
 
     #[test]

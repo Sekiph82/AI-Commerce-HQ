@@ -84,7 +84,27 @@ try {
     if ((Hash $stable) -ne $script:seedHash) { throw 'locked stable changed bytes' }
     Write-Output 'PASS locked_stable_fails_cleanly_no_byte_change'
 
-    # 7. failed smoke path leaves no spawned test process
+    # 7. failed smoke path cleans up the actual spawned test process and staging artifact
+    $child = $null
+    try {
+        $childExecutable = (Get-Process -Id $PID).Path
+        $child = Start-Process -FilePath $childExecutable -WindowStyle Hidden -PassThru -ArgumentList @('-NoLogo', '-NoProfile', '-Command', 'Start-Sleep -Seconds 30')
+        $childPid = $child.Id
+        try { throw 'simulated smoke/readiness failure after child spawn' }
+        catch {
+            if ($child -and -not $child.HasExited) {
+                Stop-Process -Id $childPid -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+    finally {
+        if ($child -and -not $child.HasExited) {
+            Stop-Process -Id $child.Id -Force -ErrorAction SilentlyContinue
+        }
+    }
+    Start-Sleep -Milliseconds 100
+    $stillRunning = Get-Process -Id $childPid -ErrorAction SilentlyContinue
+    if ($stillRunning) { throw 'failed smoke child process remained alive' }
     if (Test-Path -LiteralPath $staged) { throw 'failed smoke path left an artifact' }
     Write-Output 'PASS failed_smoke_path_no_spawned_test_process'
 

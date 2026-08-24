@@ -13,6 +13,13 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, SystemTime};
 use uuid::Uuid;
 
+#[cfg(test)]
+thread_local! {
+    static FAIL_NEXT_WATCH_ATTACH: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static FAIL_NEXT_GIT_REFRESH: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static FAIL_NEXT_SNAPSHOT_PERSISTENCE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 const CHANNEL_CAPACITY: usize = 512;
 const DEBOUNCE_WINDOW: Duration = Duration::from_millis(250);
 const REFRESH_WINDOW: Duration = Duration::from_millis(750);
@@ -245,6 +252,15 @@ impl WatcherManager {
         let project_root = project.normalized_path.clone();
         let sender = self.sender.clone();
         let callback_inner = Arc::clone(&self.inner);
+        #[cfg(test)]
+        if FAIL_NEXT_WATCH_ATTACH.with(|failpoint| failpoint.replace(false)) {
+            if let Some(status) = inner.statuses.get_mut(&project.id) {
+                status.state = "DEGRADED".to_string();
+                status.watcher_health = "DEGRADED".to_string();
+                status.rescan_required = true;
+            }
+            return Err("test-only watcher attachment failpoint".to_string());
+        }
         let mut watcher = match RecommendedWatcher::new(
             move |event| {
                 let input = RawInput {
@@ -450,6 +466,10 @@ fn refresh_project_snapshot(
             .unwrap_or(false)
         && git_relevant
     {
+        #[cfg(test)]
+        if FAIL_NEXT_GIT_REFRESH.with(|failpoint| failpoint.replace(false)) {
+            return Err("test-only Git refresh failpoint".to_string());
+        }
         let _ = git_snapshot(
             database,
             GitSnapshotRequest {
@@ -491,6 +511,10 @@ fn refresh_project_snapshot(
         "HEALTHY"
     };
     let connection = database.open_connection()?;
+    #[cfg(test)]
+    if FAIL_NEXT_SNAPSHOT_PERSISTENCE.with(|failpoint| failpoint.replace(false)) {
+        return Err("test-only snapshot persistence failpoint".to_string());
+    }
     connection.execute("INSERT INTO project_snapshots (id, project_id, availability, git_snapshot_id, last_filesystem_event_at, last_watcher_refresh_at, evidence_generated_at, changed_path_count, rescan_required, watcher_health, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, ?7, ?8, ?9, ?6)", rusqlite::params![Uuid::new_v4().to_string(), project_id, if available { "AVAILABLE" } else { "MISSING" }, git_id, last_event, now, events.len() as i64, rescan_required as i64, health]).map_err(|error| format!("persist project snapshot: {error}"))?;
     if let Ok(mut state) = inner.lock() {
         if let Some(status) = state.statuses.get_mut(project_id) {
@@ -686,7 +710,25 @@ fn timestamp() -> String {
 mod tests {
     use super::*;
     use std::fs;
+    use std::process::Command;
     use tempfile::tempdir;
+
+    fn init_git_repo(root: &Path) {
+        let run = |args: &[&str]| {
+            let status = Command::new("git")
+                .args(args)
+                .current_dir(root)
+                .status()
+                .expect("git command should start");
+            assert!(status.success(), "git command failed: {args:?}");
+        };
+        run(&["init", "--quiet"]);
+        run(&["config", "user.email", "test@example.com"]);
+        run(&["config", "user.name", "H!veAI Test"]);
+        fs::write(root.join("README.md"), "fixture").unwrap();
+        run(&["add", "."]);
+        run(&["commit", "--quiet", "-m", "fixture"]);
+    }
 
     fn event(project_id: &str, kind: EventKind, path: &str) -> RawInput {
         RawInput {
@@ -1043,6 +1085,7 @@ mod tests {
         let app_data = tempdir().unwrap();
         let project_root = tempdir().unwrap();
         let database = DatabaseState::initialize(app_data.path().to_path_buf()).unwrap();
+        let manager = WatcherManager::initialize(database.clone()).unwrap();
         let project = crate::projects::register_project(
             &database,
             crate::projects::RegisterProjectRequest {
@@ -1051,8 +1094,7 @@ mod tests {
             },
         )
         .unwrap();
-        let s = inner();
-        s.lock().unwrap().statuses.insert(
+        manager.inner.lock().unwrap().statuses.insert(
             project.id.clone(),
             ProjectWatcherStatus {
                 project_id: project.id.clone(),
@@ -1066,14 +1108,19 @@ mod tests {
                 rescan_required: true,
             },
         );
-        refresh_project_snapshot(&database, &s, &project.id, Vec::new(), false).unwrap();
-        assert!(s.lock().unwrap().statuses[&project.id].rescan_required);
+        FAIL_NEXT_WATCH_ATTACH.with(|failpoint| failpoint.set(true));
+        assert!(manager.refresh_from_registry().is_err());
+        let state = manager.inner.lock().unwrap();
+        assert!(state.watches.is_empty());
+        assert!(state.watch_roots.is_empty());
+        assert!(state.statuses[&project.id].rescan_required);
     }
 
     #[test]
     fn watcher_git_refresh_failure_preserves_rescan_requirement() {
         let app_data = tempdir().unwrap();
         let project_root = tempdir().unwrap();
+        init_git_repo(project_root.path());
         let database = DatabaseState::initialize(app_data.path().to_path_buf()).unwrap();
         let project = crate::projects::register_project(
             &database,
@@ -1105,8 +1152,23 @@ mod tests {
             None,
             EventCategory::GitMetadata,
         );
-        refresh_project_snapshot(&database, &s, &project.id, vec![git_event], false).unwrap();
+        FAIL_NEXT_GIT_REFRESH.with(|failpoint| failpoint.set(true));
+        assert!(
+            refresh_project_snapshot(&database, &s, &project.id, vec![git_event], false).is_err()
+        );
         assert!(s.lock().unwrap().statuses[&project.id].rescan_required);
+        assert_eq!(
+            database
+                .open_connection()
+                .unwrap()
+                .query_row::<i64, _, _>(
+                    "SELECT COUNT(*) FROM project_snapshots WHERE project_id = ?1",
+                    [&project.id],
+                    |row| row.get(0)
+                )
+                .unwrap(),
+            0
+        );
     }
 
     #[test]
@@ -1144,7 +1206,8 @@ mod tests {
             None,
             EventCategory::Source,
         );
-        refresh_project_snapshot(&database, &s, &project.id, vec![event], false).unwrap();
+        FAIL_NEXT_SNAPSHOT_PERSISTENCE.with(|failpoint| failpoint.set(true));
+        assert!(refresh_project_snapshot(&database, &s, &project.id, vec![event], false).is_err());
         assert!(s.lock().unwrap().statuses[&project.id].rescan_required);
     }
 
@@ -1203,7 +1266,7 @@ mod tests {
         let app_data = tempdir().unwrap();
         let project_root = tempdir().unwrap();
         let database = DatabaseState::initialize(app_data.path().to_path_buf()).unwrap();
-        crate::projects::register_project(
+        let project = crate::projects::register_project(
             &database,
             crate::projects::RegisterProjectRequest {
                 path: project_root.path().to_string_lossy().into_owned(),
@@ -1212,10 +1275,18 @@ mod tests {
         )
         .unwrap();
         let manager = WatcherManager::initialize(database.clone()).unwrap();
-        let before = manager.status().projects.len();
+        let before = manager.inner.lock().unwrap();
+        let before_watch_count = before.watches.len();
+        let before_root = before.watch_roots.get(&project.id).cloned();
+        drop(before);
         manager.refresh_from_registry().unwrap();
-        let after = manager.status().projects.len();
-        assert_eq!(before, after, "refresh must not duplicate watchers");
+        let after = manager.inner.lock().unwrap();
+        assert_eq!(
+            after.watches.len(),
+            before_watch_count,
+            "refresh must not duplicate watchers"
+        );
+        assert_eq!(after.watch_roots.get(&project.id).cloned(), before_root);
     }
 
     #[test]
@@ -1246,10 +1317,24 @@ mod tests {
         )
         .unwrap();
         manager.refresh_from_registry().unwrap();
+        let state = manager.inner.lock().unwrap();
         assert_eq!(
-            manager.project_status(&project.id).unwrap().state,
-            "WATCHING"
+            state.watch_roots[&project.id]
+                .to_string_lossy()
+                .to_ascii_lowercase(),
+            std::fs::canonicalize(new_root.path())
+                .unwrap()
+                .to_string_lossy()
+                .to_ascii_lowercase()
         );
+        assert_eq!(state.watches.len(), 1);
+        assert!(!state.watch_roots.values().any(|root| {
+            root.to_string_lossy().to_ascii_lowercase()
+                == std::fs::canonicalize(old_root.path())
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_ascii_lowercase()
+        }));
     }
 
     #[test]
@@ -1276,16 +1361,45 @@ mod tests {
         )
         .unwrap();
         manager.refresh_from_registry().unwrap();
+        let before_events = manager.project_status(&project.id).unwrap().last_event_at;
+        let before_snapshots: i64 = database
+            .open_connection()
+            .unwrap()
+            .query_row(
+                "SELECT COUNT(*) FROM project_snapshots WHERE project_id = ?1",
+                [&project.id],
+                |row| row.get(0),
+            )
+            .unwrap();
         fs::write(new_root.path().join("event.txt"), "observed").unwrap();
-        thread::sleep(Duration::from_millis(500));
-        let status = manager.project_status(&project.id).unwrap();
-        assert!(status.available);
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            let status = manager.project_status(&project.id).unwrap();
+            let snapshots: i64 = database
+                .open_connection()
+                .unwrap()
+                .query_row(
+                    "SELECT COUNT(*) FROM project_snapshots WHERE project_id = ?1",
+                    [&project.id],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            if status.last_event_at != before_events && snapshots > before_snapshots {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "new-root event was not observed"
+            );
+            thread::sleep(Duration::from_millis(100));
+        }
     }
 
     #[test]
     fn watcher_git_category_event_persists_snapshot() {
         let app_data = tempdir().unwrap();
         let project_root = tempdir().unwrap();
+        init_git_repo(project_root.path());
         let database = DatabaseState::initialize(app_data.path().to_path_buf()).unwrap();
         let project = crate::projects::register_project(
             &database,
@@ -1318,22 +1432,27 @@ mod tests {
             EventCategory::GitMetadata,
         );
         refresh_project_snapshot(&database, &s, &project.id, vec![git_event], false).unwrap();
-        let count: i64 = database
+        let (count, linked): (i64, i64) = database
             .open_connection()
             .unwrap()
             .query_row(
-                "SELECT COUNT(*) FROM project_snapshots WHERE project_id = ?1",
+                "SELECT COUNT(*), COUNT(git_snapshot_id) FROM project_snapshots WHERE project_id = ?1",
                 [&project.id],
-                |row| row.get(0),
+                |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .unwrap();
         assert!(count >= 1, "Git event must persist a snapshot");
+        assert!(
+            linked >= 1,
+            "Git event snapshot must reference persisted Git snapshot"
+        );
     }
 
     #[test]
     fn watcher_non_git_event_does_not_persist_git_snapshot() {
         let app_data = tempdir().unwrap();
         let project_root = tempdir().unwrap();
+        init_git_repo(project_root.path());
         let database = DatabaseState::initialize(app_data.path().to_path_buf()).unwrap();
         let project = crate::projects::register_project(
             &database,
@@ -1365,6 +1484,7 @@ mod tests {
             None,
             EventCategory::Source,
         );
+        let before: i64 = database.open_connection().unwrap().query_row("SELECT COUNT(*) FROM git_snapshots WHERE repository_id IN (SELECT id FROM repositories WHERE project_id = ?1)", [&project.id], |row| row.get(0)).unwrap();
         refresh_project_snapshot(&database, &s, &project.id, vec![source_event], false).unwrap();
         let git_count: i64 = database
             .open_connection()
@@ -1375,7 +1495,10 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(git_count, 0, "non-Git event must not create git snapshot");
+        assert_eq!(
+            git_count, before,
+            "non-Git event must not create git snapshot"
+        );
     }
 
     #[test]
@@ -1414,7 +1537,12 @@ mod tests {
         .unwrap();
         let manager = WatcherManager::initialize(database.clone()).unwrap();
         assert!(manager.status().running);
+        let retained = Arc::clone(&manager.inner);
         drop(manager);
+        let state = retained.lock().unwrap();
+        assert!(!state.running);
+        assert!(state.watches.is_empty());
+        assert!(state.watch_roots.is_empty());
     }
 
     #[test]
@@ -1425,9 +1553,21 @@ mod tests {
         fs::write(&real_file, "secret").unwrap();
         let inside = root.path().join("src");
         fs::create_dir_all(&inside).unwrap();
-        let contained = inside.join("normal.txt");
-        fs::write(&contained, "ok").unwrap();
-        assert!(physically_contained(&contained, root.path()));
-        assert!(!physically_contained(&real_file, root.path()));
+        let link = inside.join("escape.txt");
+        let result = {
+            #[cfg(windows)]
+            {
+                std::os::windows::fs::symlink_file(&real_file, &link)
+            }
+            #[cfg(unix)]
+            {
+                std::os::unix::fs::symlink(&real_file, &link)
+            }
+        };
+        if let Err(error) = result {
+            println!("UNVERIFIED — link creation denied by environment: {error}");
+            return;
+        }
+        assert!(!physically_contained(&link, root.path()));
     }
 }
