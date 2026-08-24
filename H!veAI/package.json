@@ -12,20 +12,32 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "verify:m00": "node -e \"const fs=require('fs'); const required=['README.md','AGENTS.md','CONSTITUTION.md','ARCHITECTURE.md','TASKS.md','CODEX_ROADMAP.md','docs/H!veAI/README.md','docs/H!veAI/prompts/M00_FRESH_START_CORRECT_ROOT_PROMPT.md','docs/H!veAI/audits/M00_FRESH_START_AUDIT.md','docs/H!veAI/codex-logs/M00_FRESH_START_CODEX_LOG.md','docs/migration/M00_AI_COMMERCE_HQ_BASELINE.md','docs/migration/M00_REUSE_MATRIX.md','docs/migration/M00_HIVEAI_APPLICATION_PLAN.md']; const missing=required.filter(p=>!fs.existsSync(p)); if(missing.length){console.error('Missing '+missing.join(', ')); process.exit(1)}; console.log('H!veAI M00 structure verified')\""
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",
     "@tauri-apps/plugin-notification": "2.3.3",
+    "framer-motion": "12.23.28",
+    "lucide-react": "0.468.0",
+    "motion-dom": "12.23.28",
+    "motion-utils": "12.23.28",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "react-router-dom": "7.8.2"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.11.4",
+    "@testing-library/jest-dom": "6.8.0",
+    "@testing-library/react": "16.3.0",
+    "@testing-library/user-event": "14.6.1",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.5",
     "@vitejs/plugin-react": "6.1.0",
+    "jsdom": "26.1.0",
     "typescript": "7.0.2",
-    "vite": "8.2.2"
+    "vite": "8.2.2",
+    "vitest": "3.2.4"
   }
 }

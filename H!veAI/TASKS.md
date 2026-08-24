@@ -29,13 +29,15 @@ M01 COMPLETE with restart verification left as a manual blocked check. Do not
 begin M02 until M01 is independently audited.
 
 ## M02 UI shell/design system
-- [ ] Remove GameWorld from root flow
-- [ ] Remove Three.js from primary bundle
-- [ ] Dark-first design system
-- [ ] Sidebar/top command bar/router
-- [ ] Routes: Command Center, Projects, Cockpit, Agents, Audits, Settings
-- [ ] shadcn/ui + Framer Motion
-- [ ] Loading/error/empty states
+- [x] Remove GameWorld from root flow
+- [x] Remove Three.js from primary bundle
+- [x] Dark-first design system
+- [x] Sidebar/top command bar/router
+- [x] Routes: Command Center, Projects, Cockpit, Agents, Audits, Settings
+- [x] Accessible reusable UI primitives + Framer Motion
+- [x] Loading/error/empty states
+
+M02 COMPLETE. Frontend, Rust/Tauri regression, bounded desktop smoke, and child-scope review passed. Do not begin M03 in this session.
 
 ## M03 Runtime refactor
 - [ ] Stop GMO/commerce orchestrators
