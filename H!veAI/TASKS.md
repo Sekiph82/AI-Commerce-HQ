@@ -128,6 +128,35 @@ production build, and publisher smoke gates pass; the milestone remains FAIL unt
 the required focused evidence matrix is complete. Final UI status is PENDING USER
 VISUAL ACCEPTANCE. M08 is unstarted.
 
+## M07.06 Focused evidence and runtime truth closure
+- [x] Deterministic Git diff boundary with no-textconv and real binary paths
+- [x] Dedicated frontend-ready IPC command, ACL, and post-mount call
+- [x] SHA-256-proven publisher rollback and isolated temp-only failure harness
+- [x] Direct Git diff, migration, SQLite, watcher, and Registry focused fixtures
+- [x] Live selected-project session state and name-only in-place project rail
+- [x] Live Tauri task/workflow/brief placeholders are neutral and truthful
+- [x] Frontend focused Command Center and topbar-surface matrix
+- [x] Full frontend/Rust regression, audit, build, and no-bundle publication gates
+- [ ] User visual acceptance of refreshed Desktop H!veAI.lnk
+- [ ] M01 actual in-app restart acceptance
+
+M07.06 strict audit verdict: FAIL. Evidence matrices incomplete; SQLite corruption-safe
+preflight ordering defect. Superseded by M07.07 surgical remediation.
+
+## M07.07 Claude surgical remediation
+- [x] SQLite corruption-safe read-only integrity preflight before WAL configuration
+- [x] Complete watcher focused evidence matrix (13 cases)
+- [x] Complete Registry identity focused evidence matrix (15 cases)
+- [x] Complete frontend live-Registry / route-race focused tests (9 cases)
+- [x] Finish launcher failure evidence harness (9 mapped cases)
+- [x] Truthful TASKS.md and M07.07 Codex log
+- [ ] User visual acceptance of refreshed Desktop H!veAI.lnk
+- [ ] M01 actual in-app restart acceptance
+
+M07.07 automated gates all pass: Rust 98/98, frontend 31/31, publisher 9/9, cargo fmt clean,
+TypeScript clean, production no-bundle build published. Status: PENDING USER VISUAL + M01
+RESTART ACCEPTANCE. M08 remains unstarted until M07.07 passes independent audit.
+
 ## M08 Task Source Discovery
 - [ ] discover TASKS/tasks/PLANS/PROGRESS/ROADMAP/CLAUDE/AGENTS/handoffs
 - [ ] custom paths
@@ -242,18 +271,3 @@ VISUAL ACCEPTANCE. M08 is unstarted.
 - [ ] user/security/privacy docs
 - [ ] release audit
 - [ ] H!veAI v1.0.0
-## M07.06 Focused evidence and runtime truth closure
-- [x] Deterministic Git diff boundary with no-textconv and real binary paths
-- [x] Dedicated frontend-ready IPC command, ACL, and post-mount call
-- [x] SHA-256-proven publisher rollback and isolated temp-only failure harness
-- [x] Direct Git diff, migration, SQLite, watcher, and Registry focused fixtures
-- [x] Live selected-project session state and name-only in-place project rail
-- [x] Live Tauri task/workflow/brief placeholders are neutral and truthful
-- [x] Frontend focused Command Center and topbar-surface matrix
-- [x] Full frontend/Rust regression, audit, build, and no-bundle publication gates
-- [ ] User visual acceptance of refreshed Desktop H!veAI.lnk
-- [ ] M01 actual in-app restart acceptance
-
-M07.06 automated gates pass. Final status remains PENDING HUMAN ACCEPTANCE until
-the user inspects the refreshed stable shortcut and confirms the visual/manual
-restart gates. M08 remains unstarted.

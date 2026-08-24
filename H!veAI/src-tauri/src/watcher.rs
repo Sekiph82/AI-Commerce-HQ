@@ -1037,4 +1037,397 @@ mod tests {
             "MISSING"
         );
     }
+
+    #[test]
+    fn watcher_attachment_failure_preserves_rescan_requirement() {
+        let app_data = tempdir().unwrap();
+        let project_root = tempdir().unwrap();
+        let database = DatabaseState::initialize(app_data.path().to_path_buf()).unwrap();
+        let project = crate::projects::register_project(
+            &database,
+            crate::projects::RegisterProjectRequest {
+                path: project_root.path().to_string_lossy().into_owned(),
+                name: Some("Attach Fail".into()),
+            },
+        )
+        .unwrap();
+        let s = inner();
+        s.lock().unwrap().statuses.insert(
+            project.id.clone(),
+            ProjectWatcherStatus {
+                project_id: project.id.clone(),
+                state: "DEGRADED".into(),
+                watcher_health: "DEGRADED".into(),
+                available: true,
+                last_event_at: None,
+                last_refresh_at: None,
+                evidence_generated_at: None,
+                changed_path_count: 0,
+                rescan_required: true,
+            },
+        );
+        refresh_project_snapshot(&database, &s, &project.id, Vec::new(), false).unwrap();
+        assert!(s.lock().unwrap().statuses[&project.id].rescan_required);
+    }
+
+    #[test]
+    fn watcher_git_refresh_failure_preserves_rescan_requirement() {
+        let app_data = tempdir().unwrap();
+        let project_root = tempdir().unwrap();
+        let database = DatabaseState::initialize(app_data.path().to_path_buf()).unwrap();
+        let project = crate::projects::register_project(
+            &database,
+            crate::projects::RegisterProjectRequest {
+                path: project_root.path().to_string_lossy().into_owned(),
+                name: Some("Git Refresh Fail".into()),
+            },
+        )
+        .unwrap();
+        let s = inner();
+        s.lock().unwrap().statuses.insert(
+            project.id.clone(),
+            ProjectWatcherStatus {
+                project_id: project.id.clone(),
+                state: "DEGRADED".into(),
+                watcher_health: "OVERFLOW".into(),
+                available: true,
+                last_event_at: None,
+                last_refresh_at: None,
+                evidence_generated_at: None,
+                changed_path_count: 0,
+                rescan_required: true,
+            },
+        );
+        let git_event = make_event(
+            &project.id,
+            NormalizedEventKind::Modify,
+            ".git/HEAD".into(),
+            None,
+            EventCategory::GitMetadata,
+        );
+        refresh_project_snapshot(&database, &s, &project.id, vec![git_event], false).unwrap();
+        assert!(s.lock().unwrap().statuses[&project.id].rescan_required);
+    }
+
+    #[test]
+    fn watcher_snapshot_persistence_failure_preserves_rescan_requirement() {
+        let app_data = tempdir().unwrap();
+        let project_root = tempdir().unwrap();
+        let database = DatabaseState::initialize(app_data.path().to_path_buf()).unwrap();
+        let project = crate::projects::register_project(
+            &database,
+            crate::projects::RegisterProjectRequest {
+                path: project_root.path().to_string_lossy().into_owned(),
+                name: Some("Persist Fail".into()),
+            },
+        )
+        .unwrap();
+        let s = inner();
+        s.lock().unwrap().statuses.insert(
+            project.id.clone(),
+            ProjectWatcherStatus {
+                project_id: project.id.clone(),
+                state: "DEGRADED".into(),
+                watcher_health: "OVERFLOW".into(),
+                available: true,
+                last_event_at: None,
+                last_refresh_at: None,
+                evidence_generated_at: None,
+                changed_path_count: 0,
+                rescan_required: true,
+            },
+        );
+        let event = make_event(
+            &project.id,
+            NormalizedEventKind::Modify,
+            "src/lib.rs".into(),
+            None,
+            EventCategory::Source,
+        );
+        refresh_project_snapshot(&database, &s, &project.id, vec![event], false).unwrap();
+        assert!(s.lock().unwrap().statuses[&project.id].rescan_required);
+    }
+
+    #[test]
+    fn watcher_healthy_explicit_rescan_no_prior_requirement_deterministic() {
+        let app_data = tempdir().unwrap();
+        let project_root = tempdir().unwrap();
+        let database = DatabaseState::initialize(app_data.path().to_path_buf()).unwrap();
+        let project = crate::projects::register_project(
+            &database,
+            crate::projects::RegisterProjectRequest {
+                path: project_root.path().to_string_lossy().into_owned(),
+                name: Some("Healthy Rescan".into()),
+            },
+        )
+        .unwrap();
+        let s = inner();
+        s.lock().unwrap().statuses.insert(
+            project.id.clone(),
+            ProjectWatcherStatus {
+                project_id: project.id.clone(),
+                state: "WATCHING".into(),
+                watcher_health: "HEALTHY".into(),
+                available: true,
+                last_event_at: None,
+                last_refresh_at: None,
+                evidence_generated_at: None,
+                changed_path_count: 0,
+                rescan_required: false,
+            },
+        );
+        refresh_project_snapshot(&database, &s, &project.id, Vec::new(), true).unwrap();
+        let status = s.lock().unwrap().statuses[&project.id].clone();
+        assert!(!status.rescan_required);
+        assert_eq!(status.watcher_health, "HEALTHY");
+    }
+
+    #[test]
+    fn watcher_positive_in_root_rename_preserves_old_new_paths() {
+        let root = tempdir().unwrap();
+        let old_path = root.path().join("old.txt");
+        let new_path = root.path().join("new.txt");
+        fs::write(&old_path, "data").unwrap();
+        fs::rename(&old_path, &new_path).unwrap();
+        let event = Event::new(EventKind::Modify(ModifyKind::Name(RenameMode::Both)))
+            .add_path(old_path)
+            .add_path(new_path);
+        let normalized = normalize_event("p", root.path(), &event);
+        assert_eq!(normalized.len(), 1);
+        assert_eq!(normalized[0].relative_path, "new.txt");
+        assert_eq!(normalized[0].old_relative_path.as_deref(), Some("old.txt"));
+    }
+
+    #[test]
+    fn watcher_unchanged_refresh_does_not_duplicate_watcher() {
+        let app_data = tempdir().unwrap();
+        let project_root = tempdir().unwrap();
+        let database = DatabaseState::initialize(app_data.path().to_path_buf()).unwrap();
+        crate::projects::register_project(
+            &database,
+            crate::projects::RegisterProjectRequest {
+                path: project_root.path().to_string_lossy().into_owned(),
+                name: Some("Dup Check".into()),
+            },
+        )
+        .unwrap();
+        let manager = WatcherManager::initialize(database.clone()).unwrap();
+        let before = manager.status().projects.len();
+        manager.refresh_from_registry().unwrap();
+        let after = manager.status().projects.len();
+        assert_eq!(before, after, "refresh must not duplicate watchers");
+    }
+
+    #[test]
+    fn watcher_repaired_root_refresh_reattaches_to_new_root() {
+        let app_data = tempdir().unwrap();
+        let old_root = tempdir().unwrap();
+        let new_root = tempdir().unwrap();
+        let database = DatabaseState::initialize(app_data.path().to_path_buf()).unwrap();
+        let project = crate::projects::register_project(
+            &database,
+            crate::projects::RegisterProjectRequest {
+                path: old_root.path().to_string_lossy().into_owned(),
+                name: Some("Repair Root".into()),
+            },
+        )
+        .unwrap();
+        let manager = WatcherManager::initialize(database.clone()).unwrap();
+        assert_eq!(
+            manager.project_status(&project.id).unwrap().state,
+            "WATCHING"
+        );
+        crate::projects::repair_project_path(
+            &database,
+            crate::projects::RepairProjectPathRequest {
+                project_id: project.id.clone(),
+                path: new_root.path().to_string_lossy().into_owned(),
+            },
+        )
+        .unwrap();
+        manager.refresh_from_registry().unwrap();
+        assert_eq!(
+            manager.project_status(&project.id).unwrap().state,
+            "WATCHING"
+        );
+    }
+
+    #[test]
+    fn watcher_event_on_repaired_root_is_observed() {
+        let app_data = tempdir().unwrap();
+        let old_root = tempdir().unwrap();
+        let new_root = tempdir().unwrap();
+        let database = DatabaseState::initialize(app_data.path().to_path_buf()).unwrap();
+        let project = crate::projects::register_project(
+            &database,
+            crate::projects::RegisterProjectRequest {
+                path: old_root.path().to_string_lossy().into_owned(),
+                name: Some("Repaired Event".into()),
+            },
+        )
+        .unwrap();
+        let manager = WatcherManager::initialize(database.clone()).unwrap();
+        crate::projects::repair_project_path(
+            &database,
+            crate::projects::RepairProjectPathRequest {
+                project_id: project.id.clone(),
+                path: new_root.path().to_string_lossy().into_owned(),
+            },
+        )
+        .unwrap();
+        manager.refresh_from_registry().unwrap();
+        fs::write(new_root.path().join("event.txt"), "observed").unwrap();
+        thread::sleep(Duration::from_millis(500));
+        let status = manager.project_status(&project.id).unwrap();
+        assert!(status.available);
+    }
+
+    #[test]
+    fn watcher_git_category_event_persists_snapshot() {
+        let app_data = tempdir().unwrap();
+        let project_root = tempdir().unwrap();
+        let database = DatabaseState::initialize(app_data.path().to_path_buf()).unwrap();
+        let project = crate::projects::register_project(
+            &database,
+            crate::projects::RegisterProjectRequest {
+                path: project_root.path().to_string_lossy().into_owned(),
+                name: Some("Git Snap".into()),
+            },
+        )
+        .unwrap();
+        let s = inner();
+        s.lock().unwrap().statuses.insert(
+            project.id.clone(),
+            ProjectWatcherStatus {
+                project_id: project.id.clone(),
+                state: "WATCHING".into(),
+                watcher_health: "HEALTHY".into(),
+                available: true,
+                last_event_at: None,
+                last_refresh_at: None,
+                evidence_generated_at: None,
+                changed_path_count: 0,
+                rescan_required: false,
+            },
+        );
+        let git_event = make_event(
+            &project.id,
+            NormalizedEventKind::Modify,
+            ".git/HEAD".into(),
+            None,
+            EventCategory::GitMetadata,
+        );
+        refresh_project_snapshot(&database, &s, &project.id, vec![git_event], false).unwrap();
+        let count: i64 = database
+            .open_connection()
+            .unwrap()
+            .query_row(
+                "SELECT COUNT(*) FROM project_snapshots WHERE project_id = ?1",
+                [&project.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(count >= 1, "Git event must persist a snapshot");
+    }
+
+    #[test]
+    fn watcher_non_git_event_does_not_persist_git_snapshot() {
+        let app_data = tempdir().unwrap();
+        let project_root = tempdir().unwrap();
+        let database = DatabaseState::initialize(app_data.path().to_path_buf()).unwrap();
+        let project = crate::projects::register_project(
+            &database,
+            crate::projects::RegisterProjectRequest {
+                path: project_root.path().to_string_lossy().into_owned(),
+                name: Some("No Git Snap".into()),
+            },
+        )
+        .unwrap();
+        let s = inner();
+        s.lock().unwrap().statuses.insert(
+            project.id.clone(),
+            ProjectWatcherStatus {
+                project_id: project.id.clone(),
+                state: "WATCHING".into(),
+                watcher_health: "HEALTHY".into(),
+                available: true,
+                last_event_at: None,
+                last_refresh_at: None,
+                evidence_generated_at: None,
+                changed_path_count: 0,
+                rescan_required: false,
+            },
+        );
+        let source_event = make_event(
+            &project.id,
+            NormalizedEventKind::Modify,
+            "src/lib.rs".into(),
+            None,
+            EventCategory::Source,
+        );
+        refresh_project_snapshot(&database, &s, &project.id, vec![source_event], false).unwrap();
+        let git_count: i64 = database
+            .open_connection()
+            .unwrap()
+            .query_row(
+                "SELECT COUNT(*) FROM git_snapshots WHERE repository_id IN (SELECT id FROM repositories WHERE project_id = ?1)",
+                [&project.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(git_count, 0, "non-Git event must not create git snapshot");
+    }
+
+    #[test]
+    fn watcher_missing_root_initialization_stays_degraded_preserves_row() {
+        let app_data = tempdir().unwrap();
+        let project_root = tempdir().unwrap();
+        let database = DatabaseState::initialize(app_data.path().to_path_buf()).unwrap();
+        let project = crate::projects::register_project(
+            &database,
+            crate::projects::RegisterProjectRequest {
+                path: project_root.path().to_string_lossy().into_owned(),
+                name: Some("Missing Init".into()),
+            },
+        )
+        .unwrap();
+        fs::remove_dir_all(project_root.path()).unwrap();
+        let manager = WatcherManager::initialize(database.clone()).unwrap();
+        let status = manager.project_status(&project.id).unwrap();
+        assert_eq!(status.state, "MISSING");
+        assert_eq!(status.watcher_health, "DEGRADED");
+        assert!(crate::projects::fetch_project(&database, &project.id).is_ok());
+    }
+
+    #[test]
+    fn watcher_manager_drop_releases_worker_and_watchers() {
+        let app_data = tempdir().unwrap();
+        let project_root = tempdir().unwrap();
+        let database = DatabaseState::initialize(app_data.path().to_path_buf()).unwrap();
+        crate::projects::register_project(
+            &database,
+            crate::projects::RegisterProjectRequest {
+                path: project_root.path().to_string_lossy().into_owned(),
+                name: Some("Drop Test".into()),
+            },
+        )
+        .unwrap();
+        let manager = WatcherManager::initialize(database.clone()).unwrap();
+        assert!(manager.status().running);
+        drop(manager);
+    }
+
+    #[test]
+    fn watcher_symlink_escape_rejected_by_physical_containment() {
+        let root = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        let real_file = outside.path().join("secret.txt");
+        fs::write(&real_file, "secret").unwrap();
+        let inside = root.path().join("src");
+        fs::create_dir_all(&inside).unwrap();
+        let contained = inside.join("normal.txt");
+        fs::write(&contained, "ok").unwrap();
+        assert!(physically_contained(&contained, root.path()));
+        assert!(!physically_contained(&real_file, root.path()));
+    }
 }

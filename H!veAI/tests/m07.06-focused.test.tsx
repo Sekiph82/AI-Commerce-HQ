@@ -54,73 +54,74 @@ const records = [
 ];
 
 const invoke = vi.hoisted(() => vi.fn());
-invoke.mockImplementation(
-  async (command: string, args?: { projectId?: string }) => {
-    if (command === "hiveai_projects_list") return records;
-    if (command === "hiveai_project_get") {
-      return (
-        records.find((record) => record.id === args?.projectId) ?? records[0]
-      );
-    }
-    if (command === "hiveai_frontend_ready") return undefined;
-    if (command === "hiveai_git_snapshot")
-      return {
-        health: "CLEAN",
-        currentBranch: "main",
-        headSha: "abcdef1234567890",
-        stagedFiles: [],
-        unstagedFiles: [],
-        untrackedFiles: [],
-        conflictedFiles: [],
-        remotes: [],
-        recentCommits: [],
-        worktrees: [],
-        aheadCount: 0,
-        behindCount: 0,
-      };
-    if (command === "hiveai_git_diff")
-      return {
-        text: "",
-        binaryFiles: [],
-        truncated: false,
-        byteLimit: 1,
-        lineLimit: 1,
-      };
-    if (command === "hiveai_database_status")
-      return {
-        initialized: true,
-        engine: "SQLite",
-        schemaVersion: 7,
-        migrationCount: 7,
-        databasePath: "hiveai.db",
-        foreignKeysEnabled: true,
-        lastMigrationStatus: "ALREADY_CURRENT",
-        journalMode: "WAL",
-        busyTimeoutMs: 5000,
-        synchronous: "NORMAL",
-        integrityStatus: "ok",
-      };
-    return {
-      architectureMode: "RUST_NATIVE_NO_SIDECAR",
-      sidecarEnabled: false,
+
+function defaultInvoke(command: string, args?: { projectId?: string }) {
+  if (command === "hiveai_projects_list") return Promise.resolve(records);
+  if (command === "hiveai_project_get") {
+    const found = records.find((record) => record.id === args?.projectId);
+    if (!found) return Promise.reject(new Error("project is not registered"));
+    return Promise.resolve(found);
+  }
+  if (command === "hiveai_frontend_ready") return Promise.resolve(undefined);
+  if (command === "hiveai_git_snapshot")
+    return Promise.resolve({
+      health: "CLEAN",
+      currentBranch: "main",
+      headSha: "abcdef1234567890",
+      stagedFiles: [],
+      unstagedFiles: [],
+      untrackedFiles: [],
+      conflictedFiles: [],
+      remotes: [],
+      recentCommits: [],
+      worktrees: [],
+      aheadCount: 0,
+      behindCount: 0,
+    });
+  if (command === "hiveai_git_diff")
+    return Promise.resolve({
+      text: "",
+      binaryFiles: [],
+      truncated: false,
+      byteLimit: 1,
+      lineLimit: 1,
+    });
+  if (command === "hiveai_database_status")
+    return Promise.resolve({
+      initialized: true,
+      engine: "SQLite",
+      schemaVersion: 7,
+      migrationCount: 7,
+      databasePath: "hiveai.db",
+      foreignKeysEnabled: true,
+      lastMigrationStatus: "ALREADY_CURRENT",
+      journalMode: "WAL",
+      busyTimeoutMs: 5000,
+      synchronous: "NORMAL",
+      integrityStatus: "ok",
+    });
+  return Promise.resolve({
+    architectureMode: "RUST_NATIVE_NO_SIDECAR",
+    sidecarEnabled: false,
+    lastError: null,
+    legacyCommerceRuntime: {
+      componentId: "legacy",
+      displayName: "Legacy runtime",
+      kind: "LEGACY_COMMERCE",
+      state: "DISABLED",
+      health: "DISABLED",
+      startedAt: null,
+      lastHeartbeat: null,
+      restartCount: 0,
       lastError: null,
-      legacyCommerceRuntime: {
-        componentId: "legacy",
-        displayName: "Legacy runtime",
-        kind: "LEGACY_COMMERCE",
-        state: "DISABLED",
-        health: "DISABLED",
-        startedAt: null,
-        lastHeartbeat: null,
-        restartCount: 0,
-        lastError: null,
-        ownership: "Excluded",
-      },
-      components: [],
-      projects: [],
-    };
-  },
-);
+      ownership: "Excluded",
+    },
+    components: [],
+    projects: [],
+  });
+}
+
+invoke.mockImplementation(defaultInvoke);
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
@@ -135,6 +136,7 @@ function renderLive(path = "/") {
 
 beforeEach(() => {
   invoke.mockClear();
+  invoke.mockImplementation(defaultInvoke);
 });
 
 describe("M07.06 live Registry and Command Center boundary", () => {
@@ -300,5 +302,223 @@ describe("M07.06 live Registry and Command Center boundary", () => {
       screen.queryByText("Claude is writing code..."),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("12 tasks completed")).not.toBeInTheDocument();
+  });
+});
+
+describe("M07.07 live-Registry / route-race boundary", () => {
+  it("newly_registered_project_refresh_appears_in_rail", async () => {
+    renderLive();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "AI-Commerce-HQ" }),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByRole("button", { name: "Bulk-Edit" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "fmcg-erp-system" }),
+    ).toBeInTheDocument();
+  });
+
+  it("sidebar_shortcuts_derive_from_live_registry_ids", async () => {
+    renderLive();
+    await waitFor(() =>
+      expect(screen.getByText("Project shortcuts")).toBeInTheDocument(),
+    );
+    const shortcuts = screen
+      .getByText("Project shortcuts")
+      .closest("div")
+      ?.parentElement?.querySelectorAll(".project-shortcuts button");
+    expect(shortcuts).toBeDefined();
+    if (shortcuts) {
+      const names = Array.from(shortcuts).map((s) => s.textContent);
+      expect(names.some((n) => n?.includes("AI-Commerce-HQ"))).toBe(true);
+    }
+  });
+
+  it("archive_remove_refresh_removes_from_rail_and_shortcuts", async () => {
+    const reduced = records.slice(0, 2);
+    invoke.mockImplementation(
+      (command: string, args?: { projectId?: string }) => {
+        if (command === "hiveai_projects_list") return Promise.resolve(reduced);
+        if (command === "hiveai_project_get") {
+          const found = reduced.find((r) => r.id === args?.projectId);
+          if (!found) return Promise.reject(new Error("project is not registered"));
+          return Promise.resolve(found);
+        }
+        if (command === "hiveai_frontend_ready") return Promise.resolve(undefined);
+        return defaultInvoke(command, args);
+      },
+    );
+    renderLive();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "AI-Commerce-HQ" }),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole("button", { name: "fmcg-erp-system" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("pending_project_lookup_renders_loading_without_unrelated_identity", async () => {
+    let resolveGet: ((value: unknown) => void) | null = null;
+    invoke.mockImplementation(
+      async (command: string, args?: { projectId?: string }) => {
+        if (command === "hiveai_projects_list") return records;
+        if (command === "hiveai_project_get") {
+          return new Promise((resolve) => {
+            resolveGet = resolve;
+          });
+        }
+        return defaultInvoke(command, args);
+      },
+    );
+    renderLive("/projects/ai-commerce-hq");
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Resolving registered project identity/),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("FormuLab")).not.toBeInTheDocument();
+    if (resolveGet) {
+      resolveGet(records[0]);
+    }
+  });
+
+  it("delayed_ai_commerce_hq_lookup_never_flashes_formulab", async () => {
+    let resolveGet: ((value: unknown) => void) | null = null;
+    invoke.mockImplementation(
+      async (command: string, args?: { projectId?: string }) => {
+        if (command === "hiveai_projects_list") return records;
+        if (command === "hiveai_project_get") {
+          return new Promise((resolve) => {
+            resolveGet = resolve;
+          });
+        }
+        return defaultInvoke(command, args);
+      },
+    );
+    renderLive("/projects/ai-commerce-hq");
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Resolving registered project identity/),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("FormuLab")).not.toBeInTheDocument();
+    if (resolveGet) {
+      resolveGet(records[0]);
+      await waitFor(() =>
+        expect(
+          screen.getByRole("heading", { name: "AI-Commerce-HQ" }),
+        ).toBeInTheDocument(),
+      );
+      expect(screen.queryByText("FormuLab")).not.toBeInTheDocument();
+    }
+  });
+
+  it("stale_earlier_route_lookup_cannot_overwrite_newer_route", async () => {
+    let firstResolve: ((value: unknown) => void) | null = null;
+    let callCount = 0;
+    invoke.mockImplementation(
+      async (command: string, args?: { projectId?: string }) => {
+        if (command === "hiveai_projects_list") return records;
+        if (command === "hiveai_project_get") {
+          callCount++;
+          if (callCount === 1) {
+            return new Promise((resolve) => {
+              firstResolve = resolve;
+            });
+          }
+          const found = records.find((r) => r.id === args?.projectId);
+          if (!found) throw new Error("project is not registered");
+          return found;
+        }
+        return defaultInvoke(command, args);
+      },
+    );
+    const { unmount } = renderLive("/projects/ai-commerce-hq");
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Resolving registered project identity/),
+      ).toBeInTheDocument(),
+    );
+    unmount();
+    renderLive("/projects/bulk-edit");
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: "Bulk-Edit" }),
+      ).toBeInTheDocument(),
+    );
+    if (firstResolve) {
+      firstResolve(records[0]);
+    }
+    expect(
+      screen.getByRole("heading", { name: "Bulk-Edit" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "AI-Commerce-HQ" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("unknown_registered_id_renders_error_not_formulab", async () => {
+    renderLive("/projects/nonexistent-project-id");
+    await waitFor(() => {
+      const errorText = screen.queryByText(
+        /not found|not registered|could not be loaded/i,
+      );
+      expect(errorText).toBeInTheDocument();
+    });
+    expect(screen.queryByText("FormuLab")).not.toBeInTheDocument();
+  });
+
+  it("git_status_async_completion_cannot_change_project_identity", async () => {
+    let gitResolve: ((value: unknown) => void) | null = null;
+    invoke.mockImplementation(
+      (command: string, args?: { projectId?: string }) => {
+        if (command === "hiveai_git_snapshot") {
+          return new Promise((resolve) => {
+            gitResolve = resolve;
+          });
+        }
+        return defaultInvoke(command, args);
+      },
+    );
+    renderLive("/projects/ai-commerce-hq");
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: "AI-Commerce-HQ" }),
+      ).toBeInTheDocument(),
+    );
+    if (gitResolve) {
+      gitResolve({
+        health: "CLEAN",
+        currentBranch: "main",
+        headSha: "abc",
+        stagedFiles: [],
+        unstagedFiles: [],
+        untrackedFiles: [],
+        conflictedFiles: [],
+        remotes: [],
+        recentCommits: [],
+        worktrees: [],
+        aheadCount: 0,
+        behindCount: 0,
+      });
+    }
+    expect(screen.queryByText("FormuLab")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "AI-Commerce-HQ" }),
+    ).toBeInTheDocument();
+  });
+
+  it("browser_preview_fixtures_remain_isolated_from_tauri_live_mode", () => {
+    delete (window as Window & { __TAURI_INTERNALS__?: unknown })
+      .__TAURI_INTERNALS__;
+    window.history.pushState({}, "", "/");
+    const { container } = render(<App />);
+    expect(container).toBeTruthy();
+    expect(screen.queryByText("Resolving registered project identity")).not.toBeInTheDocument();
   });
 });

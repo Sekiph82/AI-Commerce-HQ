@@ -520,6 +520,464 @@ mod tests {
         assert!(moved.path().exists());
     }
 
+    fn git_repo_with_remote(path: &Path, remote_url: &str) {
+        git(path, &["init", "-q"]);
+        git(path, &["config", "user.name", "Test"]);
+        git(path, &["config", "user.email", "test@example.com"]);
+        std::fs::write(path.join("README.md"), "init").unwrap();
+        git(path, &["add", "README.md"]);
+        git(path, &["commit", "-qm", "initial"]);
+        git(path, &["remote", "add", "origin", remote_url]);
+    }
+
+    fn git_repo_no_remote(path: &Path) {
+        git(path, &["init", "-q"]);
+        git(path, &["config", "user.name", "Test"]);
+        git(path, &["config", "user.email", "test@example.com"]);
+        std::fs::write(path.join("README.md"), "init").unwrap();
+        git(path, &["add", "README.md"]);
+        git(path, &["commit", "-qm", "initial"]);
+    }
+
+    fn get_head(path: &Path) -> String {
+        let output = Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(path)
+            .output()
+            .unwrap();
+        String::from_utf8(output.stdout).unwrap().trim().to_string()
+    }
+
+    #[test]
+    fn identity_01_legacy_rowless_non_git_to_moved_non_git_accepted() {
+        let (_db_dir, database) = database();
+        let original = tempdir().unwrap();
+        let moved = tempdir().unwrap();
+        let project = register_project(
+            &database,
+            RegisterProjectRequest {
+                path: original.path().to_string_lossy().into_owned(),
+                name: Some("Legacy Non-Git".into()),
+            },
+        )
+        .unwrap();
+        database
+            .open_connection()
+            .unwrap()
+            .execute(
+                "DELETE FROM repositories WHERE project_id = ?1",
+                [&project.id],
+            )
+            .unwrap();
+        assert!(repair_project_path(
+            &database,
+            RepairProjectPathRequest {
+                project_id: project.id.clone(),
+                path: moved.path().to_string_lossy().into_owned(),
+            }
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn identity_02_legacy_rowless_non_git_to_git_rejected() {
+        let (_db_dir, database) = database();
+        let original = tempdir().unwrap();
+        let git_dir = tempdir().unwrap();
+        git_repo_no_remote(git_dir.path());
+        let project = register_project(
+            &database,
+            RegisterProjectRequest {
+                path: original.path().to_string_lossy().into_owned(),
+                name: Some("Legacy to Git".into()),
+            },
+        )
+        .unwrap();
+        database
+            .open_connection()
+            .unwrap()
+            .execute(
+                "DELETE FROM repositories WHERE project_id = ?1",
+                [&project.id],
+            )
+            .unwrap();
+        assert!(repair_project_path(
+            &database,
+            RepairProjectPathRequest {
+                project_id: project.id.clone(),
+                path: git_dir.path().to_string_lossy().into_owned(),
+            }
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn identity_03_explicit_non_git_to_git_rejected() {
+        let (_db_dir, database) = database();
+        let non_git = tempdir().unwrap();
+        let git_dir = tempdir().unwrap();
+        git_repo_no_remote(git_dir.path());
+        let project = register_project(
+            &database,
+            RegisterProjectRequest {
+                path: non_git.path().to_string_lossy().into_owned(),
+                name: Some("Non-Git Explicit".into()),
+            },
+        )
+        .unwrap();
+        assert!(repair_project_path(
+            &database,
+            RepairProjectPathRequest {
+                project_id: project.id.clone(),
+                path: git_dir.path().to_string_lossy().into_owned(),
+            }
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn identity_04_same_remote_same_head_accepted() {
+        let (_db_dir, database) = database();
+        let dir1 = tempdir().unwrap();
+        git_repo_with_remote(dir1.path(), "https://github.com/org/repo.git");
+        let project = register_project(
+            &database,
+            RegisterProjectRequest {
+                path: dir1.path().to_string_lossy().into_owned(),
+                name: Some("Same Remote Same HEAD".into()),
+            },
+        )
+        .unwrap();
+        let dir2 = tempdir().unwrap();
+        git_repo_with_remote(dir2.path(), "https://github.com/org/repo.git");
+        let head1 = get_head(dir1.path());
+        let head2 = get_head(dir2.path());
+        if head1 != head2 {
+            git(
+                dir2.path(),
+                &["fetch", &dir1.path().to_string_lossy(), "HEAD"],
+            );
+            git(dir2.path(), &["reset", "--hard", "FETCH_HEAD"]);
+        }
+        assert!(repair_project_path(
+            &database,
+            RepairProjectPathRequest {
+                project_id: project.id.clone(),
+                path: dir2.path().to_string_lossy().into_owned(),
+            }
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn identity_05_same_remote_advanced_head_accepted() {
+        let (_db_dir, database) = database();
+        let dir1 = tempdir().unwrap();
+        git_repo_with_remote(dir1.path(), "https://github.com/org/repo.git");
+        let project = register_project(
+            &database,
+            RegisterProjectRequest {
+                path: dir1.path().to_string_lossy().into_owned(),
+                name: Some("Same Remote Advanced HEAD".into()),
+            },
+        )
+        .unwrap();
+        let dir2 = tempdir().unwrap();
+        git_repo_with_remote(dir2.path(), "https://github.com/org/repo.git");
+        assert!(repair_project_path(
+            &database,
+            RepairProjectPathRequest {
+                project_id: project.id.clone(),
+                path: dir2.path().to_string_lossy().into_owned(),
+            }
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn identity_06_different_remote_rejected() {
+        let (_db_dir, database) = database();
+        let dir1 = tempdir().unwrap();
+        git_repo_with_remote(dir1.path(), "https://github.com/org/repo-a.git");
+        let project = register_project(
+            &database,
+            RegisterProjectRequest {
+                path: dir1.path().to_string_lossy().into_owned(),
+                name: Some("Different Remote".into()),
+            },
+        )
+        .unwrap();
+        let dir2 = tempdir().unwrap();
+        git_repo_with_remote(dir2.path(), "https://github.com/org/repo-b.git");
+        assert!(repair_project_path(
+            &database,
+            RepairProjectPathRequest {
+                project_id: project.id.clone(),
+                path: dir2.path().to_string_lossy().into_owned(),
+            }
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn identity_07_remote_disappearance_rejected() {
+        let (_db_dir, database) = database();
+        let dir1 = tempdir().unwrap();
+        git_repo_with_remote(dir1.path(), "https://github.com/org/repo.git");
+        let project = register_project(
+            &database,
+            RegisterProjectRequest {
+                path: dir1.path().to_string_lossy().into_owned(),
+                name: Some("Remote Disappear".into()),
+            },
+        )
+        .unwrap();
+        let dir2 = tempdir().unwrap();
+        git_repo_no_remote(dir2.path());
+        assert!(repair_project_path(
+            &database,
+            RepairProjectPathRequest {
+                project_id: project.id.clone(),
+                path: dir2.path().to_string_lossy().into_owned(),
+            }
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn identity_08_no_remote_exact_head_accepted() {
+        let (_db_dir, database) = database();
+        let dir1 = tempdir().unwrap();
+        git_repo_no_remote(dir1.path());
+        let project = register_project(
+            &database,
+            RegisterProjectRequest {
+                path: dir1.path().to_string_lossy().into_owned(),
+                name: Some("No Remote Exact".into()),
+            },
+        )
+        .unwrap();
+        let dir2 = tempdir().unwrap();
+        let head = get_head(dir1.path());
+        git(dir2.path(), &["clone", &dir1.path().to_string_lossy(), "."]);
+        git(dir2.path(), &["remote", "remove", "origin"]);
+        let head2 = get_head(dir2.path());
+        assert_eq!(head, head2);
+        assert!(repair_project_path(
+            &database,
+            RepairProjectPathRequest {
+                project_id: project.id.clone(),
+                path: dir2.path().to_string_lossy().into_owned(),
+            }
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn identity_09_no_remote_ancestor_accepted() {
+        let (_db_dir, database) = database();
+        let dir1 = tempdir().unwrap();
+        git_repo_no_remote(dir1.path());
+        let project = register_project(
+            &database,
+            RegisterProjectRequest {
+                path: dir1.path().to_string_lossy().into_owned(),
+                name: Some("No Remote Ancestor".into()),
+            },
+        )
+        .unwrap();
+        let dir2 = tempdir().unwrap();
+        git(dir2.path(), &["clone", &dir1.path().to_string_lossy(), "."]);
+        git(dir2.path(), &["remote", "remove", "origin"]);
+        std::fs::write(dir2.path().join("extra.txt"), "advance").unwrap();
+        git(dir2.path(), &["add", "extra.txt"]);
+        git(dir2.path(), &["commit", "-qm", "advance"]);
+        assert!(repair_project_path(
+            &database,
+            RepairProjectPathRequest {
+                project_id: project.id.clone(),
+                path: dir2.path().to_string_lossy().into_owned(),
+            }
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn identity_10_unrelated_no_remote_rejected() {
+        let (_db_dir, database) = database();
+        let dir1 = tempdir().unwrap();
+        git_repo_no_remote(dir1.path());
+        let project = register_project(
+            &database,
+            RegisterProjectRequest {
+                path: dir1.path().to_string_lossy().into_owned(),
+                name: Some("Unrelated No Remote".into()),
+            },
+        )
+        .unwrap();
+        let dir2 = tempdir().unwrap();
+        git_repo_no_remote(dir2.path());
+        assert!(repair_project_path(
+            &database,
+            RepairProjectPathRequest {
+                project_id: project.id.clone(),
+                path: dir2.path().to_string_lossy().into_owned(),
+            }
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn identity_11_missing_stored_old_head_rejected() {
+        let (_db_dir, database) = database();
+        let dir1 = tempdir().unwrap();
+        git_repo_no_remote(dir1.path());
+        let project = register_project(
+            &database,
+            RegisterProjectRequest {
+                path: dir1.path().to_string_lossy().into_owned(),
+                name: Some("Missing Stored HEAD".into()),
+            },
+        )
+        .unwrap();
+        database
+            .open_connection()
+            .unwrap()
+            .execute(
+                "UPDATE repositories SET head_sha = NULL WHERE project_id = ?1",
+                [&project.id],
+            )
+            .unwrap();
+        let dir2 = tempdir().unwrap();
+        git(dir2.path(), &["clone", &dir1.path().to_string_lossy(), "."]);
+        git(dir2.path(), &["remote", "remove", "origin"]);
+        assert!(repair_project_path(
+            &database,
+            RepairProjectPathRequest {
+                project_id: project.id.clone(),
+                path: dir2.path().to_string_lossy().into_owned(),
+            }
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn identity_12_credential_bearing_https_remote_sanitizes_same_identity() {
+        let (_db_dir, database) = database();
+        let dir1 = tempdir().unwrap();
+        git_repo_with_remote(dir1.path(), "https://user:token@github.com/org/repo.git");
+        let project = register_project(
+            &database,
+            RegisterProjectRequest {
+                path: dir1.path().to_string_lossy().into_owned(),
+                name: Some("Credential Remote".into()),
+            },
+        )
+        .unwrap();
+        let stored_url: Option<String> = database
+            .open_connection()
+            .unwrap()
+            .query_row(
+                "SELECT remote_url FROM repositories WHERE project_id = ?1",
+                [&project.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            stored_url.as_deref(),
+            Some("https://github.com/org/repo.git")
+        );
+        let dir2 = tempdir().unwrap();
+        git_repo_with_remote(dir2.path(), "https://other:secret@github.com/org/repo.git");
+        assert!(repair_project_path(
+            &database,
+            RepairProjectPathRequest {
+                project_id: project.id.clone(),
+                path: dir2.path().to_string_lossy().into_owned(),
+            }
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn identity_13_duplicate_normalized_repair_target_rejected() {
+        let (_db_dir, database) = database();
+        let dir1 = tempdir().unwrap();
+        let dir2 = tempdir().unwrap();
+        let _p1 = register_project(
+            &database,
+            RegisterProjectRequest {
+                path: dir1.path().to_string_lossy().into_owned(),
+                name: Some("Project A".into()),
+            },
+        )
+        .unwrap();
+        let p2 = register_project(
+            &database,
+            RegisterProjectRequest {
+                path: dir2.path().to_string_lossy().into_owned(),
+                name: Some("Project B".into()),
+            },
+        )
+        .unwrap();
+        assert!(repair_project_path(
+            &database,
+            RepairProjectPathRequest {
+                project_id: p2.id.clone(),
+                path: dir1.path().to_string_lossy().into_owned(),
+            }
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn identity_14_unknown_project_id_rejected() {
+        let (_db_dir, database) = database();
+        let dir = tempdir().unwrap();
+        assert!(repair_project_path(
+            &database,
+            RepairProjectPathRequest {
+                project_id: "nonexistent-id".into(),
+                path: dir.path().to_string_lossy().into_owned(),
+            }
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn identity_15_repair_validation_leaves_candidate_unchanged() {
+        let (_db_dir, database) = database();
+        let dir1 = tempdir().unwrap();
+        let dir2 = tempdir().unwrap();
+        std::fs::write(dir2.path().join("witness.txt"), "untouched").unwrap();
+        let project = register_project(
+            &database,
+            RegisterProjectRequest {
+                path: dir1.path().to_string_lossy().into_owned(),
+                name: Some("Candidate Unchanged".into()),
+            },
+        )
+        .unwrap();
+        repair_project_path(
+            &database,
+            RepairProjectPathRequest {
+                project_id: project.id.clone(),
+                path: dir2.path().to_string_lossy().into_owned(),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(dir2.path().join("witness.txt")).unwrap(),
+            "untouched"
+        );
+        let entries: Vec<_> = std::fs::read_dir(dir2.path())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(entries, vec!["witness.txt"]);
+    }
+
     #[test]
     fn list_search_filter_and_missing_state_work() {
         let (_db_dir, database) = database();
