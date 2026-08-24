@@ -8,6 +8,7 @@
     "log:default",
     "notification:default",
     "allow-native-status",
-    "allow-request-restart"
+    "allow-request-restart",
+    "allow-runtime-status"
   ]
 }

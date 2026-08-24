@@ -9,3 +9,8 @@ commands.allow = ["hiveai_native_status"]
 identifier = "allow-request-restart"
 description = "Allows the main window to request an application restart through Tauri."
 commands.allow = ["hiveai_request_restart"]
+
+[[permission]]
+identifier = "allow-runtime-status"
+description = "Allows the main window to read structured H!veAI runtime state."
+commands.allow = ["hiveai_runtime_status"]

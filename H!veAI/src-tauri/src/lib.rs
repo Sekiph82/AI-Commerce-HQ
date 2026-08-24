@@ -2,6 +2,9 @@ use serde::Serialize;
 use tauri::{Emitter, Manager};
 use tauri_plugin_log::{Target, TargetKind};
 
+mod runtime;
+use runtime::{RuntimeStatus, RuntimeSupervisor};
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct NativeStatus {
@@ -50,6 +53,12 @@ fn hiveai_request_restart(app: tauri::AppHandle) {
     app.request_restart();
 }
 
+#[tauri::command]
+fn hiveai_runtime_status(supervisor: tauri::State<'_, RuntimeSupervisor>) -> RuntimeStatus {
+    log::info!("H!veAI runtime status requested.");
+    supervisor.status()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -63,9 +72,11 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             hiveai_native_status,
-            hiveai_request_restart
+            hiveai_request_restart,
+            hiveai_runtime_status
         ])
         .setup(|app| {
+            app.manage(RuntimeSupervisor::new());
             let app_data_dir = app
                 .path()
                 .app_data_dir()

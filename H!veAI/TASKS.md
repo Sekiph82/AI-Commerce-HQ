@@ -40,11 +40,13 @@ begin M02 until M01 is independently audited.
 M02 COMPLETE. Frontend, Rust/Tauri regression, bounded desktop smoke, and child-scope review passed. Do not begin M03 in this session.
 
 ## M03 Runtime refactor
-- [ ] Stop GMO/commerce orchestrators
-- [ ] Inventory Python responsibilities
-- [ ] Decide Rust-native vs retained sidecar
-- [ ] Harden child-process health/recovery
-- [ ] Document final runtime boundary
+- [x] Stop GMO/commerce orchestrators from H!veAI startup
+- [x] Inventory Python responsibilities
+- [x] Decide Rust-native vs retained sidecar
+- [x] Define dormant child-process health/recovery boundary without spawning a sidecar
+- [x] Document final runtime boundary
+
+M03 COMPLETE. H!veAI uses a Rust-native runtime with no always-on Python sidecar. Do not begin M04 in this session.
 
 ## M04 SQLite + migrations
 - [ ] Versioned migration framework
