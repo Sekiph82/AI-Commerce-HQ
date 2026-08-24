@@ -94,6 +94,14 @@ M07 implementation is remediated by the M07.01 strict quality gate. Historical M
 
 M07.02 remains IN PROGRESS. The M07.02A launcher hotfix is implemented and locally smoke-tested; final milestone acceptance remains subject to the active strict gate.
 
+## M07.03 Consolidated strict closure and single-viewport UI
+- [ ] Re-audit M07 findings A01-A09 and B01-B04 against repository evidence
+- [ ] Maintain production `--no-bundle` candidate publication with smoke test and rollback
+- [ ] Maintain canonical single-viewport UI composition and UI governance compliance
+- [ ] User visual acceptance of refreshed Desktop `H!veAI.lnk`
+
+M07.03 automated remediation is implemented and locally verified. Final UI status remains PENDING USER VISUAL ACCEPTANCE until the user inspects the refreshed Desktop shortcut build. Do not advance the active milestone gate from this state.
+
 ## M08 Task Source Discovery
 - [ ] discover TASKS/tasks/PLANS/PROGRESS/ROADMAP/CLAUDE/AGENTS/handoffs
 - [ ] custom paths

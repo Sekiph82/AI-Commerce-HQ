@@ -15,14 +15,14 @@ name = "hiveai-desktop"
 path = "src/main.rs"
 
 [build-dependencies]
-tauri-build = "2.6.3"
+tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-rusqlite = { version = "0.32", features = ["bundled"] }
-tauri = "2.11.5"
+rusqlite = { version = "0.32", features = ["bundled", "backup"] }
+tauri = { version = "2.11.5", features = [] }
 tauri-plugin-log = "2.9.0"
 tauri-plugin-notification = "2.3.3"
 uuid = { version = "1", features = ["v4"] }

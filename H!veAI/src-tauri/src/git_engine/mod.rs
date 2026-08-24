@@ -177,7 +177,8 @@ pub fn diff(database: &DatabaseState, request: GitDiffRequest) -> Result<GitDiff
         binary_files.sort();
         binary_files.dedup();
     }
-    let (text, truncated) = bound_text(&raw, MAX_DIFF_BYTES, MAX_DIFF_LINES);
+    let text = sanitize_binary_payloads(&raw);
+    let (text, truncated) = bound_text(&text, MAX_DIFF_BYTES, MAX_DIFF_LINES);
     Ok(GitDiff {
         project_id: request.project_id,
         scope: request.scope,
@@ -187,6 +188,24 @@ pub fn diff(database: &DatabaseState, request: GitDiffRequest) -> Result<GitDiff
         byte_limit: MAX_DIFF_BYTES,
         line_limit: MAX_DIFF_LINES,
     })
+}
+
+fn sanitize_binary_payloads(raw: &str) -> String {
+    let mut in_binary_payload = false;
+    raw.lines()
+        .filter(|line| {
+            if line.starts_with("diff --git ") {
+                in_binary_payload = false;
+                return true;
+            }
+            if *line == "GIT binary patch" {
+                in_binary_payload = true;
+                return false;
+            }
+            !in_binary_payload
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn collect_snapshot(

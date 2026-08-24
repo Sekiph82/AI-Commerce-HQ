@@ -5,6 +5,7 @@ use rusqlite::Connection;
 use serde::Serialize;
 use std::fs;
 use std::path::PathBuf;
+use std::time::Duration;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -61,7 +62,7 @@ impl DatabaseState {
             .unwrap_or(false)
             && current_version < latest_version
         {
-            create_migration_backup(&database_path)?;
+            create_migration_backup(&connection, &database_path)?;
         }
         let report = migrations::apply_migrations(&mut connection, migrations::migrations())
             .map_err(|error| format!("run H!veAI database migrations: {error}"))?;
@@ -103,11 +104,23 @@ fn configure_connection(connection: &Connection) -> Result<(), String> {
     Ok(())
 }
 
-fn create_migration_backup(database_path: &PathBuf) -> Result<(), String> {
+fn create_migration_backup(connection: &Connection, database_path: &PathBuf) -> Result<(), String> {
     let backup = database_path.with_extension("db.pre-migration.bak");
     let temporary = database_path.with_extension("db.pre-migration.tmp");
-    fs::copy(database_path, &temporary)
-        .map_err(|error| format!("backup H!veAI database before migration: {error}"))?;
+    let _ = fs::remove_file(&temporary);
+    let mut destination = Connection::open(&temporary)
+        .map_err(|error| format!("open H!veAI migration backup: {error}"))?;
+    let backup_result = {
+        let backup_handle = rusqlite::backup::Backup::new(connection, &mut destination)
+            .map_err(|error| format!("backup H!veAI database before migration: {error}"))?;
+        backup_handle
+            .run_to_completion(5, Duration::from_millis(25), None)
+            .map_err(|error| format!("backup H!veAI database before migration: {error}"))
+    };
+    destination
+        .close()
+        .map_err(|(_, error)| format!("close H!veAI migration backup: {error}"))?;
+    backup_result?;
     if let Err(error) = fs::rename(&temporary, &backup) {
         let _ = fs::remove_file(&temporary);
         return Err(format!("publish H!veAI database migration backup: {error}"));
@@ -148,7 +161,7 @@ mod tests {
         let status = state.status();
         assert!(status.initialized);
         assert_eq!(status.database_path, "hiveai.db");
-        assert_eq!(status.schema_version, 5);
+        assert_eq!(status.schema_version, 6);
         assert!(status.foreign_keys_enabled);
         assert!(directory.path().join("hiveai.db").exists());
         assert_eq!(status.journal_mode, "WAL");
@@ -161,11 +174,24 @@ mod tests {
     fn migration_backup_is_atomic_and_bounded_to_database_path() {
         let directory = tempdir().expect("temp directory");
         let database = directory.path().join("hiveai.db");
-        std::fs::write(&database, b"fixture").expect("fixture database");
-        create_migration_backup(&database).expect("backup should publish");
+        let source = Connection::open(&database).expect("open fixture database");
+        configure_connection(&source).expect("configure fixture database");
+        source
+            .execute("CREATE TABLE fixture (value TEXT)", [])
+            .expect("create fixture");
+        source
+            .execute("INSERT INTO fixture VALUES ('wal-preserved')", [])
+            .expect("insert fixture");
+        create_migration_backup(&source, &database).expect("backup should publish");
+        drop(source);
+        let backup =
+            Connection::open(database.with_extension("db.pre-migration.bak")).expect("open backup");
         assert_eq!(
-            std::fs::read(database.with_extension("db.pre-migration.bak")).unwrap(),
-            b"fixture"
+            backup
+                .query_row("SELECT value FROM fixture", [], |row| row
+                    .get::<_, String>(0))
+                .unwrap(),
+            "wal-preserved"
         );
         assert!(!database.with_extension("db.pre-migration.tmp").exists());
     }

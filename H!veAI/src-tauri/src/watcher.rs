@@ -578,12 +578,35 @@ fn make_event(
 }
 fn relative_path(path: &Path, root: &Path) -> Option<String> {
     let relative = path.strip_prefix(root).ok()?;
+    if root.exists() && !physically_contained(path, root) {
+        return None;
+    }
     let value = relative.to_string_lossy().replace('\\', "/");
     if value.is_empty() || value == "." || value.split('/').any(|part| part == "..") {
         None
     } else {
         Some(value.trim_start_matches("./").to_string())
     }
+}
+
+fn physically_contained(path: &Path, root: &Path) -> bool {
+    let Ok(canonical_root) = std::fs::canonicalize(root) else {
+        return false;
+    };
+    let existing = if path.exists() {
+        path.to_path_buf()
+    } else {
+        let mut ancestor = path.to_path_buf();
+        while !ancestor.exists() {
+            if !ancestor.pop() {
+                return false;
+            }
+        }
+        ancestor
+    };
+    std::fs::canonicalize(existing)
+        .map(|canonical| canonical.starts_with(canonical_root))
+        .unwrap_or(false)
 }
 fn is_excluded(path: &str) -> bool {
     let lower = path.to_ascii_lowercase();

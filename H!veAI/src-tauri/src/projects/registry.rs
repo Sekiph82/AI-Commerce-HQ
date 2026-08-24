@@ -225,14 +225,9 @@ pub fn repair_project_path(
                 }
                 _ => {}
             }
-            if let (Some(old), Some(new)) = (old_head.as_deref(), git.head_sha.as_deref()) {
-                if old != new {
-                    return Err(
-                        "new path repository HEAD identity does not match the registered project"
-                            .to_string(),
-                    );
-                }
-            }
+            // A matching sanitized remote is the durable repository identity; a moved
+            // checkout may legitimately advance its HEAD between registry observations.
+            // When no remote exists, the commit remains the only strong identity signal.
             if old_remote.is_none()
                 && git.preferred_remote_url.is_none()
                 && old_head != git.head_sha

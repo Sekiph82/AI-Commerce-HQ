@@ -305,6 +305,32 @@ UPDATE project_snapshots SET last_watcher_refresh_at = strftime('%Y-%m-%dT%H:%M:
 UPDATE project_snapshots SET evidence_generated_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(evidence_generated_at AS INTEGER), 'unixepoch') WHERE evidence_generated_at GLOB '[0-9]*' AND evidence_generated_at NOT GLOB '*[^0-9]*';
 "#;
 
+const RESIDUAL_TIMESTAMP_STANDARDIZATION: &str = r#"
+UPDATE tasks SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(created_at AS INTEGER), 'unixepoch') WHERE created_at GLOB '[0-9]*' AND created_at NOT GLOB '*[^0-9]*';
+UPDATE tasks SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(updated_at AS INTEGER), 'unixepoch') WHERE updated_at GLOB '[0-9]*' AND updated_at NOT GLOB '*[^0-9]*';
+UPDATE task_sources SET discovered_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(discovered_at AS INTEGER), 'unixepoch') WHERE discovered_at GLOB '[0-9]*' AND discovered_at NOT GLOB '*[^0-9]*';
+UPDATE task_events SET occurred_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(occurred_at AS INTEGER), 'unixepoch') WHERE occurred_at GLOB '[0-9]*' AND occurred_at NOT GLOB '*[^0-9]*';
+UPDATE prompts SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(created_at AS INTEGER), 'unixepoch') WHERE created_at GLOB '[0-9]*' AND created_at NOT GLOB '*[^0-9]*';
+UPDATE prompts SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(updated_at AS INTEGER), 'unixepoch') WHERE updated_at GLOB '[0-9]*' AND updated_at NOT GLOB '*[^0-9]*';
+UPDATE prompt_versions SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(created_at AS INTEGER), 'unixepoch') WHERE created_at GLOB '[0-9]*' AND created_at NOT GLOB '*[^0-9]*';
+UPDATE agent_sessions SET started_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(started_at AS INTEGER), 'unixepoch') WHERE started_at GLOB '[0-9]*' AND started_at NOT GLOB '*[^0-9]*';
+UPDATE agent_sessions SET ended_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(ended_at AS INTEGER), 'unixepoch') WHERE ended_at GLOB '[0-9]*' AND ended_at NOT GLOB '*[^0-9]*';
+UPDATE agent_sessions SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(created_at AS INTEGER), 'unixepoch') WHERE created_at GLOB '[0-9]*' AND created_at NOT GLOB '*[^0-9]*';
+UPDATE agent_events SET occurred_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(occurred_at AS INTEGER), 'unixepoch') WHERE occurred_at GLOB '[0-9]*' AND occurred_at NOT GLOB '*[^0-9]*';
+UPDATE agent_tool_calls SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(created_at AS INTEGER), 'unixepoch') WHERE created_at GLOB '[0-9]*' AND created_at NOT GLOB '*[^0-9]*';
+UPDATE permission_requests SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(created_at AS INTEGER), 'unixepoch') WHERE created_at GLOB '[0-9]*' AND created_at NOT GLOB '*[^0-9]*';
+UPDATE audits SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(created_at AS INTEGER), 'unixepoch') WHERE created_at GLOB '[0-9]*' AND created_at NOT GLOB '*[^0-9]*';
+UPDATE audit_findings SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(created_at AS INTEGER), 'unixepoch') WHERE created_at GLOB '[0-9]*' AND created_at NOT GLOB '*[^0-9]*';
+UPDATE test_runs SET started_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(started_at AS INTEGER), 'unixepoch') WHERE started_at GLOB '[0-9]*' AND started_at NOT GLOB '*[^0-9]*';
+UPDATE test_runs SET finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(finished_at AS INTEGER), 'unixepoch') WHERE finished_at GLOB '[0-9]*' AND finished_at NOT GLOB '*[^0-9]*';
+UPDATE alerts SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(created_at AS INTEGER), 'unixepoch') WHERE created_at GLOB '[0-9]*' AND created_at NOT GLOB '*[^0-9]*';
+UPDATE alerts SET resolved_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(resolved_at AS INTEGER), 'unixepoch') WHERE resolved_at GLOB '[0-9]*' AND resolved_at NOT GLOB '*[^0-9]*';
+UPDATE decisions SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(created_at AS INTEGER), 'unixepoch') WHERE created_at GLOB '[0-9]*' AND created_at NOT GLOB '*[^0-9]*';
+UPDATE github_sync_state SET last_synced_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(last_synced_at AS INTEGER), 'unixepoch') WHERE last_synced_at GLOB '[0-9]*' AND last_synced_at NOT GLOB '*[^0-9]*';
+UPDATE settings SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(created_at AS INTEGER), 'unixepoch') WHERE created_at GLOB '[0-9]*' AND created_at NOT GLOB '*[^0-9]*';
+UPDATE settings SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(updated_at AS INTEGER), 'unixepoch') WHERE updated_at GLOB '[0-9]*' AND updated_at NOT GLOB '*[^0-9]*';
+"#;
+
 pub fn migrations() -> &'static [Migration] {
     &[
         Migration {
@@ -331,6 +357,11 @@ pub fn migrations() -> &'static [Migration] {
             version: 5,
             name: "timestamp_standardization",
             sql: TIMESTAMP_STANDARDIZATION,
+        },
+        Migration {
+            version: 6,
+            name: "residual_timestamp_standardization",
+            sql: RESIDUAL_TIMESTAMP_STANDARDIZATION,
         },
     ]
 }
@@ -430,8 +461,8 @@ mod tests {
     fn fresh_database_reaches_latest_version() {
         let (_directory, mut connection) = temp_connection();
         let report = apply_migrations(&mut connection, migrations()).expect("migrations apply");
-        assert_eq!(report.schema_version, 5);
-        assert_eq!(report.migration_count, 5);
+        assert_eq!(report.schema_version, 6);
+        assert_eq!(report.migration_count, 6);
         assert_eq!(report.last_migration_status, "APPLIED");
     }
 
@@ -441,7 +472,7 @@ mod tests {
         apply_migrations(&mut connection, migrations()).expect("first apply");
         let report = apply_migrations(&mut connection, migrations()).expect("second apply");
         assert_eq!(report.last_migration_status, "ALREADY_CURRENT");
-        assert_eq!(report.migration_count, 5);
+        assert_eq!(report.migration_count, 6);
     }
 
     #[test]
@@ -462,7 +493,8 @@ mod tests {
                 (2, "initial_lookup_indexes".to_string()),
                 (3, "project_registry_fields".to_string()),
                 (4, "project_snapshot_fields".to_string()),
-                (5, "timestamp_standardization".to_string())
+                (5, "timestamp_standardization".to_string()),
+                (6, "residual_timestamp_standardization".to_string())
             ]
         );
     }

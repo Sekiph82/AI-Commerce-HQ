@@ -42,6 +42,15 @@ Use the Akilta logo in the footer with:
 
 Preserve these UI rules across future milestones unless the user explicitly changes them.
 
+### UI Layout Governance
+
+Before changing the H!veAI UI, read `docs/H!veAI/UI_LAYOUT_GOVERNANCE.md`. The
+dashboard is governed as a single desktop viewport: keep the canonical small
+logo and text logo, compact infrastructure/status details, dense panel
+composition, and internal panel scrolling. Do not add long explanatory UI
+copy, global zoom/transform workarounds, or browser-hosted application-shell
+launches.
+
 ## Development Manual QA Launcher
 
 During active development, the user must be able to launch the latest validated H!veAI desktop build by double-clicking one stable Windows shortcut without reinstalling the application.
@@ -88,6 +97,10 @@ Canonical behavior:
 - Prefer an installed Google Chrome executable and launch it explicitly when browser choice is under H!veAI or development-helper control.
 - Do not intentionally launch Microsoft Edge for H!veAI-managed browser opens.
 - Do not change the user's global Windows default-browser setting merely to enforce this project preference.
+
+The repository helper `scripts/publish-dev-qa.ps1` must build with Tauri
+production mode `--no-bundle`, smoke-test the candidate before replacement,
+and retain a rollback copy until the stable executable and shortcut validate.
 - If Google Chrome cannot be found, fail clearly or mark the browser-open check `UNVERIFIED`; do not silently fall back to Edge.
 - Browser-opening helpers must use argument-safe process invocation and must not construct shell command strings.
 - The native H!veAI desktop window may use the Windows WebView runtime required by Tauri internally; this must not create or expose a standalone Microsoft Edge browser window to the user.
