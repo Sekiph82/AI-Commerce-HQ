@@ -78,12 +78,14 @@ M05 COMPLETE. H!veAI supports explicit, read-only project registration backed by
 M06 COMPLETE. H!veAI has a registry-resolved, read-only local Git engine with a default-denied mutation boundary. Do not begin M07 in this session.
 
 ## M07 Filesystem Watcher + snapshots
-- [ ] watch project roots/task files/.hiveai
-- [ ] debounce
-- [ ] detect moved/missing repos
-- [ ] project snapshots/evidence timestamps
-- [ ] trigger task/git refresh
-- [ ] large-repo protections
+- [x] watch project roots/task files/.hiveai
+- [x] debounce
+- [x] detect moved/missing repos
+- [x] project snapshots/evidence timestamps
+- [x] trigger task/git refresh
+- [x] large-repo protections
+
+M07 COMPLETE. H!veAI has a registry-scoped Rust filesystem watcher with bounded event handling and project evidence snapshots. Do not begin M08 in this session.
 
 ## M08 Task Source Discovery
 - [ ] discover TASKS/tasks/PLANS/PROGRESS/ROADMAP/CLAUDE/AGENTS/handoffs

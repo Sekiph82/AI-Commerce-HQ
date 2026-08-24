@@ -274,6 +274,23 @@ ALTER TABLE repositories ADD COLUMN head_sha TEXT;
 ALTER TABLE repositories ADD COLUMN remote_urls_json TEXT;
 "#;
 
+const PROJECT_SNAPSHOT_FIELDS: &str = r#"
+CREATE TABLE project_snapshots (
+    id TEXT PRIMARY KEY NOT NULL,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    availability TEXT NOT NULL,
+    git_snapshot_id TEXT REFERENCES git_snapshots(id) ON DELETE SET NULL,
+    last_filesystem_event_at TEXT,
+    last_watcher_refresh_at TEXT,
+    evidence_generated_at TEXT NOT NULL,
+    changed_path_count INTEGER NOT NULL DEFAULT 0,
+    rescan_required INTEGER NOT NULL DEFAULT 0,
+    watcher_health TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX idx_project_snapshots_project_time ON project_snapshots(project_id, evidence_generated_at);
+"#;
+
 pub fn migrations() -> &'static [Migration] {
     &[
         Migration {
@@ -290,6 +307,11 @@ pub fn migrations() -> &'static [Migration] {
             version: 3,
             name: "project_registry_fields",
             sql: PROJECT_REGISTRY_FIELDS,
+        },
+        Migration {
+            version: 4,
+            name: "project_snapshot_fields",
+            sql: PROJECT_SNAPSHOT_FIELDS,
         },
     ]
 }
@@ -389,8 +411,8 @@ mod tests {
     fn fresh_database_reaches_latest_version() {
         let (_directory, mut connection) = temp_connection();
         let report = apply_migrations(&mut connection, migrations()).expect("migrations apply");
-        assert_eq!(report.schema_version, 3);
-        assert_eq!(report.migration_count, 3);
+        assert_eq!(report.schema_version, 4);
+        assert_eq!(report.migration_count, 4);
         assert_eq!(report.last_migration_status, "APPLIED");
     }
 
@@ -400,7 +422,7 @@ mod tests {
         apply_migrations(&mut connection, migrations()).expect("first apply");
         let report = apply_migrations(&mut connection, migrations()).expect("second apply");
         assert_eq!(report.last_migration_status, "ALREADY_CURRENT");
-        assert_eq!(report.migration_count, 3);
+        assert_eq!(report.migration_count, 4);
     }
 
     #[test]
@@ -419,7 +441,8 @@ mod tests {
             vec![
                 (1, "initial_hiveai_schema".to_string()),
                 (2, "initial_lookup_indexes".to_string()),
-                (3, "project_registry_fields".to_string())
+                (3, "project_registry_fields".to_string()),
+                (4, "project_snapshot_fields".to_string())
             ]
         );
     }

@@ -68,3 +68,7 @@ export function repairProjectPath(projectId: string, path: string) {
 export function updateProjectSettings(projectId: string, priority: number) {
   return invoke<ProjectRecord>('hiveai_project_update_settings', { request: { projectId, priority } });
 }
+
+export function refreshWatcherSet() {
+  return invoke('hiveai_watcher_refresh_set');
+}

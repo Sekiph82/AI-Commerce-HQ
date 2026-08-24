@@ -29,3 +29,8 @@ commands.allow = ["hiveai_projects_list", "hiveai_project_register", "hiveai_pro
 identifier = "allow-git-engine-read"
 description = "Allows the main window to request bounded, read-only Git snapshots and diffs for registered repositories."
 commands.allow = ["hiveai_git_snapshot", "hiveai_git_diff", "hiveai_git_mutation_status"]
+
+[[permission]]
+identifier = "allow-filesystem-watcher"
+description = "Allows the main window to inspect and explicitly refresh registered-project watcher state."
+commands.allow = ["hiveai_watcher_status", "hiveai_watcher_project_status", "hiveai_watcher_refresh_set", "hiveai_watcher_rescan"]

@@ -12,6 +12,7 @@
     "allow-runtime-status",
     "allow-database-status",
     "allow-project-registry",
-    "allow-git-engine-read"
+    "allow-git-engine-read",
+    "allow-filesystem-watcher"
   ]
 }

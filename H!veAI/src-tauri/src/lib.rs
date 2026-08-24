@@ -6,12 +6,14 @@ mod db;
 mod git_engine;
 mod projects;
 mod runtime;
+mod watcher;
 use db::{DatabaseState, DatabaseStatus};
 use projects::{
     ProjectListQuery, ProjectRecord, RegisterProjectRequest, RepairProjectPathRequest,
     UpdateProjectSettingsRequest,
 };
 use runtime::{RuntimeStatus, RuntimeSupervisor};
+use watcher::{ProjectWatcherStatus, WatcherManager, WatcherStatusSummary};
 
 use git_engine::{GitDiff, GitDiffRequest, GitSnapshot, GitSnapshotRequest, MutationStatus};
 
@@ -152,6 +154,34 @@ fn hiveai_git_mutation_status() -> MutationStatus {
     git_engine::mutation_status()
 }
 
+#[tauri::command]
+fn hiveai_watcher_status(watcher: tauri::State<'_, WatcherManager>) -> WatcherStatusSummary {
+    watcher.status()
+}
+
+#[tauri::command]
+fn hiveai_watcher_project_status(
+    watcher: tauri::State<'_, WatcherManager>,
+    project_id: String,
+) -> Result<ProjectWatcherStatus, String> {
+    watcher.project_status(&project_id)
+}
+
+#[tauri::command]
+fn hiveai_watcher_refresh_set(
+    watcher: tauri::State<'_, WatcherManager>,
+) -> Result<WatcherStatusSummary, String> {
+    watcher.refresh_from_registry()
+}
+
+#[tauri::command]
+fn hiveai_watcher_rescan(
+    watcher: tauri::State<'_, WatcherManager>,
+    project_id: String,
+) -> Result<ProjectWatcherStatus, String> {
+    watcher.rescan_project(&project_id)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -177,7 +207,11 @@ pub fn run() {
             hiveai_project_repair_path,
             hiveai_git_snapshot,
             hiveai_git_diff,
-            hiveai_git_mutation_status
+            hiveai_git_mutation_status,
+            hiveai_watcher_status,
+            hiveai_watcher_project_status,
+            hiveai_watcher_refresh_set,
+            hiveai_watcher_rescan
         ])
         .setup(|app| {
             app.manage(RuntimeSupervisor::new());
@@ -188,7 +222,10 @@ pub fn run() {
             let database = DatabaseState::initialize(app_data_dir.clone())
                 .map_err(|error| format!("H!veAI persistence initialization failed: {error}"))?;
             let database_status = database.status();
+            let watcher_manager = WatcherManager::initialize(database.clone())
+                .map_err(|error| format!("H!veAI watcher initialization failed: {error}"))?;
             app.manage(database);
+            app.manage(watcher_manager);
 
             log::info!(
                 "H!veAI Tauri 2 foundation started; app_data_dir={}; schema_version={}",
