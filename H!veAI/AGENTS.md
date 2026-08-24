@@ -18,6 +18,30 @@ tests, desktop shell files, and application configuration under:
 Do not treat `H!veAI` as a separate Git repository. It must not contain a `.git`
 directory.
 
+## Canonical UI Assets
+
+Canonical UI reference assets are located at:
+
+`C:\Users\sekip\Desktop\AI-Commerce-HQ files\H!veAI`
+
+Use the assets in this folder as authoritative visual references:
+
+- dashboard reference image
+- Akilta logo
+- H!veAI logo
+
+Do not redesign these assets unless explicitly instructed.
+
+For any milestone that creates, changes, or visually touches the H!veAI UI, use the dashboard reference to reproduce the layout, spacing, visual hierarchy, panels, cards, navigation, right-side assistant/status columns, typography density, and overall dark visual language as closely as practical.
+
+Use the H!veAI logo in product branding.
+
+Use the Akilta logo in the footer with:
+
+`Built with ♥ for maximum productivity by Akilta`
+
+Preserve these UI rules across future milestones unless the user explicitly changes them.
+
 ## Mandatory Fetch-Before-Prompt Preflight
 
 Before reading milestone prompt files:
