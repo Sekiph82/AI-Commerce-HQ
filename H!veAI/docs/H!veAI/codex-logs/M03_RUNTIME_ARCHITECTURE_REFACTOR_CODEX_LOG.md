@@ -97,3 +97,17 @@ This section is appended chronologically during implementation. Prior failures r
 - M00, M01 and M02 Codex logs remained unchanged.
 - No parent source/package file was modified.
 - Ignored `node_modules`, `dist`, `src-tauri/target`, caches, binaries, runtime logs, secrets, and databases were not staged.
+
+### 2026-08-24 - commit, push and remote verification
+
+- Implementation commit: `b50e74d` (`refactor(H!veAI): establish runtime architecture boundary`).
+- `git push origin H!veAI`: passed; remote advanced from `0ac2736` to `b50e74d`.
+- Final log-only update is recorded in a separate documentation commit after this implementation commit.
+- Remote verification targets:
+  - `H!veAI/docs/H!veAI/codex-logs/M00_FRESH_START_CODEX_LOG.md`
+  - `H!veAI/docs/H!veAI/codex-logs/M01_TAURI2_FOUNDATION_CODEX_LOG.md`
+  - `H!veAI/docs/H!veAI/codex-logs/M02_UI_SHELL_AND_DESIGN_SYSTEM_CODEX_LOG.md`
+  - `H!veAI/docs/H!veAI/codex-logs/M03_RUNTIME_ARCHITECTURE_REFACTOR_CODEX_LOG.md`
+- M04 was not started; no M04 prompt was created or recommended.
+
+PHASE STATUS: COMPLETE
