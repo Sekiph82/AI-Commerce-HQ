@@ -1,9 +1,31 @@
 {
   "name": "hiveai",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
-  "description": "H!veAI dedicated application workspace",
+  "type": "module",
+  "description": "H!veAI Tauri 2 desktop foundation",
   "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "typecheck": "tsc --noEmit",
     "verify:m00": "node -e \"const fs=require('fs'); const required=['README.md','AGENTS.md','CONSTITUTION.md','ARCHITECTURE.md','TASKS.md','CODEX_ROADMAP.md','docs/H!veAI/README.md','docs/H!veAI/prompts/M00_FRESH_START_CORRECT_ROOT_PROMPT.md','docs/H!veAI/audits/M00_FRESH_START_AUDIT.md','docs/H!veAI/codex-logs/M00_FRESH_START_CODEX_LOG.md','docs/migration/M00_AI_COMMERCE_HQ_BASELINE.md','docs/migration/M00_REUSE_MATRIX.md','docs/migration/M00_HIVEAI_APPLICATION_PLAN.md']; const missing=required.filter(p=>!fs.existsSync(p)); if(missing.length){console.error('Missing '+missing.join(', ')); process.exit(1)}; console.log('H!veAI M00 structure verified')\""
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.11.1",
+    "@tauri-apps/plugin-notification": "2.3.3",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.11.4",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "@vitejs/plugin-react": "6.1.0",
+    "typescript": "7.0.2",
+    "vite": "8.2.2"
   }
 }

@@ -18,12 +18,15 @@ Legend: [x] validated complete, [ ] incomplete, [~] active, [!] blocked,
 M00 COMPLETE. Do not begin M01 until M00 is independently audited.
 
 ## M01 Tauri 2 foundation
-- [ ] Upgrade Tauri packages and Rust APIs
-- [ ] Add Tauri 2 capabilities
-- [ ] Rename active app identity to H!veAI
-- [ ] Define app-data migration policy
-- [ ] Verify Windows launch/close/restart
-- [ ] Add native logging/notifications
+- [x] Upgrade Tauri packages and Rust APIs
+- [x] Add Tauri 2 capabilities
+- [x] Rename active app identity to H!veAI
+- [x] Define app-data migration policy
+- [!] Verify Windows launch/close/restart
+- [x] Add native logging/notifications
+
+M01 COMPLETE with restart verification left as a manual blocked check. Do not
+begin M02 until M01 is independently audited.
 
 ## M02 UI shell/design system
 - [ ] Remove GameWorld from root flow

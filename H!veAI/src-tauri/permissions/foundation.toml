@@ -1,0 +1,11 @@
+"$schema" = "schemas/schema.json"
+
+[[permission]]
+identifier = "allow-native-status"
+description = "Allows the main window to read minimal H!veAI native shell metadata."
+commands.allow = ["hiveai_native_status"]
+
+[[permission]]
+identifier = "allow-request-restart"
+description = "Allows the main window to request an application restart through Tauri."
+commands.allow = ["hiveai_request_restart"]

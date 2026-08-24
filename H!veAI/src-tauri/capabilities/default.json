@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-window",
+  "description": "M01 minimal permissions for the H!veAI main desktop window.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "log:default",
+    "notification:default",
+    "allow-native-status",
+    "allow-request-restart"
+  ]
+}
