@@ -55,3 +55,14 @@ M07 implementation details will be recorded chronologically during the session.
 - All watcher and Git tests use temporary directories/repositories; no registered external project was mutated.
 - No watched project files, production database, temp repository, generated artifact, file-content dump, secret, `.env`, or runtime log was staged.
 - M00-M06 Codex logs, the pre-M00 stash, and untracked parent `start-demo.bat` and `task.md` remain preserved.
+
+## 2026-08-24 - publication and remote verification
+
+- Focused implementation commit: `f1293db` (`feat(H!veAI): add filesystem watcher and snapshots`).
+- Initial push was rejected because origin had concurrent governance commit `d9cbe79` updating only `H!veAI/AGENTS.md`.
+- Fetched and reviewed the remote change, merged it normally without force or destructive synchronization, and pushed merge commit `22c97fc`.
+- M07 implementation and log are now published on `origin/H!veAI`; M00-M07 logs were verified as separate GitHub files.
+- No M08 prompt was created, invented, recommended, or started.
+
+PHASE STATUS: COMPLETE
+EXACT NEXT MILESTONE: M08 — Task Source Discovery
