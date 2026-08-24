@@ -70,10 +70,12 @@ M04 COMPLETE. H!veAI owns a Rust-native SQLite schema with versioned migrations,
 M05 COMPLETE. H!veAI supports explicit, read-only project registration backed by the M04 SQLite layer. Do not begin M06 in this session.
 
 ## M06 Local Git Engine
-- [ ] branch/HEAD/status/staged/unstaged/untracked
-- [ ] remote/ahead-behind/commits/diff/conflicts/worktrees
-- [ ] safe branch/commit/push interfaces
-- [ ] temp-repo tests
+- [x] branch/HEAD/status/staged/unstaged/untracked
+- [x] remote/ahead-behind/commits/diff/conflicts/worktrees
+- [x] safe branch/commit/push interfaces
+- [x] temp-repo tests
+
+M06 COMPLETE. H!veAI has a registry-resolved, read-only local Git engine with a default-denied mutation boundary. Do not begin M07 in this session.
 
 ## M07 Filesystem Watcher + snapshots
 - [ ] watch project roots/task files/.hiveai

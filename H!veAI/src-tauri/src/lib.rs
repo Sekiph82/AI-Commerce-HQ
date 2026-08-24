@@ -3,6 +3,7 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_log::{Target, TargetKind};
 
 mod db;
+mod git_engine;
 mod projects;
 mod runtime;
 use db::{DatabaseState, DatabaseStatus};
@@ -11,6 +12,8 @@ use projects::{
     UpdateProjectSettingsRequest,
 };
 use runtime::{RuntimeStatus, RuntimeSupervisor};
+
+use git_engine::{GitDiff, GitDiffRequest, GitSnapshot, GitSnapshotRequest, MutationStatus};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -128,6 +131,27 @@ fn hiveai_project_repair_path(
     projects::repair_project_path(&database, request)
 }
 
+#[tauri::command]
+fn hiveai_git_snapshot(
+    database: tauri::State<'_, DatabaseState>,
+    request: GitSnapshotRequest,
+) -> Result<GitSnapshot, String> {
+    git_engine::snapshot(&database, request)
+}
+
+#[tauri::command]
+fn hiveai_git_diff(
+    database: tauri::State<'_, DatabaseState>,
+    request: GitDiffRequest,
+) -> Result<GitDiff, String> {
+    git_engine::diff(&database, request)
+}
+
+#[tauri::command]
+fn hiveai_git_mutation_status() -> MutationStatus {
+    git_engine::mutation_status()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -150,7 +174,10 @@ pub fn run() {
             hiveai_project_update_settings,
             hiveai_project_archive,
             hiveai_project_remove_from_registry,
-            hiveai_project_repair_path
+            hiveai_project_repair_path,
+            hiveai_git_snapshot,
+            hiveai_git_diff,
+            hiveai_git_mutation_status
         ])
         .setup(|app| {
             app.manage(RuntimeSupervisor::new());

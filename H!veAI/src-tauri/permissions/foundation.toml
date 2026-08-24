@@ -24,3 +24,8 @@ commands.allow = ["hiveai_database_status"]
 identifier = "allow-project-registry"
 description = "Allows the main window to use bounded, explicit H!veAI project registry operations."
 commands.allow = ["hiveai_projects_list", "hiveai_project_register", "hiveai_project_get", "hiveai_project_update_settings", "hiveai_project_archive", "hiveai_project_remove_from_registry", "hiveai_project_repair_path"]
+
+[[permission]]
+identifier = "allow-git-engine-read"
+description = "Allows the main window to request bounded, read-only Git snapshots and diffs for registered repositories."
+commands.allow = ["hiveai_git_snapshot", "hiveai_git_diff", "hiveai_git_mutation_status"]
