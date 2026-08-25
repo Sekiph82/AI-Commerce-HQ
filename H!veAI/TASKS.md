@@ -1,32 +1,38 @@
 # H!veAI MASTER TASKS
 
-Legend: [x] validated complete, [ ] incomplete, [~] active, [!] blocked,
-[?] decision required.
+Legend: [x] validated complete, [~] active, [ ] planned/not started, [!] blocked.
+
+## Current truth
+
+- M00 through M07 are PASS/CLOSED.
+- M01 real native Settings restart is PASS and user-accepted.
+- M08.00/M08.00B presentation bootstrap is PASS/CLOSED, including opening video, post-sidebar hive background alignment, and restrained glass/glow styling.
+- M08 Task Source Discovery is the only active milestone.
+- M09 and later milestones are blocked until M08 implementation, independent strict audit, and any required manual acceptance are complete.
+- Strict completed milestone count: 8 / 20.
+
+Historical M07 remediation details remain preserved in `docs/H!veAI/audits/`, `docs/H!veAI/prompts/`, and `docs/H!veAI/codex-logs/`. They are audit history only and are not active work.
+
+---
 
 ## M00 Fresh start with dedicated application root
 - [x] Prove Git root and H!veAI child application root
 - [x] Verify official repository and branch
 - [x] Correct remote to `Sekiph82/AI-Commerce-HQ`
 - [x] Inspect old parent AI-Commerce-HQ application as source material
-- [x] Inspect existing H!veAI child files
-- [x] Add H!veAI foundation docs under the child root
-- [x] Copy canonical prompts/audits/Codex-log docs under the child root
-- [x] Create fresh M00 migration docs under the child root
-- [x] Classify reusable vs commerce-specific code
-- [x] Record baseline validation and security findings
+- [x] Establish H!veAI foundation docs, child-root governance, and migration baseline
 
-M00 COMPLETE. Do not begin M01 until M00 is independently audited.
+M00 PASS/CLOSED.
 
 ## M01 Tauri 2 foundation
 - [x] Upgrade Tauri packages and Rust APIs
 - [x] Add Tauri 2 capabilities
 - [x] Rename active app identity to H!veAI
 - [x] Define app-data migration policy
-- [!] Verify Windows launch/close/restart
 - [x] Add native logging/notifications
+- [x] Verify Windows launch/close/restart through real Settings -> Restart H!veAI flow
 
-M01 COMPLETE with restart verification left as a manual blocked check. Do not
-begin M02 until M01 is independently audited.
+M01 PASS/CLOSED. Native restart acceptance is documented in `docs/H!veAI/audits/M07.07B_NATIVE_RESTART_MANUAL_ACCEPTANCE.md`.
 
 ## M02 UI shell/design system
 - [x] Remove GameWorld from root flow
@@ -37,16 +43,16 @@ begin M02 until M01 is independently audited.
 - [x] Accessible reusable UI primitives + Framer Motion
 - [x] Loading/error/empty states
 
-M02 COMPLETE. Frontend, Rust/Tauri regression, bounded desktop smoke, and child-scope review passed. Do not begin M03 in this session.
+M02 PASS/CLOSED.
 
 ## M03 Runtime refactor
-- [x] Stop GMO/commerce orchestrators from H!veAI startup
+- [x] Stop commerce-specific orchestrators from H!veAI startup
 - [x] Inventory Python responsibilities
-- [x] Decide Rust-native vs retained sidecar
-- [x] Define dormant child-process health/recovery boundary without spawning a sidecar
+- [x] Select Rust-native runtime architecture
+- [x] Remove always-on sidecar requirement
 - [x] Document final runtime boundary
 
-M03 COMPLETE. H!veAI uses a Rust-native runtime with no always-on Python sidecar. Do not begin M04 in this session.
+M03 PASS/CLOSED.
 
 ## M04 SQLite + migrations
 - [x] Versioned migration framework
@@ -56,9 +62,9 @@ M03 COMPLETE. H!veAI uses a Rust-native runtime with no always-on Python sidecar
 - [x] agent sessions/events/tool calls/permissions
 - [x] audits/findings/test_runs/alerts/decisions
 - [x] GitHub cache/settings
-- [x] migration tests and failure recovery
+- [x] corruption-safe integrity preflight, migration backup, rollback, contention, and failure evidence
 
-M04 COMPLETE. H!veAI owns a Rust-native SQLite schema with versioned migrations, transactional failure recovery, and read-only database status IPC. Do not begin M05 in this session.
+M04 PASS/CLOSED.
 
 ## M05 Project Registry
 - [x] Add existing folder without mutation
@@ -66,181 +72,92 @@ M04 COMPLETE. H!veAI owns a Rust-native SQLite schema with versioned migrations,
 - [x] Priority/builder/auditor/task-source settings
 - [x] Path repair/archive/remove-from-registry
 - [x] Search/sort/filter
+- [x] Registry identity repair evidence matrix
 
-M05 COMPLETE. H!veAI supports explicit, read-only project registration backed by the M04 SQLite layer. Do not begin M06 in this session.
+M05 PASS/CLOSED.
 
 ## M06 Local Git Engine
 - [x] branch/HEAD/status/staged/unstaged/untracked
 - [x] remote/ahead-behind/commits/diff/conflicts/worktrees
-- [x] safe branch/commit/push interfaces
-- [x] temp-repo tests
+- [x] deterministic safe diff with `--no-ext-diff` / `--no-textconv`
+- [x] binary diff metadata handling
+- [x] default-denied mutation boundary
+- [x] temp-repo/direct production-path tests
 
-M06 COMPLETE. H!veAI has a registry-resolved, read-only local Git engine with a default-denied mutation boundary. Do not begin M07 in this session.
+M06 PASS/CLOSED.
 
 ## M07 Filesystem Watcher + snapshots
-- [x] watch project roots/task files/.hiveai
-- [x] debounce
+- [x] watch registered project roots/task-relevant files/.hiveai
+- [x] debounce and bounded watcher lifecycle
 - [x] detect moved/missing repos
 - [x] project snapshots/evidence timestamps
-- [x] trigger task/git refresh
+- [x] trigger bounded task/git refresh categories
 - [x] large-repo protections
+- [x] repaired-root reattachment and actual event evidence
+- [x] Git-category / non-Git-category snapshot evidence
+- [x] watcher failure, persistence failure, drop cleanup, containment evidence
+- [x] production no-bundle publisher, rollback, launcher, frontend-ready, and UI closure
+- [x] real Settings restart acceptance
+- [x] final enlarged one-piece H!veAI sidebar logo acceptance
 
-M07 implementation is remediated by the M07.01 strict quality gate. Historical M07 completion claims are not evidence of acceptance; M07.01 owns the current gate result.
+M07 PASS/CLOSED. Final strict closure is documented in `docs/H!veAI/audits/M07.07C_SIDEBAR_LOGO_SCALE_VISUAL_CORRECTION_STRICT_AUDIT.md` and the manual logo acceptance in `docs/H!veAI/audits/M07.07C_SIDEBAR_LOGO_MANUAL_ACCEPTANCE.md`.
 
-## M07.02 Strict remediation continuation
-- [ ] independent strict-audit regression closure
-- [ ] manual-QA production launcher closure
-- [ ] user-confirmed visual and in-app restart acceptance
+### Historical M07 remediation chain
 
-M07.02 remains IN PROGRESS. The M07.02A launcher hotfix is implemented and locally smoke-tested; final milestone acceptance remains subject to the active strict gate.
+The following are superseded historical gates, not active tasks:
 
-## M07.03 Consolidated strict closure and single-viewport UI
-- [ ] Re-audit M07 findings A01-A09 and B01-B04 against repository evidence
-- [ ] Maintain production `--no-bundle` candidate publication with smoke test and rollback
-- [ ] Maintain canonical single-viewport UI composition and UI governance compliance
-- [ ] User visual acceptance of refreshed Desktop `H!veAI.lnk`
+- M07.02: historical strict-remediation continuation, superseded.
+- M07.03: historical consolidated strict closure attempt, failed and superseded.
+- M07.04: historical automated remediation attempt, superseded.
+- M07.05: historical bounded correctness/evidence remediation, superseded.
+- M07.06: historical focused evidence closure, strict audit FAIL and superseded.
+- M07.07: historical Claude surgical remediation, strict audit FAIL because several named tests did not exercise the claimed failures.
+- M07.07A: historical evidence-integrity closure stage, superseded by later closure work.
+- M07.07B: historical final visual/restart closure, CONDITIONAL before final logo scale acceptance.
+- M07.07C: PASS and final M07 closure.
 
-M07.03 was reopened as FAILED by the independent strict audit and is superseded by the active M07.04 automated remediation. Final UI status remains PENDING USER VISUAL ACCEPTANCE until the user inspects the refreshed Desktop shortcut build.
+Do not treat any historical M07 subsection as active work. Detailed evidence remains immutable in its original audit/log/prompt files.
 
-## M07.04 Automated closure remediation
-- [ ] Rescan, watcher, registry, migration, SQLite, diff, and launcher strict findings
-- [ ] Focused production-path evidence matrix
-- [ ] Independent M07.04 audit closure
-- [ ] User visual acceptance of refreshed Desktop `H!veAI.lnk`
-- [ ] M01 actual in-app restart acceptance
-
-M07.04 remains ACTIVE until independent audit. Aggregate tests alone do not establish automated closure. Do not start or create later milestone work.
-
-## M07.05 Bounded correctness and evidence remediation
-- [x] Correct watcher ordinary-refresh and attachment-gated rescan semantics
-- [x] Track watcher roots and reattach when a registered path changes
-- [x] Close legacy rowless Git repair path and sanitize binary diff evidence
-- [x] Restore historical migration v5 body and add stable migration v7
-- [x] Make Project Registry the live Tauri UI identity source with explicit route states
-- [x] Apply bounded single-viewport UI corrections without redesigning the dashboard
-- [x] Maintain production no-bundle publication, readiness, rollback, and shortcut checks
-- [ ] Complete the independent focused R01-R15 evidence matrix
-- [ ] User visual acceptance of refreshed Desktop H!veAI.lnk
-- [ ] M01 actual in-app restart acceptance
-
-M07.05 is the active strict remediation gate. Automated frontend, Rust, formatting,
-production build, and publisher smoke gates pass; the milestone remains FAIL until
-the required focused evidence matrix is complete. Final UI status is PENDING USER
-VISUAL ACCEPTANCE. M08 is unstarted.
-
-## M07.06 Focused evidence and runtime truth closure
-- [x] Deterministic Git diff boundary with no-textconv and real binary paths
-- [x] Dedicated frontend-ready IPC command, ACL, and post-mount call
-- [x] SHA-256-proven publisher rollback and isolated temp-only failure harness
-- [x] Direct Git diff, migration, SQLite, watcher, and Registry focused fixtures
-- [x] Live selected-project session state and name-only in-place project rail
-- [x] Live Tauri task/workflow/brief placeholders are neutral and truthful
-- [x] Frontend focused Command Center and topbar-surface matrix
-- [x] Full frontend/Rust regression, audit, build, and no-bundle publication gates
-- [ ] User visual acceptance of refreshed Desktop H!veAI.lnk
-- [ ] M01 actual in-app restart acceptance
-
-M07.06 strict audit verdict: FAIL. Evidence matrices incomplete; SQLite corruption-safe
-preflight ordering defect. Superseded by M07.07 surgical remediation.
-
-## M07.07 Claude surgical remediation
-- [x] SQLite corruption-safe read-only integrity preflight before WAL configuration
-- [x] Complete watcher focused evidence matrix (13 cases)
-- [x] Complete Registry identity focused evidence matrix (15 cases)
-- [x] Complete frontend live-Registry / route-race focused tests (9 cases)
-- [x] Finish launcher failure evidence harness (9 mapped cases)
-- [x] Truthful TASKS.md and M07.07 Codex log
-- [ ] User visual acceptance of refreshed Desktop H!veAI.lnk
-- [ ] M01 actual in-app restart acceptance
-
-M07.07 strict audit = FAIL because several named failure-path tests were state-only
-or simulated without exercising the claimed failure. M07.07 historical implementation
-and log remain immutable. M07.07A is the active evidence-integrity closure. M08 remains
-unstarted and blocked.
-
-## M07.07A Evidence integrity closure
-- [~] Replace misleading SQLite contention and backup tests with real DB paths and private cfg(test) failpoints
-- [~] Replace watcher name-only tests with real failpoint, lifecycle, root, event, Git, and persistence evidence
-- [~] Replace frontend pre-baked states with mounted-app Registry transitions and same-instance route race
-- [~] Replace publisher smoke placeholder with an actual spawned child-process cleanup assertion
-- [ ] Independent M07.07A strict audit
-- [ ] User visual acceptance of refreshed Desktop H!veAI.lnk
-- [ ] M01 actual in-app restart acceptance
-
-M07.07A remains ACTIVE until its independent audit. The Windows symlink containment
-case is UNVERIFIED because link creation was denied by the environment with OS error
-1314. Do not claim human-only pending status before independent audit. M08 remains
-unstarted and blocked.
-
-## M07.07B Final visual and restart closure
-- [x] Replace visible sidebar branding with one-piece canonical H!veAI logo PNG
-- [x] Expose native Settings -> Restart H!veAI action
-- [x] Correct Projects Git metadata copy and remove milestone suffix from product chrome
-- [x] Update durable sidebar branding governance while preserving shortcut small-logo rule
-- [x] Run focused/full regression and production no-bundle publication
-- [ ] User final M07 visual acceptance
-- [x] User real in-app restart acceptance
-
-M07.07B strict audit = CONDITIONAL. Command Center selection visual behavior was
-user-approved from real Desktop H!veAI.lnk screenshots. M07.07C is the active final
-visual/bookkeeping closure for the enlarged sidebar logo. M07 final closure still
-requires user enlarged-logo visual acceptance and real in-app restart acceptance.
-M08 remains blocked and unstarted.
-
-## M07.07C Sidebar logo scale visual correction
-- [x] Re-verify canonical source and repository logo identity without changing asset bytes
-- [x] Make the visible one-piece sidebar logo width-driven and materially larger
-- [x] Preserve the approximately 220 px sidebar and approved Command Center layout
-- [x] Record M07.07B bookkeeping corrections prospectively in a new immutable log
-- [x] Run automated regression gates and republish the stable no-bundle QA build
-- [x] Independent M07.07C strict audit
-- [x] User enlarged-logo visual acceptance
-- [x] User real in-app restart acceptance (already PASS; no restart-path changes)
-
-Native Settings restart manual gate = PASS, documented in
-`docs/H!veAI/audits/M07.07B_NATIVE_RESTART_MANUAL_ACCEPTANCE.md`. M07.07C strict
-audit = PASS, with visual acceptance documented in
-`docs/H!veAI/audits/M07.07C_SIDEBAR_LOGO_MANUAL_ACCEPTANCE.md`.
-
-## Current M07 closure truth
-
-M07 strict audit and M07.07C audit are PASS. M07 is PASS/CLOSED. The real native
-restart acceptance and enlarged-sidebar-logo visual acceptance are complete and
-documented by their audits. Historical remediation notes above remain audit
-history; they do not reopen M07.
+---
 
 ## M08.00 App presentation bootstrap
-- [x] Copy and verify the canonical global hive background asset
-- [x] Copy and verify the canonical native opening video asset
-- [x] Mount the native startup intro over an immediately mounted App
-- [x] Keep intro play-once behavior scoped to the native lifecycle
-- [x] Adapt restrained neon liquid glass styling to shared buttons, panels, and real tables
+- [x] Copy and verify canonical global hive background asset
+- [x] Copy and verify canonical native opening video asset
+- [x] Mount startup intro over immediately mounted App
+- [x] Preserve frontend-ready independence
+- [x] Add restrained neon liquid-glass styling to buttons, panels, tables, and focus states
 - [x] Preserve M07 Command Center geometry and behavior
-- [x] Run focused and full frontend/native/publisher gates
-- [x] Publish the validated no-bundle desktop QA build
-- [ ] Independent M08.00 audit
-- [ ] User visual and lifecycle acceptance
+- [x] Run focused/full frontend, Rust, publisher and no-bundle publication gates
+- [x] Fix startup video normal-flow/scrollbar defect
+- [x] Move hive background to post-sidebar `.main-area`
+- [x] Add native process-scoped startup intro claim
+- [x] Cold-launch intro manual acceptance
+- [x] Native restart intro replay manual acceptance
+- [x] Post-sidebar background alignment manual acceptance
 
-M08.00 presentation + neon-glass bootstrap is implemented and published, pending
-independent audit and user visual/lifecycle acceptance. M08 Task Source Discovery
-is not implemented by this pass and remains unstarted.
-
-## M08.00B Background alignment and native intro remediation
-- [x] Move the canonical background to the post-sidebar main workspace
-- [x] Add a fixed fullscreen startup overlay with contained video and no normal-flow overflow
-- [x] Add a native process-scoped startup claim command and narrow ACL permission
-- [x] Add focused frontend and Rust evidence for claim, failure, lifecycle, and layout behavior
-- [ ] Independent M08.00B strict audit
-- [ ] User manual acceptance of the refreshed native build
-
-M08.00B is implemented and published pending independent audit and user manual
-acceptance. M08 Task Source Discovery remains blocked and unimplemented.
+M08.00/M08.00B PASS/CLOSED. Strict audit: `docs/H!veAI/audits/M08.00B_BACKGROUND_ALIGNMENT_AND_NATIVE_INTRO_FIX_STRICT_AUDIT.md`. Manual acceptance: `docs/H!veAI/audits/M08.00B_MANUAL_ACCEPTANCE.md`.
 
 ## M08 Task Source Discovery
-- [ ] discover TASKS/tasks/PLANS/PROGRESS/ROADMAP/CLAUDE/AGENTS/handoffs
-- [ ] custom paths
-- [ ] priority/authority/freshness
-- [ ] source UI
+- [~] Discover standard task-source files: TASKS/TASK/PLANS/PLAN/PROGRESS/ROADMAP/AGENTS/CLAUDE/HANDOFF variants
+- [~] Discover bounded task-relevant directories: `tasks/`, `plans/`, `handoffs/`, `.hiveai/`
+- [~] Support safe project-scoped custom source paths
+- [~] Enforce physical containment, traversal rejection, symlink/junction escape protection, ignore trees, depth/file-size limits
+- [~] Classify source kind, origin, authority/priority, freshness evidence, status, size, mtime, SHA-256
+- [~] Persist/reconcile source inventory idempotently in H!veAI-owned SQLite `project_sources`
+- [~] Keep M08 strictly at source-discovery level; do not parse tasks or infer workflow semantics
+- [~] Add narrow native Rust IPC and Tauri permission/capability
+- [~] Reuse M07 watcher boundary without creating a second watcher subsystem
+- [~] Replace native `/tasks` placeholder with real Task Sources workspace for selected live Registry project
+- [~] Add truthful loading/empty/error/missing/custom-path states
+- [~] Add mounted-app selected-project transition and stale-response-race tests
+- [~] Add direct Rust production-path discovery/persistence/security evidence matrix
+- [~] Run full frontend/Rust/security/publisher regression
+- [~] Publish stable no-bundle QA build
+- [~] Create `docs/H!veAI/codex-logs/M08_TASK_SOURCE_DISCOVERY_LOG.md`
+- [ ] Independent strict audit after implementation
+- [ ] User manual acceptance only if the completed UI introduces a visual/interaction gate requiring it
+
+M08 Task Source Discovery is ACTIVE. Authoritative implementation prompt: `docs/H!veAI/prompts/M08_TASK_SOURCE_DISCOVERY_PROMPT.md`.
 
 ## M09 Task Intelligence Parser
 - [ ] headings/checklists/milestones/status tags/task IDs
@@ -250,6 +167,8 @@ acceptance. M08 Task Source Discovery remains blocked and unimplemented.
 - [ ] generic adapter
 - [ ] FormuLab/Scrubbots/FMCG adapters
 - [ ] regression fixtures
+
+M09 BLOCKED until M08 PASS.
 
 ## M10 Workflow State Machine
 - [ ] canonical task/actor states
@@ -261,7 +180,7 @@ acceptance. M08 Task Source Discovery remains blocked and unimplemented.
 - [ ] restart recovery
 
 ## M11 Global Command Center
-- [ ] KPI strip
+- [ ] KPI strip backed by live task intelligence
 - [ ] project operation cards
 - [ ] current task/progress/health/state
 - [ ] last action/next action/required actor
@@ -350,3 +269,13 @@ acceptance. M08 Task Source Discovery remains blocked and unimplemented.
 - [ ] user/security/privacy docs
 - [ ] release audit
 - [ ] H!veAI v1.0.0
+
+---
+
+## Milestone policy
+
+- The active milestone is M08 Task Source Discovery only.
+- M08 internal numbered sections inside the authoritative prompt are work sections, not separate milestones or separate prompts.
+- Do not start M09 until M08 implementation is independently audited PASS.
+- Builder logs are claims, not acceptance evidence.
+- Historical audits/logs/prompts are immutable evidence and remain the authoritative record for failed/superseded remediation stages.
