@@ -79,9 +79,12 @@ Chronological builder logs. Builder logs are claims/evidence records, not indepe
 - Original M09 strict audit: historical FAIL.
 - M09A strict re-audit: historical FAIL after residual R01/R02 findings.
 - M09B/M09C/M09D remediation and audit history are preserved; M09D final strict audit = PASS.
-- Strict completed milestone count: 10/20 = 50%.
-- M10+ remain blocked/unstarted.
-- The active pre-M10 native UX hotfix must close the Git child-process console-window defect and muted startup-intro audio defect; manual native acceptance and independent hotfix audit remain pending.
+- Pre-M10 Native UX Hotfix X01/X02: PASS/CLOSED after source-level strict audit plus user native acceptance.
+- X01 terminal/console popup suppression: accepted fixed after approximately 45 minutes of native runtime with no unwanted terminal windows.
+- X02 startup intro audio/replay behavior: accepted fixed; startup audio works and same-process navigation does not replay the intro.
+- Strict completed milestone count remains 10/20 = 50% because the pre-M10 hotfix is not a numbered roadmap milestone.
+- M10 Workflow State Machine is READY / UNSTARTED.
+- M11/M12 remain planned behind M10. Their runtime implementation must incorporate the `.hiveai/PROJECT_DASHBOARD.md` authority manifest system without pretending the current manifest documentation is already a live dashboard engine.
 
 For exact current status, always defer to `H!veAI/TASKS.md`.
 
