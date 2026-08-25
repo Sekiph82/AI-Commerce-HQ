@@ -96,7 +96,7 @@ Focused Rust task-source suite: 35/35 passed. Every focused test passed:
 - `unavailable_registered_root_is_bounded_error`
 - `unreadable_failpoint_preserves_other_valid_source`
 - `unrelated_legacy_project_source_survives_reconciliation`
-- `visited_entry_limit_is_structured`
+- `visited_entry_limit_is_enforced`
 
 Focused frontend M08 suite: `tests/m08-task-sources-focused.test.tsx`, 20/20
 passed unchanged.
@@ -142,5 +142,6 @@ Independent strict re-audit remains open. Native `/tasks` visual status remains
 `PENDING USER VISUAL ACCEPTANCE`. M09 remains BLOCKED/UNSTARTED. No installer
 was created and work stops after M08C.
 
-Publication commit equality after push will be recorded in this same immutable
-log before final closure.
+Publication commit `3c1ea19eb647b31f5449e9e32bc4021ac1d14fc8` was pushed to
+`origin/H!veAI` and local/origin equality was verified. This documentation-only
+log correction is the final M08C follow-up commit.
