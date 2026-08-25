@@ -43,9 +43,12 @@ Status: PASS
 - `npm audit --audit-level=high`: PASS, 0 vulnerabilities.
 - `cargo fmt --manifest-path H!veAI/src-tauri/Cargo.toml -- --check`: PASS.
 - `cargo check --manifest-path H!veAI/src-tauri/Cargo.toml`: PASS.
-- `cargo test --manifest-path H!veAI/src-tauri/Cargo.toml`: pending final full run.
-- `cargo build --manifest-path H!veAI/src-tauri/Cargo.toml`: pending final publication run.
-- Publisher failure harness and governed production publisher: pending final run.
+- `cargo test --manifest-path H!veAI/src-tauri/Cargo.toml`: PASS, 190 tests passed, 0 failed.
+- `cargo build --manifest-path H!veAI/src-tauri/Cargo.toml`: PASS.
+- Publisher failure harness: PASS, all 9 governed failure/rollback assertions.
+- Governed production publisher: PASS, production `--no-bundle`, candidate/stable smoke, frontend-ready marker, no forbidden dev ports, and no visible console host.
+- Stable executable: `H!veAI/dev-bin/H!veAI.exe`, SHA-256 `3DE0029C908876CEEB377ABC9FC7F2EB335EF57B50FB432C9E3AB05E3929C430`, size `17715200` bytes.
+- Shortcut target: `H!veAI/dev-bin/H!veAI.exe`; icon: `H!veAI/dev-bin/H!veAI.ico,0`.
 
 ## Truth and scope
 
@@ -56,8 +59,8 @@ Status: PASS
 
 ## Commit/publication evidence
 
-- Implementation commit: recorded after the implementation commit below.
-- Stable executable SHA/size/shortcut: recorded after governed publication.
+- Implementation commit: `63b73795dcc781f181b21b1cc02199c67f5565f1`.
+- Stable executable SHA/size/shortcut: recorded above after governed publication.
 - Final pushed M09C log commit: `SELF / verified after push in session`.
 - Final remote branch HEAD: recorded in terminal/session evidence and final response.
 - Local/origin equality: verified after the final pushed log commit without force-push.
