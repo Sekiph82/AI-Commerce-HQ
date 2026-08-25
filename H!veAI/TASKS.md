@@ -181,10 +181,24 @@ unstarted and blocked.
 - [ ] User final M07 visual acceptance
 - [ ] User real in-app restart acceptance
 
-M07.07A independent audit = CONDITIONAL / automated closure accepted. Command Center
-selection visual behavior was user-approved from real Desktop H!veAI.lnk screenshots.
-M07.07B is the final visual/restart closure patch. Status: PENDING USER FINAL M07
-ACCEPTANCE. M08 remains blocked and unstarted.
+M07.07B strict audit = CONDITIONAL. Command Center selection visual behavior was
+user-approved from real Desktop H!veAI.lnk screenshots. M07.07C is the active final
+visual/bookkeeping closure for the enlarged sidebar logo. M07 final closure still
+requires user enlarged-logo visual acceptance and real in-app restart acceptance.
+M08 remains blocked and unstarted.
+
+## M07.07C Sidebar logo scale visual correction
+- [x] Re-verify canonical source and repository logo identity without changing asset bytes
+- [x] Make the visible one-piece sidebar logo width-driven and materially larger
+- [x] Preserve the approximately 220 px sidebar and approved Command Center layout
+- [x] Record M07.07B bookkeeping corrections prospectively in a new immutable log
+- [x] Run automated regression gates and republish the stable no-bundle QA build
+- [ ] Independent M07.07C strict audit
+- [ ] User enlarged-logo visual acceptance
+- [ ] User real in-app restart acceptance
+
+M07.07C remains ACTIVE until independently audited and both user acceptance gates
+are complete. Do not mark M07 PASS. M08 remains blocked and unstarted.
 
 ## M08 Task Source Discovery
 - [ ] discover TASKS/tasks/PLANS/PROGRESS/ROADMAP/CLAUDE/AGENTS/handoffs

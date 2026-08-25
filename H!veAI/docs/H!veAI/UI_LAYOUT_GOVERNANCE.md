@@ -22,6 +22,8 @@ Rules:
 
 - Visible sidebar branding is exactly one combined PNG image from `H!veAI logo.png`.
 - Do not show a separate emblem, separate text logo, or `Development command center` subtitle.
+- At canonical desktop sizes, the logo should occupy almost the full usable sidebar width with only small horizontal breathing room.
+- Size the logo width-first with preserved aspect ratio; fixed-height sizing that makes the combined logo visually tiny is prohibited.
 - Preserve the combined image aspect ratio with `object-fit: contain` or equivalent. Do not crop, stretch, recolor, redraw, or distort it.
 
 Desktop shortcut icon source (unchanged):
