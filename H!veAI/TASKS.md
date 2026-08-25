@@ -22,14 +22,15 @@ Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition
 - M09 original strict audit = historical FAIL.
 - M09A strict re-audit = historical FAIL after closing the original seven findings but exposing two residual production defects.
 - M09B strict re-audit = historical FAIL due residual R02C/E01C/E03C/E05 findings.
-- M09C independent strict re-audit = CONDITIONAL, with 0 BLOCKER / 0 MAJOR / 1 MINOR evidence item (E01C retry-containment proof).
-- M09D is an evidence-only retry-containment closure; implementation/test evidence is complete and independent M09D audit remains pending.
-- M09 is ACTIVE / NOT CLOSED.
-- M10+ remain BLOCKED/UNSTARTED until M09 closes.
-- Strict completed milestone count remains **9 / 20 = 45%**.
-- Pre-M10 UX hotfix queue remains open:
+- M09C independent strict re-audit = historical CONDITIONAL, remediated by M09D.
+- M09D independent final strict audit = PASS.
+- M09 Task Intelligence Parser final closure = PASS/CLOSED.
+- M09 is PASS/CLOSED.
+- Strict completed milestone count is **10 / 20 = 50%**.
+- X01/X02 are the active pre-M10 native UX hotfix.
   - X01: repeated visible Windows terminal/console windows from spawned Git child processes.
   - X02: startup intro video is muted even though the canonical video contains audio.
+- M10 remains BLOCKED/UNSTARTED until this hotfix is independently audited and required manual acceptance is complete.
 
 ---
 
@@ -681,7 +682,7 @@ M08 PASS/CLOSED.
 - [x] M09C fixes residual R02C bounded working-identity defect.
 - [x] M09C independent strict re-audit recorded as CONDITIONAL with one bounded E01C evidence item.
 - [x] M09D strengthens retry-containment evidence with a canonicalizable outside-root fixture and exact containment-message assertion.
-- [ ] Independent M09D audit acceptance and final M09 closure.
+- [x] Independent M09D final strict audit = PASS and final M09 closure accepted.
 
 ### M09.10 - Adapter boundary
 - [x] Generic adapter safe fallback.
@@ -786,35 +787,37 @@ M08 PASS/CLOSED.
 - [x] M09C production identity and publication evidence remain accepted; E01C direct retry evidence was the sole residual item.
 - [x] M09D evidence-only retry-containment implementation/test work completed.
 - [x] M09D focused/full regression and governed publication gates completed.
-- [ ] Independently verify final M09D branch/source truth.
-- [ ] Independently verify final M09D publication/equality evidence.
+- [x] Independently verify final M09D branch/source truth.
+- [x] Independently verify final M09D publication/equality evidence.
 
 ### M09.21 - M09 final regression/publication closure
-- [ ] Final M09 audit verdict.
-- [ ] Mark M09 PASS/CLOSED only if no BLOCKER/MAJOR remains.
-- [ ] Unlock M10 only after independent closure.
+- [x] Final M09 audit verdict = PASS.
+- [x] Mark M09 PASS/CLOSED with no BLOCKER/MAJOR remaining.
+- [ ] Unlock M10 only after the pre-M10 native UX hotfix is independently audited and manually accepted.
 
-M09 ACTIVE / NOT CLOSED.
+M09 PASS/CLOSED.
 
 ---
 
 # PRE-M10 NATIVE UX HOTFIX QUEUE
 
 ### X01 - Suppress spawned Git console windows
-- [ ] Apply Windows `CREATE_NO_WINDOW`-style creation flags to Git child processes.
-- [ ] Preserve stdout/stderr capture and exit handling.
-- [ ] Prove watcher-triggered Git refresh still works.
+- [x] Apply Windows `CREATE_NO_WINDOW`-style creation flags to Git child processes.
+- [x] Preserve stdout/stderr capture and exit handling.
+- [x] Prove watcher-triggered Git refresh still works.
 - [ ] Prove no visible console/terminal windows appear while H!veAI stays open.
-- [ ] Run Git Engine/watcher/full regression and republish QA EXE.
+- [x] Run Git Engine/watcher/full regression and republish QA EXE.
+- [ ] Native manual acceptance remains pending.
 
 ### X02 - Restore startup intro audio
-- [ ] Remove unconditional muted startup-video playback.
-- [ ] Configure reliable audible WebView2 autoplay without weakening unrelated security settings.
-- [ ] Preserve canonical opening video bytes.
+- [x] Remove unconditional muted startup-video playback.
+- [x] Configure reliable audible WebView2 autoplay without weakening unrelated security settings.
+- [x] Preserve canonical opening video bytes.
 - [ ] Cold launch: intro video + audio.
 - [ ] Native restart/new process: intro video + audio.
 - [ ] SPA navigation: intro does not replay.
 - [ ] Obtain user manual acceptance.
+- [ ] Native manual acceptance remains pending.
 
 These are product defects, not M09 parser tasks. Complete before M10 work begins.
 
@@ -1475,7 +1478,7 @@ M20 PLANNED/BLOCKED until M19 and final hardening gates.
 # Milestone policy
 
 - M00-M08 are PASS/CLOSED.
-- M09 remains active until independent M09D audit/final closure.
+- M09 is PASS/CLOSED after independent M09D audit/final closure.
 - M10 remains blocked until M09 and the queued pre-M10 native UX hotfix are closed.
 - M11-M20 remain planned and must not be treated as implemented because their roadmap entries are detailed.
 - Each future milestone should be executed as one bounded milestone unless an actual independent audit requires a remediation prompt.

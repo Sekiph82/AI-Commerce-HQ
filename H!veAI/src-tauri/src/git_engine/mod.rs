@@ -2,6 +2,8 @@ mod mutation;
 
 use crate::db::DatabaseState;
 use serde::{Deserialize, Serialize};
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::thread;
@@ -538,8 +540,15 @@ fn git_optional(path: &Path, args: &[&str]) -> Result<Option<String>, String> {
     }
 }
 
+fn production_git_command() -> Command {
+    let mut command = Command::new("git");
+    #[cfg(windows)]
+    command.creation_flags(0x08000000);
+    command
+}
+
 pub(crate) fn run_git(path: &Path, args: &[&str]) -> Result<Output, String> {
-    let mut child = Command::new("git")
+    let mut child = production_git_command()
         .args(args)
         .current_dir(path)
         .stdin(Stdio::null())
@@ -836,6 +845,22 @@ mod tests {
     #[test]
     fn non_git_and_missing_errors_are_structured() {
         assert!(detect_non_git(tempdir().unwrap().path()).contains("NON_GIT"));
+    }
+
+    #[test]
+    fn production_git_path_captures_bounded_version_output() {
+        let dir = tempdir().unwrap();
+        let output = run_git(dir.path(), &["--version"]).unwrap();
+        let version = output_text(&output.stdout).unwrap();
+        assert!(version.starts_with("git version "));
+        assert!(version.len() <= 128);
+    }
+
+    #[test]
+    fn production_git_path_preserves_structured_exit_errors() {
+        let dir = tempdir().unwrap();
+        let error = run_git(dir.path(), &["not-a-real-git-subcommand"]).unwrap_err();
+        assert!(error.starts_with("GIT_EXIT_"));
     }
     fn detect_non_git(path: &Path) -> String {
         if !path.join(".git").exists() {

@@ -8,11 +8,11 @@ User-facing roadmap denominator remains **20**. `M00` is the historical rebuild/
 
 ## Current status
 
-- M00-M08: PASS/CLOSED.
-- M09: ACTIVE, M09B implementation present, independent strict re-audit/final closure pending.
-- Pre-M10 UX hotfix: terminal-popup suppression + startup-audio restoration pending.
+- M00-M09: PASS/CLOSED.
+- M09 Task Intelligence Parser: PASS/CLOSED after the independent M09D final strict audit.
+- Pre-M10 UX hotfix: X01 terminal-popup suppression + X02 startup-audio restoration active.
 - M10-M20: planned/blocked.
-- Strict completed progress: 9/20 = 45%.
+- Strict completed progress: 10/20 = 50%.
 
 ---
 
@@ -228,10 +228,12 @@ Packages:
 Current status:
 - Original M09: historical FAIL.
 - M09A: historical FAIL after exposing R01/R02.
-- M09B implementation/tests are present; independent strict re-audit/final closure pending.
-- M10 remains blocked.
+- M09B/M09C: historical remediation records preserved.
+- M09D independent final strict audit: PASS.
+- M09 Task Intelligence Parser: PASS/CLOSED.
+- M10 remains blocked by the pre-M10 native UX hotfix.
 
-Status: ACTIVE / NOT CLOSED.
+Status: PASS/CLOSED.
 
 ---
 
@@ -245,7 +247,7 @@ Packages:
 
 Exit: native H!veAI can remain open without terminal-popup storms, and cold launch/native restart plays the intended intro audio.
 
-Status: PLANNED, required before M10 implementation.
+Status: ACTIVE, required before M10 implementation; manual native acceptance and independent hotfix audit remain pending.
 
 ---
 

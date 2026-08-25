@@ -74,14 +74,14 @@ Chronological builder logs. Builder logs are claims/evidence records, not indepe
 
 ## Current roadmap truth
 
-- M00-M08: PASS/CLOSED.
-- M09 Task Intelligence Parser: ACTIVE / NOT CLOSED.
+- M00-M09: PASS/CLOSED.
+- M09 Task Intelligence Parser: PASS/CLOSED after independent M09D final strict audit.
 - Original M09 strict audit: historical FAIL.
 - M09A strict re-audit: historical FAIL after residual R01/R02 findings.
-- M09B bounded-identity micro-fix implementation: present, independent strict re-audit/final closure pending.
-- Strict completed milestone count: 9/20 = 45% until M09 closes.
+- M09B/M09C/M09D remediation and audit history are preserved; M09D final strict audit = PASS.
+- Strict completed milestone count: 10/20 = 50%.
 - M10+ remain blocked/unstarted.
-- Before M10, the separate native UX queue must close the Git child-process console-window defect and muted startup-intro audio defect.
+- The active pre-M10 native UX hotfix must close the Git child-process console-window defect and muted startup-intro audio defect; manual native acceptance and independent hotfix audit remain pending.
 
 For exact current status, always defer to `H!veAI/TASKS.md`.
 

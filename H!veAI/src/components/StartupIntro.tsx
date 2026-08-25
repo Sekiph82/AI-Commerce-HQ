@@ -47,6 +47,8 @@ export function StartupIntro() {
     const failsafe = window.setTimeout(dismiss, INTRO_FAILSAFE_MS);
     const video = videoRef.current;
     if (video) {
+      video.muted = false;
+      video.volume = 1;
       const playback = video.play();
       playback?.catch(dismiss);
     }
@@ -74,7 +76,6 @@ export function StartupIntro() {
           aria-label="H!veAI opening video"
           src={openingVideo}
           autoPlay
-          muted
           playsInline
           preload="auto"
           controls={false}
