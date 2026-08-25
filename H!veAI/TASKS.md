@@ -4,14 +4,14 @@ Legend: [x] validated complete, [~] active, [ ] planned/not started, [!] blocked
 
 ## Current truth
 
-- M00 through M07 are PASS/CLOSED.
+- M00 through M08 are PASS/CLOSED.
 - M01 real native Settings restart is PASS and user-accepted.
 - M08.00/M08.00B presentation bootstrap is PASS/CLOSED, including opening video, post-sidebar hive background alignment, and restrained glass/glow styling.
-- M08C custom-order backward-compatibility micro-fix is the only active work.
-- M09 and later milestones are blocked until M08 implementation, independent strict audit, and any required manual acceptance are complete.
-- Strict completed milestone count: 8 / 20.
+- M08 Task Source Discovery final closure is PASS, including the M08A/M08B/M08C remediation chain and native `/tasks` user acceptance.
+- M09 Task Intelligence Parser is READY/UNSTARTED and is the next authorized milestone.
+- Strict completed milestone count: 9 / 20 = 45%.
 
-Historical M07 remediation details remain preserved in `docs/H!veAI/audits/`, `docs/H!veAI/prompts/`, and `docs/H!veAI/codex-logs/`. They are audit history only and are not active work.
+Historical M07 and M08 remediation details remain preserved in `docs/H!veAI/audits/`, `docs/H!veAI/prompts/`, and `docs/H!veAI/codex-logs/`. They are audit history only and are not active work.
 
 ---
 
@@ -132,8 +132,7 @@ Do not treat any historical M07 subsection as active work. Detailed evidence rem
 - [x] Independent M08.00 audit
 - [x] User visual and lifecycle acceptance
 
-M08.00 presentation + neon-glass bootstrap is PASS/CLOSED with independent audit
-and user visual/lifecycle acceptance.
+M08.00 presentation + neon-glass bootstrap is PASS/CLOSED with independent audit and user visual/lifecycle acceptance.
 
 ## M08.00B Background alignment and native intro remediation
 - [x] Move the canonical background to the post-sidebar main workspace
@@ -142,13 +141,8 @@ and user visual/lifecycle acceptance.
 - [x] Add focused frontend and Rust evidence for claim, failure, lifecycle, and layout behavior
 - [x] Independent M08.00B strict audit
 - [x] User manual acceptance of the refreshed native build
-
-M08.00B is PASS/CLOSED with independent audit and user manual acceptance.
-
 - [x] Run focused/full frontend, Rust, publisher and no-bundle publication gates
 - [x] Fix startup video normal-flow/scrollbar defect
-- [x] Move hive background to post-sidebar `.main-area`
-- [x] Add native process-scoped startup intro claim
 - [x] Cold-launch intro manual acceptance
 - [x] Native restart intro replay manual acceptance
 - [x] Post-sidebar background alignment manual acceptance
@@ -158,13 +152,14 @@ M08.00/M08.00B PASS/CLOSED. Strict audit: `docs/H!veAI/audits/M08.00B_BACKGROUND
 ## M08 Task Source Discovery
 - [x] Original bounded source-discovery implementation
 - [x] Native `/tasks` Task Sources workspace and narrow ACL
-- [ ] Independent strict audit closure: original M08 audit is FAIL
-- [ ] User visual acceptance of the native Task Sources workspace
+- [x] Final independent strict closure across M08/M08A/M08B/M08C
+- [x] User visual acceptance of the native Task Sources workspace
 
-M08 original implementation remains historical evidence. Its strict audit is FAIL;
-M08A is the only active closure remediation. M09 remains blocked and unstarted.
+M08 PASS/CLOSED. Final closure audit: `docs/H!veAI/audits/M08_TASK_SOURCE_DISCOVERY_FINAL_CLOSURE_AUDIT.md`. Manual acceptance: `docs/H!veAI/audits/M08_TASK_SOURCE_DISCOVERY_MANUAL_ACCEPTANCE.md`.
 
-## M08A Task Source Discovery Strict Closure
+### Historical M08 remediation chain
+
+#### M08A Task Source Discovery Strict Closure
 - [x] Close F01 filesystem work bounds and structured warning evidence
 - [x] Close F02 custom update, persisted order, and equivalent-path removal
 - [x] Close F03 M08-owned, versioned, non-destructive `project_sources` reconciliation
@@ -172,36 +167,29 @@ M08A is the only active closure remediation. M09 remains blocked and unstarted.
 - [x] Close F06 direct SQLite, unreadable-source, limits, status, and containment evidence
 - [x] Close F07 immutable remediation log with individual test/equality evidence
 - [x] Close N01 archived-project boundary and N02 containment-aware custom status
-- [ ] Independent M08 strict re-audit
-- [ ] User visual acceptance of the remediated native Task Sources workspace
 
-M08A strict re-audit is FAIL historically. M08B is the only active remediation.
-M09 remains blocked and unstarted.
+M08A strict re-audit remained historical FAIL and was superseded by M08B.
 
-## M08B Task Source Discovery Final Strict Closure
+#### M08B Task Source Discovery Final Strict Closure
 - [x] Fix true positional custom reorder semantics
 - [x] Narrow safe pre-version M08 inventory adoption
 - [x] Add direct persisted hash, deletion, legacy-preservation, and ordering SQL evidence
 - [x] Add mounted custom add-refresh and multi-item reorder-visible-order evidence
 - [x] Run focused/full regression and production no-bundle publication
 - [x] Create the immutable M08B closure log
-- [ ] Independent strict re-audit
-- [ ] User visual acceptance of the remediated native Task Sources workspace
 
-M08B remains historical evidence. Original M08, M08A, and M08B strict audits remain
-historical gates; M09 remains BLOCKED/UNSTARTED.
+M08B strict re-audit remained historical FAIL because one backward-compatibility defect and one minor evidence mismatch remained; both were superseded by M08C.
 
-## M08C Custom Order Backward-Compatibility Micro Fix
+#### M08C Custom Order Backward-Compatibility Micro Fix
 - [x] Normalize legacy custom settings without valid explicit order by persisted vector position
 - [x] Preserve normalized position during path-only rename and persist contiguous order on mutation
 - [x] Extend combined custom/standard ordering evidence to three CUSTOM sources
 - [x] Run focused/full frontend, Rust, publisher and no-bundle publication gates
 - [x] Create the immutable M08C micro-fix log
-- [ ] Independent strict re-audit
-- [ ] User visual acceptance of the remediated native Task Sources workspace
+- [x] Independent strict re-audit: CONDITIONAL PASS with 0 BLOCKER / 0 MAJOR
+- [x] User visual acceptance of the remediated native Task Sources workspace
 
-M08C implementation and automated evidence are complete. Independent strict re-audit
-and user visual acceptance remain open; do not mark M08 PASS. M09 remains BLOCKED/UNSTARTED.
+M08C final source-level closure and manual acceptance are complete. Historical earlier FAIL audits remain immutable evidence only and do not reopen M08.
 
 ## M09 Task Intelligence Parser
 - [ ] headings/checklists/milestones/status tags/task IDs
@@ -212,7 +200,7 @@ and user visual acceptance remain open; do not mark M08 PASS. M09 remains BLOCKE
 - [ ] FormuLab/Scrubbots/FMCG adapters
 - [ ] regression fixtures
 
-M09 BLOCKED until M08 PASS.
+M09 READY/UNSTARTED. It is the next authorized milestone; begin only from its dedicated implementation prompt.
 
 ## M10 Workflow State Machine
 - [ ] canonical task/actor states
@@ -318,8 +306,8 @@ M09 BLOCKED until M08 PASS.
 
 ## Milestone policy
 
-- The active milestone is M08 Task Source Discovery only.
-- M08 internal numbered sections inside the authoritative prompt are work sections, not separate milestones or separate prompts.
-- Do not start M09 until M08 implementation is independently audited PASS.
+- M00 through M08 are PASS/CLOSED.
+- M09 Task Intelligence Parser is READY/UNSTARTED and is the next authorized milestone.
+- Start M09 only from its dedicated implementation prompt.
 - Builder logs are claims, not acceptance evidence.
 - Historical audits/logs/prompts are immutable evidence and remain the authoritative record for failed/superseded remediation stages.
