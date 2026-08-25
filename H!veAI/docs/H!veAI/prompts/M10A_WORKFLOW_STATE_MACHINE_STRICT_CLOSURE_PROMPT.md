@@ -2,13 +2,13 @@
 
 ## Mission
 
-Close the five MAJOR findings and five evidence gaps from:
+First, implement the user-requested bounded footer link change described below. Then close the five MAJOR findings and five evidence gaps from:
 
 `H!veAI/docs/H!veAI/audits/M10_WORKFLOW_STATE_MACHINE_STRICT_AUDIT.md`
 
-This is a bounded remediation of M10 only.
+This remains a bounded M10 remediation run. The only visible UI change allowed is the Akilta footer link described in Task 0.
 
-Do not redesign the workflow architecture. Do not start M11/M12. Do not implement Project Dashboard runtime ingestion. Do not change visible UI. Do not create an installer.
+Do not redesign the workflow architecture. Do not start M11/M12. Do not implement Project Dashboard runtime ingestion. Do not redesign any other visible UI. Do not create an installer.
 
 ---
 
@@ -37,17 +37,18 @@ Read:
 2. `H!veAI/CONSTITUTION.md`
 3. `H!veAI/ARCHITECTURE.md`
 4. `H!veAI/TASKS.md`
-5. `H!veAI/docs/H!veAI/prompts/M10_WORKFLOW_STATE_MACHINE_PROMPT.md`
-6. `H!veAI/docs/H!veAI/audits/M10_WORKFLOW_STATE_MACHINE_STRICT_AUDIT.md`
-7. current `workflow.rs`, `task_intelligence.rs`, TypeScript contract, permissions/capability
+5. `H!veAI/CODEX_ROADMAP.md`
+6. `H!veAI/docs/H!veAI/prompts/M10_WORKFLOW_STATE_MACHINE_PROMPT.md`
+7. `H!veAI/docs/H!veAI/audits/M10_WORKFLOW_STATE_MACHINE_STRICT_AUDIT.md`
+8. current `workflow.rs`, `task_intelligence.rs`, TypeScript workflow contract, permissions/capability
+9. `H!veAI/src/components/Shell.tsx` and current footer styling/tests
+10. this prompt
 
 Preserve user-owned untracked `start-demo.bat` and `task.md` if still present.
 
 ---
 
 # Canonical UI Assets
-
-M10A must not visually change H!veAI.
 
 Canonical user-owned asset root:
 
@@ -62,7 +63,49 @@ Required unchanged hashes:
 
 Preserve X01 terminal-popup suppression and X02 audible startup intro/replay behavior.
 
-No visible M10A UI work.
+The footer must remain visually consistent with the accepted layout. No geometry, spacing, logo, wordmark, text, background, route, or shell redesign is allowed beyond making the visible final `Akilta` text actionable.
+
+---
+
+# Task 0 — FIRST TASK: make footer Akilta open www.akilta.com
+
+Current footer production source is `H!veAI/src/components/Shell.tsx` and currently renders:
+
+`Built with ♥ for maximum productivity by Akilta`
+
+Required behavior:
+
+- preserve the exact visible sentence and existing Akilta wordmark/layout;
+- make the final visible word `Akilta` keyboard-accessible and clickable;
+- clicking it must open exactly `https://www.akilta.com/` externally;
+- H!veAI must remain open and must not navigate its Tauri WebView away from the application;
+- obey the existing H!veAI external-browser policy: when browser choice is controlled by H!veAI, use Google Chrome, not Microsoft Edge;
+- do not change the user's Windows default browser;
+- do not silently fall back to Edge;
+- do not construct shell command strings or use `cmd.exe` / PowerShell wrappers;
+- do not expose a generic arbitrary-URL native command merely for this footer link;
+- if a safe existing external-URL/Chrome helper already exists, reuse it;
+- otherwise add the narrowest practical production path for this single allowlisted URL and keep it argument-safe;
+- on Windows, any helper child-process launch must preserve the X01 no-console behavior and must not flash a terminal window;
+- if Chrome is unavailable, fail truthfully rather than opening another browser silently.
+
+Preferred frontend semantics:
+
+- use an accessible link-like control for the final `Akilta` text;
+- if an anchor is used, prevent in-WebView navigation and route the action through the safe external-open path;
+- preserve current footer CSS appearance except a restrained hover/focus affordance if needed for accessibility.
+
+Required automated evidence:
+
+1. component/contract test proves the visible footer sentence is still exactly `Built with ♥ for maximum productivity by Akilta`;
+2. test proves only the final `Akilta` text is the website action and targets the exact Akilta URL/path;
+3. if a native command is added, test proves there is no arbitrary frontend URL parameter and the native constant is exactly `https://www.akilta.com/`;
+4. test/inspection proves there is no Edge fallback and no shell-string invocation;
+5. existing X01 terminal suppression and X02 startup audio/replay tests remain green.
+
+Native manual acceptance for this user-requested UI change remains **PENDING USER ACCEPTANCE** after publication. Record in the log that the user must click `Akilta` in the published H!veAI footer and confirm that `www.akilta.com` opens in Google Chrome while H!veAI stays open and no terminal window appears.
+
+Do this Task 0 before R01-R05 remediation.
 
 ---
 
@@ -253,7 +296,7 @@ Strengthen direct assertions:
 
 - reparse: parser title/metadata actually refresh while state/event count stay unchanged;
 - stale: `task_intelligence::list()` does not contain the retired task;
-- reappearance: `sourceActive=true`, sourceRetired=false, same task ID, refreshed parser metadata, same created_at, same workflow state/history.
+- reappearance: `sourceActive=true`, `sourceRetired=false`, same task ID, refreshed parser metadata, same `created_at`, same workflow state/history.
 
 Do not weaken existing M09 no-history stale deletion.
 
@@ -295,16 +338,17 @@ Do not regress:
 - M09 no-history stale deletion;
 - history/list bounds;
 - archived/missing read/history availability;
-- narrow IPC/permission/capability;
-- no arbitrary SQL/shell/network/process launch;
-- no visible UI work;
+- narrow workflow IPC/permission/capability;
+- no arbitrary SQL/network/process launch from workflow APIs;
 - no Project Dashboard runtime ingestion;
 - X01/X02 native UX fixes;
 - canonical asset hashes;
 - stable QA launcher/icon;
 - no installer.
 
-Do not mutate historical M10 builder log or original audit.
+The user-requested footer link is the only permitted visible UI change in this run. Do not alter any other application-shell visuals.
+
+Do not mutate the historical M10 builder log or original M10 strict audit.
 
 ---
 
@@ -315,7 +359,8 @@ At the start of M10A, prospectively synchronize live tracker docs so they say:
 - M00-M09 PASS/CLOSED;
 - pre-M10 X01/X02 PASS/CLOSED;
 - M10 original strict audit = FAIL with 5 MAJOR findings;
-- M10A remediation ACTIVE/then IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT after all gates pass;
+- M10A remediation ACTIVE/then IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT after automated gates pass;
+- Akilta footer link = implementation task in this run, manual native acceptance PENDING until the user clicks it in the published app;
 - strict completed count remains `10 / 20 = 50%`;
 - M11/M12 remain blocked.
 
@@ -327,25 +372,27 @@ Do not mark M10 PASS/CLOSED yourself.
 
 Run and record exact commands/results:
 
-1. focused M10 Rust tests;
-2. full Rust tests;
-3. relevant M09 integration tests;
-4. TypeScript workflow contract tests;
-5. full frontend tests;
-6. `npm run typecheck`;
-7. `npm run build`;
-8. `npm audit --audit-level=high`;
-9. `cargo fmt -- --check` using the repository manifest path;
-10. `cargo check`;
-11. `cargo test`;
-12. `cargo build`;
-13. publisher failure/rollback harness;
-14. governed Tauri production `--no-bundle` QA publication;
-15. stable EXE/shortcut/icon validation;
-16. canonical background/video hashes;
-17. no installer scan.
+1. focused Akilta footer-link tests;
+2. focused M10 Rust tests;
+3. full Rust tests;
+4. relevant M09 integration tests;
+5. TypeScript workflow contract tests;
+6. full frontend tests;
+7. `npm run typecheck`;
+8. `npm run build`;
+9. `npm audit --audit-level=high`;
+10. `cargo fmt -- --check` using the repository manifest path;
+11. `cargo check`;
+12. `cargo test`;
+13. `cargo build`;
+14. publisher failure/rollback harness;
+15. governed Tauri production `--no-bundle` QA publication;
+16. stable EXE/shortcut/icon validation;
+17. canonical background/video hashes;
+18. no installer scan;
+19. source/test proof that X01 terminal-popup suppression and X02 startup audio/replay remain intact.
 
-No manual visual acceptance is required unless you unexpectedly change visible UI. You must not change visible UI.
+Because Task 0 intentionally changes a clickable visible footer behavior, manual native acceptance is required after publication. Leave it PENDING for the user; do not fabricate PASS.
 
 ---
 
@@ -358,13 +405,15 @@ Create:
 Record:
 
 - start branch/HEAD/origin equality;
+- Task 0 implementation, exact URL, browser-opening design, changed files and tests;
 - exact findings R01-R05 and E01-E05;
 - changed files/symbols;
-- pre-fix failure evidence for the new regression tests;
+- pre-fix failure evidence for new regression tests;
 - failed attempts retained chronologically;
 - focused/full regression results;
 - publication evidence;
 - canonical hashes;
+- manual Akilta-link acceptance = PENDING USER ACCEPTANCE;
 - final implementation commit SHA;
 - final log/tracker commit SHA;
 - exact final local HEAD;
