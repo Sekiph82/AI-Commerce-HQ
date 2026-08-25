@@ -195,7 +195,7 @@ M08 remains blocked and unstarted.
 - [x] Run automated regression gates and republish the stable no-bundle QA build
 - [ ] Independent M07.07C strict audit
 - [ ] User enlarged-logo visual acceptance
-- [ ] User real in-app restart acceptance
+- [x] User real in-app restart acceptance (already PASS; no restart-path changes)
 
 Native Settings restart manual gate = PASS, documented in
 `docs/H!veAI/audits/M07.07B_NATIVE_RESTART_MANUAL_ACCEPTANCE.md`. M07.07C remains
