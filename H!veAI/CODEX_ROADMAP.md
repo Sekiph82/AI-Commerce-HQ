@@ -10,9 +10,10 @@ User-facing roadmap denominator remains **20**. `M00` is the historical rebuild/
 
 - M00-M09: PASS/CLOSED.
 - M09 Task Intelligence Parser: PASS/CLOSED after the independent M09D final strict audit.
-- Pre-M10 UX hotfix: X01 terminal-popup suppression + X02 startup-audio restoration active.
-- M10-M20: planned/blocked.
-- Strict completed progress: 10/20 = 50%.
+- Pre-M10 Native UX Hotfix X01/X02: PASS/CLOSED after independent source audit plus user native acceptance.
+- M10 Workflow State Machine: READY/UNSTARTED.
+- M11-M20: planned/blocked.
+- Strict completed progress remains 10/20 = 50% because the pre-M10 hotfix is not a numbered roadmap milestone.
 
 ---
 
@@ -231,7 +232,6 @@ Current status:
 - M09B/M09C: historical remediation records preserved.
 - M09D independent final strict audit: PASS.
 - M09 Task Intelligence Parser: PASS/CLOSED.
-- M10 remains blocked by the pre-M10 native UX hotfix.
 
 Status: PASS/CLOSED.
 
@@ -245,9 +245,14 @@ Packages:
 - X01 Suppress visible Git child-process console windows on Windows while preserving watcher/Git Engine behavior.
 - X02 Restore audible startup intro autoplay while preserving process-scoped intro lifecycle and canonical video bytes.
 
-Exit: native H!veAI can remain open without terminal-popup storms, and cold launch/native restart plays the intended intro audio.
+Acceptance:
+- X01: user observed approximately 45 minutes of native runtime with no unwanted terminal/console windows.
+- X02: startup audio is accepted fixed and same-process navigation does not replay the intro.
+- Independent source/config audit found 0 BLOCKER / 0 MAJOR / 0 MINOR and required only user native acceptance, which is now supplied.
 
-Status: ACTIVE, required before M10 implementation; manual native acceptance and independent hotfix audit remain pending.
+Exit: native H!veAI can remain open without terminal-popup storms, and the startup intro behaves audibly without same-process replay.
+
+Status: PASS/CLOSED.
 
 ---
 
@@ -269,52 +274,52 @@ Packages:
 
 Exit: every task operational state is explainable, evidence-backed and recoverable.
 
-Status: BLOCKED/UNSTARTED.
+Status: READY/UNSTARTED.
 
 ---
 
 ## M11 - Global Command Center
 
-Purpose: make the existing command-center UI operational with live Registry/task/workflow data.
+Purpose: make the existing command-center UI operational with live Registry/task/workflow data and resolve each project's declared Project Dashboard authority map.
 
 Packages:
-- M11.01 Live portfolio aggregation model.
+- M11.01 Live portfolio aggregation model + native `.hiveai/PROJECT_DASHBOARD.md` authority resolver with bounded/contained fallback to M08/M09.
 - M11.02 KPI strip.
-- M11.03 Project operation cards/current task/state/health.
+- M11.03 Project operation cards/current task/state/health using resolved authority roles where available.
 - M11.04 Needs Your Attention.
 - M11.05 Active Work Queue.
-- M11.06 AI Engineering Brief surface/data contract.
+- M11.06 AI Engineering Brief surface/data contract with factual source provenance.
 - M11.07 Recent Activity/search/filter.
 - M11.08 Selected-project interaction/session memory.
 - M11.09 Layout/performance/accessibility preservation.
-- M11.10 Mounted tests, publication, visual acceptance, strict audit.
+- M11.10 Mounted tests, manifest present/absent/malformed/stale/containment evidence, no-double-count proof, publication, visual acceptance, strict audit.
 
-Exit: one-screen truthful portfolio operations dashboard.
+Exit: one-screen truthful portfolio operations dashboard backed by Registry/M08/M09/M10 truth and the Project Dashboard authority manifest system.
 
-Status: PLANNED/BLOCKED.
+Status: PLANNED/BLOCKED until M10.
 
 ---
 
 ## M12 - Project Cockpit
 
-Purpose: complete per-project operational workspace.
+Purpose: complete per-project operational workspace using the same resolved Project Dashboard authority/provenance model as M11.
 
 Packages:
-- M12.01 Project route/loading/missing-state shell.
-- M12.02 Overview/current task hero.
-- M12.03 Tasks/dependencies/evidence drawer.
+- M12.01 Project route/loading/missing-state shell + project-scoped resolved authority map.
+- M12.02 Overview/current task hero + useful source provenance.
+- M12.03 Tasks/dependencies/evidence drawer with manifest-declared canonical task authority and duplicate suppression.
 - M12.04 Workflow pipeline/history/override controls.
 - M12.05 Agents.
 - M12.06 Audit.
 - M12.07 Git.
-- M12.08 Tests/Activity/Files.
-- M12.09 Project Settings/Registry controls.
+- M12.08 Tests/Activity/Files with classified roadmap/handoff/history/architecture context.
+- M12.09 Project Settings/Registry controls + manifest status/roles/warnings/provenance, without auto-rewriting project files.
 - M12.10 Manual correction/event controls.
-- M12.11 Mounted tests/publication/visual acceptance/audit.
+- M12.11 Mounted tests, authority/provenance rendering tests, publication, visual acceptance, audit.
 
-Exit: complete end-to-end project operations cockpit.
+Exit: complete end-to-end project operations cockpit with truthful source authority and provenance.
 
-Status: PLANNED/BLOCKED.
+Status: PLANNED/BLOCKED until M10/M11 foundation.
 
 ---
 
@@ -486,7 +491,7 @@ Status: PLANNED/BLOCKED.
 
 ## Dependency path
 
-`M00 -> M01 -> M02 -> M03 -> M04 -> M05 -> M06 -> M07 -> M08 -> M09 -> pre-M10 UX hotfix -> M10 -> M11/M12 -> M13 -> M14 -> M15 -> M16 -> M17 -> M18 -> M19 -> M20`
+`M00 -> M01 -> M02 -> M03 -> M04 -> M05 -> M06 -> M07 -> M08 -> M09 -> pre-M10 UX hotfix (PASS/CLOSED) -> M10 -> M11/M12 -> M13 -> M14 -> M15 -> M16 -> M17 -> M18 -> M19 -> M20`
 
 ## Builder execution rule
 
