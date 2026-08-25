@@ -179,7 +179,7 @@ unstarted and blocked.
 - [x] Update durable sidebar branding governance while preserving shortcut small-logo rule
 - [x] Run focused/full regression and production no-bundle publication
 - [ ] User final M07 visual acceptance
-- [ ] User real in-app restart acceptance
+- [x] User real in-app restart acceptance
 
 M07.07B strict audit = CONDITIONAL. Command Center selection visual behavior was
 user-approved from real Desktop H!veAI.lnk screenshots. M07.07C is the active final
@@ -197,8 +197,10 @@ M08 remains blocked and unstarted.
 - [ ] User enlarged-logo visual acceptance
 - [ ] User real in-app restart acceptance
 
-M07.07C remains ACTIVE until independently audited and both user acceptance gates
-are complete. Do not mark M07 PASS. M08 remains blocked and unstarted.
+Native Settings restart manual gate = PASS, documented in
+`docs/H!veAI/audits/M07.07B_NATIVE_RESTART_MANUAL_ACCEPTANCE.md`. M07.07C remains
+ACTIVE until independently audited. The remaining human gate is enlarged-logo
+visual acceptance only. Do not mark M07 PASS. M08 remains blocked and unstarted.
 
 ## M08 Task Source Discovery
 - [ ] discover TASKS/tasks/PLANS/PROGRESS/ROADMAP/CLAUDE/AGENTS/handoffs
