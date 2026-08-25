@@ -17,7 +17,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition
 
 ## Current truth
 
-- M00 through M08 are PASS/CLOSED.
+- M00 through M09 are PASS/CLOSED.
 - M08 presentation bootstrap, Task Source Discovery, remediation chain, and native `/tasks` manual acceptance are PASS/CLOSED.
 - M09 original strict audit = historical FAIL.
 - M09A strict re-audit = historical FAIL after closing the original seven findings but exposing two residual production defects.
@@ -25,12 +25,12 @@ Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition
 - M09C independent strict re-audit = historical CONDITIONAL, remediated by M09D.
 - M09D independent final strict audit = PASS.
 - M09 Task Intelligence Parser final closure = PASS/CLOSED.
-- M09 is PASS/CLOSED.
-- Strict completed milestone count is **10 / 20 = 50%**.
-- X01/X02 are the active pre-M10 native UX hotfix.
-  - X01: repeated visible Windows terminal/console windows from spawned Git child processes.
-  - X02: startup intro video is muted even though the canonical video contains audio.
-- M10 remains BLOCKED/UNSTARTED until this hotfix is independently audited and required manual acceptance is complete.
+- Pre-M10 Native UX Hotfix X01/X02 = PASS/CLOSED after independent source audit plus user native acceptance.
+  - X01: terminal/console popup suppression accepted fixed after approximately 45 minutes of native runtime with no unwanted terminal windows.
+  - X02: startup intro audio/replay behavior accepted fixed; audio works and same-process route navigation does not replay the intro.
+- Strict completed milestone count remains **10 / 20 = 50%** because the pre-M10 hotfix is not a numbered roadmap milestone.
+- M10 Workflow State Machine is READY / UNSTARTED.
+- M11/M12 remain planned behind M10. Their runtime scope must incorporate the `.hiveai/PROJECT_DASHBOARD.md` authority manifest system without pretending the current manifest documentation is already a live Dashboard engine.
 
 ---
 
@@ -793,7 +793,7 @@ M08 PASS/CLOSED.
 ### M09.21 - M09 final regression/publication closure
 - [x] Final M09 audit verdict = PASS.
 - [x] Mark M09 PASS/CLOSED with no BLOCKER/MAJOR remaining.
-- [ ] Unlock M10 only after the pre-M10 native UX hotfix is independently audited and manually accepted.
+- [x] Unlock M10 after the pre-M10 native UX hotfix independent audit and user native acceptance both PASS.
 
 M09 PASS/CLOSED.
 
@@ -805,21 +805,22 @@ M09 PASS/CLOSED.
 - [x] Apply Windows `CREATE_NO_WINDOW`-style creation flags to Git child processes.
 - [x] Preserve stdout/stderr capture and exit handling.
 - [x] Prove watcher-triggered Git refresh still works.
-- [ ] Prove no visible console/terminal windows appear while H!veAI stays open.
+- [x] Prove no visible console/terminal windows appear while H!veAI stays open: user observed approximately 45 minutes with no unwanted terminal windows.
 - [x] Run Git Engine/watcher/full regression and republish QA EXE.
-- [ ] Native manual acceptance remains pending.
+- [x] Native manual acceptance = PASS.
 
 ### X02 - Restore startup intro audio
 - [x] Remove unconditional muted startup-video playback.
 - [x] Configure reliable audible WebView2 autoplay without weakening unrelated security settings.
 - [x] Preserve canonical opening video bytes.
-- [ ] Cold launch: intro video + audio.
-- [ ] Native restart/new process: intro video + audio.
-- [ ] SPA navigation: intro does not replay.
-- [ ] Obtain user manual acceptance.
-- [ ] Native manual acceptance remains pending.
+- [x] Startup intro audio behavior accepted fixed by the user.
+- [x] Same-process route navigation does not replay the intro.
+- [x] Obtain user manual acceptance.
+- [x] Native manual acceptance = PASS.
 
-These are product defects, not M09 parser tasks. Complete before M10 work begins.
+Closure evidence: `docs/H!veAI/audits/PRE_M10_NATIVE_UX_HOTFIX_X01_X02_MANUAL_ACCEPTANCE_CLOSURE.md`.
+
+Pre-M10 Native UX Hotfix X01/X02 PASS/CLOSED.
 
 ---
 
@@ -883,7 +884,7 @@ These are product defects, not M09 parser tasks. Complete before M10 work begins
 - [ ] Independent strict audit.
 - [ ] Close M10 before M11/M12 live operational UI is unlocked.
 
-M10 BLOCKED/UNSTARTED pending M09 closure and pre-M10 UX hotfix.
+M10 READY/UNSTARTED.
 
 ---
 
@@ -892,6 +893,10 @@ M10 BLOCKED/UNSTARTED pending M09 closure and pre-M10 UX hotfix.
 ### M11.01 - Live portfolio data model
 - [ ] Replace placeholder KPI data with Registry/task/workflow-backed data.
 - [ ] Define portfolio aggregation contract.
+- [ ] Add native Project Dashboard authority resolver for `.hiveai/PROJECT_DASHBOARD.md` on registered projects.
+- [ ] Resolve declared task/handoff/roadmap/history/architecture/instruction roles without duplicating the same task truth across sources.
+- [ ] Fall back safely to existing M08/M09 authority when a manifest is absent, malformed, stale, or references unavailable files.
+- [ ] Keep manifest reads bounded, containment-safe, deterministic, and project-scoped.
 - [ ] Avoid fake live metrics.
 
 ### M11.02 - KPI strip
@@ -908,6 +913,7 @@ M10 BLOCKED/UNSTARTED pending M09 closure and pre-M10 UX hotfix.
 - [ ] Next action.
 - [ ] Required actor.
 - [ ] Project health/progress.
+- [ ] Use resolved Project Dashboard authority roles for project summaries where available.
 
 ### M11.04 - Needs Your Attention
 - [ ] Human decisions/gates.
@@ -925,6 +931,7 @@ M10 BLOCKED/UNSTARTED pending M09 closure and pre-M10 UX hotfix.
 ### M11.06 - AI Engineering Brief surface
 - [ ] Create deterministic data contract for brief inputs.
 - [ ] Surface current project/portfolio situation.
+- [ ] Include resolved dashboard source provenance so factual statements remain traceable.
 - [ ] Keep AI-generated recommendations clearly separate from factual state.
 
 ### M11.07 - Recent Activity
@@ -948,6 +955,8 @@ M10 BLOCKED/UNSTARTED pending M09 closure and pre-M10 UX hotfix.
 ### M11.10 - Tests/audit/closure
 - [ ] Mounted live-data tests.
 - [ ] Stale project-switch/race tests.
+- [ ] Manifest present/absent/malformed/stale/cross-project containment tests.
+- [ ] Prove authority resolution does not double-count duplicate task sources.
 - [ ] Full regression/publication.
 - [ ] User visual acceptance if layout materially changes.
 - [ ] Independent strict audit.
@@ -963,6 +972,7 @@ M11 PLANNED/BLOCKED until M10.
 - [ ] Async loading skeleton.
 - [ ] No fallback to another project on missing/late data.
 - [ ] Truthful missing/archived state.
+- [ ] Load the selected project's resolved Project Dashboard authority map without leaking another project's manifest/source state.
 
 ### M12.02 - Overview tab
 - [ ] Project identity/health.
@@ -970,12 +980,14 @@ M11 PLANNED/BLOCKED until M10.
 - [ ] Current workflow state.
 - [ ] Last completed action.
 - [ ] Next action/required actor.
+- [ ] Show source provenance/authority where useful without overwhelming the user.
 
 ### M12.03 - Tasks tab
 - [ ] Parsed tasks with status/state distinction.
 - [ ] Dependencies/blockers/acceptance criteria.
 - [ ] Evidence drawer.
 - [ ] Source locator navigation foundation.
+- [ ] Respect manifest-declared canonical task authority and avoid duplicate task rendering.
 
 ### M12.04 - Workflow tab
 - [ ] State pipeline.
@@ -1005,11 +1017,14 @@ M11 PLANNED/BLOCKED until M10.
 - [ ] Activity timeline.
 - [ ] Bounded relevant-file inventory.
 - [ ] Evidence links.
+- [ ] Surface manifest-declared roadmap/handoff/history/architecture sources as classified project context, not duplicate tasks.
 
 ### M12.09 - Project Settings tab
 - [ ] Registry settings.
 - [ ] Preferred builder/auditor.
 - [ ] Task-source policy/custom source entry points.
+- [ ] Show Project Dashboard manifest status, resolved authority roles, warnings, and source provenance.
+- [ ] Do not auto-rewrite project manifests or tracker files merely because H!veAI reads them.
 - [ ] Path repair/archive/remove-from-registry controls.
 
 ### M12.10 - Manual correction controls
@@ -1021,6 +1036,7 @@ M11 PLANNED/BLOCKED until M10.
 ### M12.11 - Tests/audit/closure
 - [ ] Mounted project-switch/race tests.
 - [ ] Evidence rendering tests.
+- [ ] Project Dashboard authority/provenance rendering tests.
 - [ ] Full regression/publication.
 - [ ] User visual acceptance.
 - [ ] Independent strict audit.
@@ -1477,10 +1493,11 @@ M20 PLANNED/BLOCKED until M19 and final hardening gates.
 
 # Milestone policy
 
-- M00-M08 are PASS/CLOSED.
-- M09 is PASS/CLOSED after independent M09D audit/final closure.
-- M10 remains blocked until M09 and the queued pre-M10 native UX hotfix are closed.
+- M00-M09 are PASS/CLOSED.
+- Pre-M10 Native UX Hotfix X01/X02 is PASS/CLOSED after independent audit and user native acceptance.
+- M10 is READY/UNSTARTED.
 - M11-M20 remain planned and must not be treated as implemented because their roadmap entries are detailed.
+- M11/M12 must implement the Project Dashboard manifest authority resolver before treating `.hiveai/PROJECT_DASHBOARD.md` as live runtime truth.
 - Each future milestone should be executed as one bounded milestone unless an actual independent audit requires a remediation prompt.
 - Subpackage numbering is for traceability, source/evidence mapping, and progress visibility, not an instruction to generate many tiny prompts.
 - Every milestone closes only after production implementation, direct evidence, full regression, governed publication where applicable, and independent audit acceptance.
