@@ -58,6 +58,6 @@ Status: PASS
 ## Commit and publication evidence
 
 - Implementation/test/tracker commit: `0e4e7f1f46e01be8b21bd3c9b39fa5340ed840a4` (`Close M09D retry containment evidence`).
-- M09D log commit: pending.
-- Final remote branch HEAD: pending.
-- Final local/origin equality after the pushed log commit: pending.
+- M09D log commit: `SELF / verified after push in session`.
+- Final remote branch HEAD: `SELF / verified after push in session`.
+- Final local/origin equality after the pushed log commit: `HEAD == origin/H!veAI; 0 0`, verified after the final push in session.
