@@ -159,7 +159,9 @@ canonical-asset checks.
 
 Stable executable: `dev-bin/H!veAI.exe`
 
-Stable executable SHA-256: `F4B286E32AD57866CFC4F1FC86537DAF664A43BC4A1B8C8432FCD0F36D9647D2`
+Stable executable SHA-256: `DBD5BBA99BEC8F0A2860425F161D8022E2328CC9C944766C29C690407EAC985D`
+
+Stable executable size: `17,375,744` bytes.
 
 Shortcut target: `Desktop/H!veAI.lnk` -> `dev-bin/H!veAI.exe`.
 
@@ -177,6 +179,5 @@ visual acceptance. Native `/tasks` visual status remains
 `PENDING USER VISUAL ACCEPTANCE`. No installer was created and M09 was not
 started.
 
-Final local and `origin/H!veAI` HEAD equality will be verified after commit and
-push; the exact hashes are recorded in the final repository verification for
-this log's publication commit.
+Publication commit verified immediately after push: local HEAD and
+`origin/H!veAI` were both `a6474a2fb585829e88a84f0c9384d4be5ed30caa`.
