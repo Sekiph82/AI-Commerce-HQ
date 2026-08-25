@@ -203,10 +203,10 @@ M08C final source-level closure and manual acceptance are complete. Historical e
 - [x] M09-owned SQLite reconciliation and preservation evidence
 - [ ] Independent strict audit
 
-M09 original implementation remains historical FAIL. M09A automated implementation complete, PENDING INDEPENDENT STRICT AUDIT. M10 remains
+M09 original implementation and M09A strict re-audit remain historical FAIL. M09B bounded identity micro-fix implementation is complete, PENDING INDEPENDENT STRICT RE-AUDIT. M10 remains
 BLOCKED/UNSTARTED.
 
-M09A F01-F07 remediation is implemented and evidence-tested; do not treat this builder result as M09 PASS/CLOSED. Do not start M10.
+M09A F01-F07 remediation and M09B R01/R02 plus E01-E04 evidence are implemented and evidence-tested; do not treat this builder result as M09 PASS/CLOSED. Do not start M10.
 
 ## M10 Workflow State Machine
 - [ ] canonical task/actor states

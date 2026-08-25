@@ -4,7 +4,7 @@ use crate::task_sources::{self, DiscoveredProjectSource, MAX_SOURCE_BYTES};
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -19,6 +19,8 @@ const OWNER: &str = "M09_TASK_INTELLIGENCE_PARSER";
 const SCHEMA_VERSION: u32 = 1;
 #[cfg(test)]
 static RETRY_FAILPOINT: OnceLock<Mutex<Option<PathBuf>>> = OnceLock::new();
+#[cfg(test)]
+static RETRY_PATH_FAILPOINT: OnceLock<Mutex<Option<PathBuf>>> = OnceLock::new();
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -144,8 +146,12 @@ pub fn parse(
         warnings: Vec::new(),
     };
     let mut parsed_sources = Vec::new();
+    let mut parsed_paths = HashSet::new();
     for source in sources {
         if !is_parser_source(&source) {
+            continue;
+        }
+        if !parsed_paths.insert(normalize_path_identity(&source.relative_path)) {
             continue;
         }
         match read_authoritative_source(database, project_id, &source) {
@@ -266,6 +272,28 @@ fn read_authoritative_source(
     else {
         return Ok(None);
     };
+    #[cfg(test)]
+    if let Some(path) = RETRY_PATH_FAILPOINT
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .unwrap()
+        .take()
+    {
+        fs::remove_file(&path).map_err(|error| {
+            warning(
+                "SOURCE_READ_FAILED",
+                error.to_string(),
+                Some(&source.relative_path),
+            )
+        })?;
+        fs::create_dir(&path).map_err(|error| {
+            warning(
+                "SOURCE_READ_FAILED",
+                error.to_string(),
+                Some(&source.relative_path),
+            )
+        })?;
+    }
     let refreshed_root =
         fs::canonicalize(Path::new(&project.normalized_path)).map_err(|error| {
             warning(
@@ -349,6 +377,7 @@ fn parse_document(
         waiting: Vec::new(),
         evidence: Vec::new(),
     };
+    let mut warnings = Vec::new();
     let mut has_handoff = source.source_kind.eq_ignore_ascii_case("HANDOFF");
     for (index, raw) in lines.iter().enumerate() {
         let line = index + 1;
@@ -373,8 +402,21 @@ fn parse_document(
             if !value.is_empty() {
                 let heading_path = headings
                     .iter()
-                    .map(|(_, title)| title.clone())
+                    .map(|(_, title)| {
+                        bounded_field(
+                            title,
+                            "handoff heading path",
+                            &source.relative_path,
+                            &mut warnings,
+                        )
+                    })
                     .collect::<Vec<_>>();
+                let value = bounded_field(
+                    &value,
+                    "handoff value",
+                    &source.relative_path,
+                    &mut warnings,
+                );
                 let locator = evidence(source, hash, line, line, &heading_path, None);
                 if section.contains("current") || section == "now" {
                     handoff.current.push(value.clone());
@@ -396,7 +438,6 @@ fn parse_document(
         }
     }
     let mut tasks = Vec::new();
-    let mut warnings = Vec::new();
     let mut duplicate_ordinals: HashMap<String, usize> = HashMap::new();
     for (position, candidate) in candidates.iter().enumerate() {
         if tasks.len() >= task_budget {
@@ -411,6 +452,17 @@ fn parse_document(
         if context.is_empty() {
             context = Vec::new();
         }
+        let bounded_context = context
+            .iter()
+            .map(|heading| {
+                bounded_field(
+                    heading,
+                    "milestone/heading path",
+                    &source.relative_path,
+                    &mut warnings,
+                )
+            })
+            .collect::<Vec<_>>();
         let fields = fields_for(
             &lines,
             candidate.line,
@@ -419,7 +471,7 @@ fn parse_document(
             &source.relative_path,
         );
         let key = if let Some(explicit) = &candidate.explicit_id {
-            format!("explicit|{}", normalize_text(explicit))
+            format!("explicit|{}", explicit.to_ascii_lowercase())
         } else {
             format!("{}|{}", context.join("/"), normalize_text(&candidate.title))
         };
@@ -476,6 +528,9 @@ fn parse_document(
             reasons.push("evidenced repo-specific adapter convention".into());
         }
         let end_line = fields.end_line.max(candidate.line);
+        let bounded_locator_text = candidate.explicit_id.as_ref().map(|value| {
+            bounded_field(value, "locator text", &source.relative_path, &mut warnings)
+        });
         tasks.push(ParsedTask {
             id,
             project_id: source.project_id.clone(),
@@ -490,8 +545,15 @@ fn parse_document(
             ),
             parsed_status: candidate.status.clone(),
             storage_state,
-            explicit_task_id: candidate.explicit_id.clone(),
-            milestone: context.last().cloned(),
+            explicit_task_id: candidate.explicit_id.as_ref().map(|value| {
+                bounded_field(
+                    value,
+                    "explicit task id",
+                    &source.relative_path,
+                    &mut warnings,
+                )
+            }),
+            milestone: bounded_context.last().cloned(),
             required_actor: fields.actor,
             blockers: bounded_values(
                 fields.blockers,
@@ -534,8 +596,8 @@ fn parse_document(
                 hash,
                 candidate.line,
                 end_line,
-                &context,
-                candidate.explicit_id.clone(),
+                &bounded_context,
+                bounded_locator_text,
             ),
             adapter_id: adapter.id.clone(),
             warnings: Vec::new(),
@@ -969,11 +1031,14 @@ fn bounded_field(
         while out.len() > MAX_FIELD_BYTES {
             out.pop();
         }
-        warnings.push(warning(
-            "FIELD_TRUNCATED",
-            format!("{field} exceeded UTF-8 byte bound"),
-            Some(path),
-        ));
+        let message = format!("{field} exceeded UTF-8 byte bound");
+        if !warnings.iter().any(|existing| {
+            existing.code == "FIELD_TRUNCATED"
+                && existing.source_path.as_deref() == Some(path)
+                && existing.message == message
+        }) {
+            warnings.push(warning("FIELD_TRUNCATED", message, Some(path)));
+        }
     }
     out
 }
@@ -1047,14 +1112,14 @@ fn task_id(
         format!(
             "{}|{}|explicit|{}|{ordinal}",
             normalize_text(project),
-            normalize_text(path),
+            normalize_path_identity(path),
             normalize_text(explicit)
         )
     } else {
         format!(
             "{}|{}|{}|{}|{ordinal}",
             normalize_text(project),
-            normalize_text(path),
+            normalize_path_identity(path),
             headings
                 .iter()
                 .map(|heading| normalize_text(heading))
@@ -1064,6 +1129,22 @@ fn task_id(
         )
     };
     format!("m09task:{}", hash_bytes(identity.as_bytes()))
+}
+fn normalize_path_identity(value: &str) -> String {
+    let mut components = Vec::new();
+    let separators_normalized = value.replace('\\', "/");
+    for component in separators_normalized.split('/') {
+        if component.is_empty() || component == "." {
+            continue;
+        }
+        components.push(component);
+    }
+    let normalized = components.join("/");
+    if cfg!(windows) {
+        normalized.to_ascii_lowercase()
+    } else {
+        normalized
+    }
 }
 fn source_id(source: &DiscoveredProjectSource) -> String {
     format!(
@@ -1262,29 +1343,18 @@ mod tests {
     }
     #[test]
     fn p01_retry_rechecks_physical_containment() {
-        let (_db_dir, _dir, db, id) = fixture("- [ ] safe\n");
-        let outside = tempfile::tempdir().unwrap();
-        let source = DiscoveredProjectSource {
-            id: "forged".into(),
-            project_id: id.clone(),
-            relative_path: "../outside.md".into(),
-            absolute_path: outside.path().join("outside.md").to_string_lossy().into(),
-            source_kind: "TASKS".into(),
-            origin: "STANDARD".into(),
-            status: "AVAILABLE".into(),
-            authority_class: "TASKS".into(),
-            priority: 1,
-            size_bytes: None,
-            modified_at: None,
-            discovered_at: "now".into(),
-            content_hash: Some("old".into()),
-            depth: 0,
-            warnings: Vec::new(),
-            schema_version: 1,
-            owner: OWNER.into(),
-            source_order: None,
-        };
-        fs::write(outside.path().join("outside.md"), "- [ ] outside\n").unwrap();
+        let (_db_dir, dir, db, id) = fixture("- [ ] safe\n");
+        let target = dir.path().join("TASKS.md");
+        let source = task_sources::discover(&db, &id)
+            .unwrap()
+            .into_iter()
+            .find(|source| source.relative_path == "TASKS.md")
+            .unwrap();
+        fs::write(&target, "- [ ] changed\n").unwrap();
+        *RETRY_PATH_FAILPOINT
+            .get_or_init(|| Mutex::new(None))
+            .lock()
+            .unwrap() = Some(target);
         assert_eq!(
             read_authoritative_source(&db, &id, &source)
                 .unwrap_err()
@@ -1614,10 +1684,24 @@ mod tests {
             },
         )
         .unwrap();
+        let ordered_sources = task_sources::discover(&db, &id)
+            .unwrap()
+            .into_iter()
+            .filter(|source| is_parser_source(source))
+            .scan(HashSet::new(), |seen, source| {
+                if seen.insert(normalize_path_identity(&source.relative_path)) {
+                    Some(if source.relative_path == "HANDOFF-2.md" {
+                        "second"
+                    } else {
+                        "root"
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
         let current = parse(&db, &id).unwrap().handoff.unwrap().current;
-        assert!(current.len() >= 2);
-        assert!(current.iter().any(|v| v == "root"));
-        assert!(current.iter().any(|v| v == "second"));
+        assert_eq!(current, ordered_sources);
     }
     #[test]
     fn p05_same_text_different_projects_never_collides() {
@@ -1681,13 +1765,61 @@ mod tests {
     }
     #[test]
     fn p07_removed_task_and_source_reconcile_only_stale_m09_rows() {
-        let (_db_dir, dir, db, id) = fixture("- [ ] keep\n- [ ] remove\n");
+        let (_db_dir, dir, db, id) = fixture("- [ ] keep\n");
+        fs::write(dir.path().join("STALE.md"), "- [ ] remove\n").unwrap();
+        task_sources::custom_path_add(
+            &db,
+            task_sources::CustomPathRequest {
+                project_id: id.clone(),
+                path: "STALE.md".into(),
+            },
+        )
+        .unwrap();
         let before = parse(&db, &id).unwrap();
-        fs::write(dir.path().join("TASKS.md"), "- [ ] keep\n").unwrap();
+        let stale_id = before
+            .tasks
+            .iter()
+            .find(|task| task.title == "remove")
+            .unwrap()
+            .id
+            .clone();
+        let legacy = db.open_connection().unwrap();
+        legacy.execute("INSERT INTO task_sources (id, project_id, source_path, source_kind, locator, content_hash, discovered_at) VALUES ('legacy-source', ?1, 'legacy.md', 'LEGACY', 'legacy', 'legacy', 'now')", [&id]).unwrap();
+        legacy.execute("INSERT INTO tasks (id, project_id, source_id, title, state, metadata_json, created_at, updated_at) VALUES ('legacy-task', ?1, 'legacy-source', 'Legacy', 'BACKLOG', '{\"legacy\":true}', 'now', 'now')", [&id]).unwrap();
+        drop(legacy);
+        task_sources::custom_path_remove(&db, &id, "STALE.md").unwrap();
         let after = parse(&db, &id).unwrap();
         assert_eq!(after.tasks.len(), 1);
         assert_eq!(after.tasks[0].title, "keep");
-        assert!(before.tasks.iter().any(|t| t.title == "remove"));
+        let check = db.open_connection().unwrap();
+        assert_eq!(check.query_row("SELECT COUNT(*) FROM task_sources WHERE id LIKE 'm09src:%' AND source_path='STALE.md'", [], |r| r.get::<_, i64>(0)).unwrap(), 0);
+        assert_eq!(
+            check
+                .query_row("SELECT COUNT(*) FROM tasks WHERE id=?1", [&stale_id], |r| r
+                    .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            check
+                .query_row(
+                    "SELECT COUNT(*) FROM task_sources WHERE id='legacy-source'",
+                    [],
+                    |r| r.get::<_, i64>(0)
+                )
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            check
+                .query_row(
+                    "SELECT COUNT(*) FROM tasks WHERE id='legacy-task'",
+                    [],
+                    |r| r.get::<_, i64>(0)
+                )
+                .unwrap(),
+            1
+        );
     }
     #[test]
     fn p07_dependency_edges_reconcile_exactly_without_duplicates() {
@@ -1714,6 +1846,97 @@ mod tests {
                 .unwrap(),
             1
         );
+    }
+    #[test]
+    fn r01_distinct_whitespace_paths_never_collide() {
+        let (_db_dir, dir, db, id) = fixture("");
+        fs::create_dir_all(dir.path().join("plans")).unwrap();
+        for path in ["plans/a b.md", "plans/a  b.md"] {
+            fs::write(dir.path().join(path), "# Same\n- [ ] Same task\n").unwrap();
+            task_sources::custom_path_add(
+                &db,
+                task_sources::CustomPathRequest {
+                    project_id: id.clone(),
+                    path: path.into(),
+                },
+            )
+            .unwrap();
+        }
+        let snapshot = parse(&db, &id).unwrap();
+        assert_eq!(snapshot.tasks.len(), 2);
+        assert_ne!(snapshot.tasks[0].source_path, snapshot.tasks[1].source_path);
+        assert_ne!(snapshot.tasks[0].id, snapshot.tasks[1].id);
+        assert_eq!(db.open_connection().unwrap().query_row("SELECT COUNT(*) FROM tasks WHERE project_id=?1 AND json_extract(metadata_json,'$.owner')=?2", params![id, OWNER], |r| r.get::<_, i64>(0)).unwrap(), 2);
+    }
+    #[test]
+    fn r02_oversized_heading_is_bounded_without_snapshot_amplification() {
+        let heading = "é".repeat(3000);
+        let (_db_dir, _dir, db, id) = fixture(&format!("# {heading}\n- [ ] one\n- [ ] two\n"));
+        let snapshot = parse(&db, &id).unwrap();
+        assert_eq!(snapshot.tasks.len(), 2);
+        for task in &snapshot.tasks {
+            assert!(task.milestone.as_ref().unwrap().len() <= MAX_FIELD_BYTES);
+            assert!(task
+                .evidence
+                .heading_path
+                .iter()
+                .all(|part| part.len() <= MAX_FIELD_BYTES));
+            assert!(std::str::from_utf8(task.milestone.as_ref().unwrap().as_bytes()).is_ok());
+        }
+        assert_eq!(
+            snapshot
+                .warnings
+                .iter()
+                .filter(|warning| warning.code == "FIELD_TRUNCATED")
+                .count(),
+            1
+        );
+    }
+    #[test]
+    fn r02_oversized_handoff_value_is_bounded() {
+        let narrative = "é".repeat(3000);
+        let (_db_dir, dir, db, id) = fixture("");
+        fs::write(
+            dir.path().join("HANDOFF.md"),
+            format!("# Handoff\n## Current\n{narrative}\n"),
+        )
+        .unwrap();
+        let snapshot = parse(&db, &id).unwrap();
+        let value = &snapshot.handoff.unwrap().current[0];
+        assert!(value.len() <= MAX_FIELD_BYTES);
+        assert!(std::str::from_utf8(value.as_bytes()).is_ok());
+        assert!(snapshot
+            .warnings
+            .iter()
+            .any(|warning| warning.code == "FIELD_TRUNCATED"));
+    }
+    #[test]
+    fn r02_oversized_explicit_id_is_bounded_and_deterministic() {
+        let explicit = format!("TASK-{}", "a".repeat(5000));
+        let (_db_dir, dir, db, id) = fixture(&format!("- [ ] {explicit}: task\n"));
+        let first = parse(&db, &id).unwrap();
+        fs::write(
+            dir.path().join("TASKS.md"),
+            format!("- [ ] {explicit}: task\n"),
+        )
+        .unwrap();
+        let second = parse(&db, &id).unwrap();
+        assert_eq!(first.tasks[0].id, second.tasks[0].id);
+        assert!(first.tasks[0].explicit_task_id.as_ref().unwrap().len() <= MAX_FIELD_BYTES);
+        assert!(first
+            .warnings
+            .iter()
+            .any(|warning| warning.code == "FIELD_TRUNCATED"));
+    }
+    #[test]
+    fn r02_bounded_snapshot_repeat_is_deterministic() {
+        let heading = "é".repeat(3000);
+        let (_db_dir, _dir, db, id) = fixture(&format!("# {heading}\n- [ ] one\n"));
+        let first = parse(&db, &id).unwrap();
+        let second = parse(&db, &id).unwrap();
+        assert_eq!(first.tasks, second.tasks);
+        assert_eq!(first.handoff, second.handoff);
+        assert_eq!(first.warnings, second.warnings);
     }
     #[test]
     fn p07_unrelated_rows_and_project_bytes_are_preserved() {
