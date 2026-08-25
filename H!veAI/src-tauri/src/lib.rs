@@ -4,6 +4,7 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_log::{Target, TargetKind};
 
 mod db;
+mod external_browser;
 mod git_engine;
 mod projects;
 mod runtime;
@@ -96,6 +97,11 @@ fn hiveai_request_restart(app: tauri::AppHandle) {
 #[tauri::command]
 fn hiveai_frontend_ready() {
     log::info!("HIVEAI_FRONTEND_READY");
+}
+
+#[tauri::command]
+fn hiveai_open_akilta() -> Result<(), String> {
+    external_browser::open_akilta()
 }
 
 #[tauri::command]
@@ -339,6 +345,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             hiveai_native_status,
             hiveai_frontend_ready,
+            hiveai_open_akilta,
             hiveai_startup_intro_claim,
             hiveai_request_restart,
             hiveai_runtime_status,

@@ -638,11 +638,16 @@ fn validate_gate(
             let result: String = tx
                 .query_row("SELECT result FROM audits WHERE id=?1", [id], |r| r.get(0))
                 .map_err(|e| error("WORKFLOW_EVIDENCE_DATABASE", e.to_string()))?;
-            let pass = result.eq_ignore_ascii_case("PASS");
-            if (to == WorkflowState::AuditPassed) != pass {
+            let normalized = result.trim().to_ascii_uppercase();
+            let matches_target = match normalized.as_str() {
+                "PASS" => to == WorkflowState::AuditPassed,
+                "CONDITIONAL" | "FAIL" => to == WorkflowState::AuditFailed,
+                _ => false,
+            };
+            if !matches_target {
                 return Err(error(
                     "WORKFLOW_EVIDENCE_INCOMPATIBLE",
-                    "audit result does not match requested state",
+                    "audit result must be final PASS, CONDITIONAL, or FAIL evidence matching the requested state",
                 ));
             }
             Ok(())
@@ -687,53 +692,70 @@ fn validate_gate(
     }
 }
 
+const INTERNAL_SYSTEM_TRANSITIONS: &[(WorkflowState, WorkflowState)] = &[
+    (
+        WorkflowState::ImplementationComplete,
+        WorkflowState::AuditRequired,
+    ),
+    (
+        WorkflowState::ImplementationComplete,
+        WorkflowState::ReAuditRequired,
+    ),
+    (WorkflowState::AuditPassed, WorkflowState::VerifyRequired),
+];
+
+fn actor_policy(from: WorkflowState, to: WorkflowState) -> &'static [ActorType] {
+    if INTERNAL_SYSTEM_TRANSITIONS.contains(&(from, to)) {
+        return &[ActorType::System];
+    }
+    if from == WorkflowState::WaitingExternal {
+        return &[ActorType::External, ActorType::Human];
+    }
+    if matches!(
+        from,
+        WorkflowState::WaitingHuman | WorkflowState::DesignGate
+    ) {
+        return &[ActorType::Human];
+    }
+    if from == WorkflowState::Blocked {
+        return &[ActorType::Human, ActorType::System];
+    }
+    match to {
+        WorkflowState::BuilderRunning => &[ActorType::Codex, ActorType::Claude],
+        WorkflowState::ImplementationComplete => &[ActorType::Codex, ActorType::Claude],
+        WorkflowState::AuditRunning => &[ActorType::GptAudit, ActorType::Ci],
+        WorkflowState::VerifyRunning | WorkflowState::TaskComplete => &[ActorType::Ci],
+        WorkflowState::AuditPassed | WorkflowState::AuditFailed => {
+            &[ActorType::GptAudit, ActorType::Ci]
+        }
+        WorkflowState::Blocked
+        | WorkflowState::WaitingHuman
+        | WorkflowState::WaitingExternal
+        | WorkflowState::DesignGate => &[ActorType::Human],
+        _ => &[ActorType::Human],
+    }
+}
+
+fn allowed_actors_for_state(state: WorkflowState, next_states: &[WorkflowState]) -> Vec<ActorType> {
+    let mut actors = Vec::new();
+    for next in next_states {
+        for actor in actor_policy(state, *next) {
+            if !actors.contains(actor) {
+                actors.push(*actor);
+            }
+        }
+    }
+    actors
+}
+
 fn validate_actor(actor: ActorType, from: WorkflowState, to: WorkflowState) -> Result<(), String> {
-    if matches!(to, WorkflowState::BuilderRunning)
-        && !matches!(actor, ActorType::Codex | ActorType::Claude)
-    {
-        return Err(error(
-            "WORKFLOW_ACTOR_NOT_ALLOWED",
-            "builder execution requires CODEX or CLAUDE",
-        ));
+    if actor_policy(from, to).contains(&actor) {
+        return Ok(());
     }
-    if matches!(to, WorkflowState::AuditRunning)
-        && !matches!(actor, ActorType::GptAudit | ActorType::Ci)
-    {
-        return Err(error(
-            "WORKFLOW_ACTOR_NOT_ALLOWED",
-            "audit execution requires GPT_AUDIT or CI",
-        ));
-    }
-    if matches!(to, WorkflowState::VerifyRunning) && actor != ActorType::Ci {
-        return Err(error(
-            "WORKFLOW_ACTOR_NOT_ALLOWED",
-            "verification execution requires CI",
-        ));
-    }
-    if from.is_suspension()
-        && matches!(
-            from,
-            WorkflowState::WaitingHuman | WorkflowState::DesignGate
-        )
-        && actor != ActorType::Human
-    {
-        return Err(error("WORKFLOW_ACTOR_NOT_ALLOWED", "resume requires HUMAN"));
-    }
-    if from == WorkflowState::WaitingExternal
-        && !matches!(actor, ActorType::External | ActorType::Human)
-    {
-        return Err(error(
-            "WORKFLOW_ACTOR_NOT_ALLOWED",
-            "external wait resume requires EXTERNAL or HUMAN",
-        ));
-    }
-    if from == WorkflowState::Blocked && !matches!(actor, ActorType::Human | ActorType::System) {
-        return Err(error(
-            "WORKFLOW_ACTOR_NOT_ALLOWED",
-            "blocked resume actor is not allowed",
-        ));
-    }
-    Ok(())
+    Err(error(
+        "WORKFLOW_ACTOR_NOT_ALLOWED",
+        format!("{actor} is not allowed for {from} -> {to}"),
+    ))
 }
 
 fn validate_override_running_evidence(
@@ -1034,6 +1056,7 @@ pub fn override_state(
             format!("expected {}, found {current}", request.expected_from_state),
         ));
     }
+    validate_evidence(&tx, &request.task_id, &project_id, &request.evidence_refs)?;
     if request.to_state.is_running() {
         validate_override_running_evidence(
             &tx,
@@ -1054,6 +1077,26 @@ pub fn override_state(
             request.to_state,
         )?;
     }
+    let failed = had_failed_audit(&tx, &request.task_id)?;
+    let override_suspension = request.to_state.is_suspension();
+    if override_suspension
+        && request.to_state == WorkflowState::WaitingExternal
+        && !has_kind(&request.evidence_refs, EvidenceKind::ExternalReference)
+    {
+        return Err(error(
+            "WORKFLOW_EVIDENCE_REQUIRED",
+            "WAITING_EXTERNAL requires EXTERNAL_REFERENCE evidence",
+        ));
+    }
+    let resume = if override_suspension {
+        Some(if current.is_suspension() {
+            resume_state(&tx, &request.task_id, current)?
+        } else {
+            suspension_resume(current, failed)
+        })
+    } else {
+        None
+    };
     let decision = decision_id(&request.task_id, &request.request_id);
     let now = utc_timestamp();
     tx.execute("INSERT INTO decisions (id, project_id, task_id, decision_kind, decision, rationale, created_at) VALUES (?1,?2,?3,'WORKFLOW_OVERRIDE',?4,?5,?6)", params![decision, project_id, request.task_id, request.to_state.to_string(), request.rationale, now]).map_err(|e| error("WORKFLOW_DATABASE", e.to_string()))?;
@@ -1066,7 +1109,7 @@ pub fn override_state(
         &request.rationale,
         &request.evidence_refs,
     );
-    let evidence_json = json!({"request": fingerprint, "requestId": request.request_id, "decisionId": decision, "rationale": request.rationale, "evidenceRefs": normalize_refs(&request.evidence_refs)}).to_string();
+    let evidence_json = json!({"request": fingerprint, "requestId": request.request_id, "decisionId": decision, "rationale": request.rationale, "evidenceRefs": normalize_refs(&request.evidence_refs), "suspendedState": if override_suspension { Some(current.to_string()) } else { None }, "resumeState": resume.map(|value| value.to_string())}).to_string();
     insert_event(
         &tx,
         &id,
@@ -1096,6 +1139,16 @@ fn history_tx(
         .map_err(|e| error("WORKFLOW_DATABASE", e.to_string()))?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(|e| error("WORKFLOW_DATABASE", e.to_string()))
+}
+
+fn latest_event_tx(tx: &Transaction<'_>, task_id: &str) -> Result<Option<WorkflowEvent>, String> {
+    tx.query_row(
+        "SELECT id, task_id, event_type, from_state, to_state, actor_type, summary, evidence_json, occurred_at FROM task_events WHERE task_id=?1 AND event_type LIKE 'WORKFLOW_%' ORDER BY occurred_at DESC, id DESC LIMIT 1",
+        [task_id],
+        event_from_row,
+    )
+    .optional()
+    .map_err(|e| error("WORKFLOW_DATABASE", e.to_string()))
 }
 
 pub fn history(
@@ -1145,29 +1198,13 @@ fn task_read(tx: &Transaction<'_>, task_id: &str, _limit: usize) -> Result<Workf
     } else {
         None
     };
-    let events = history_tx(tx, task_id, 1)?;
+    let latest_event = latest_event_tx(tx, task_id)?;
     let allowed_next_states = if state.is_suspension() {
         resume.into_iter().collect()
     } else {
         state.normal_next(failed).to_vec()
     };
-    let allowed_actors =
-        if state == WorkflowState::WaitingHuman || state == WorkflowState::DesignGate {
-            vec![ActorType::Human]
-        } else if state == WorkflowState::WaitingExternal {
-            vec![ActorType::External, ActorType::Human]
-        } else if state == WorkflowState::Blocked {
-            vec![ActorType::Human, ActorType::System]
-        } else {
-            vec![
-                ActorType::Human,
-                ActorType::Codex,
-                ActorType::Claude,
-                ActorType::GptAudit,
-                ActorType::Ci,
-                ActorType::External,
-            ]
-        };
+    let allowed_actors = allowed_actors_for_state(state, &allowed_next_states);
     Ok(WorkflowTask {
         task_id: task_id.to_string(),
         project_id,
@@ -1179,7 +1216,7 @@ fn task_read(tx: &Transaction<'_>, task_id: &str, _limit: usize) -> Result<Workf
         allowed_next_states,
         allowed_actors,
         suspension_resume_state: resume,
-        latest_event: events.into_iter().next(),
+        latest_event,
         attention_required: state.is_suspension()
             || state == WorkflowState::AuditFailed
             || state == WorkflowState::FixRequired,
@@ -1245,8 +1282,21 @@ pub fn project_list(
 
 pub fn recover_stale(database: &DatabaseState) -> Result<usize, String> {
     let mut connection = database.open_connection()?;
+    let candidate_count: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM tasks t JOIN projects p ON p.id=t.project_id WHERE t.state IN ('BUILDER_RUNNING','AUDIT_RUNNING','VERIFY_RUNNING') AND EXISTS(SELECT 1 FROM task_events e WHERE e.task_id=t.id AND e.event_type LIKE 'WORKFLOW_%')",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| error("WORKFLOW_DATABASE", e.to_string()))?;
+    if candidate_count > 4096 {
+        return Err(error(
+            "WORKFLOW_RECOVERY_BOUNDS",
+            "stale workflow recovery exceeds the bounded batch capacity",
+        ));
+    }
     let candidates: Vec<(String, String)> = {
-        let mut statement = connection.prepare("SELECT t.id, t.state FROM tasks t JOIN projects p ON p.id=t.project_id WHERE p.status='ACTIVE' AND t.state IN ('BUILDER_RUNNING','AUDIT_RUNNING','VERIFY_RUNNING') AND EXISTS(SELECT 1 FROM task_events e WHERE e.task_id=t.id AND e.event_type LIKE 'WORKFLOW_%') ORDER BY t.id LIMIT 4096").map_err(|e| error("WORKFLOW_DATABASE", e.to_string()))?;
+        let mut statement = connection.prepare("SELECT t.id, t.state FROM tasks t JOIN projects p ON p.id=t.project_id WHERE t.state IN ('BUILDER_RUNNING','AUDIT_RUNNING','VERIFY_RUNNING') AND EXISTS(SELECT 1 FROM task_events e WHERE e.task_id=t.id AND e.event_type LIKE 'WORKFLOW_%') ORDER BY t.id LIMIT 4096").map_err(|e| error("WORKFLOW_DATABASE", e.to_string()))?;
         let rows = statement
             .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
             .map_err(|e| error("WORKFLOW_DATABASE", e.to_string()))?
@@ -1366,6 +1416,23 @@ mod tests {
             .map(|value| format!("'{value}'"))
             .unwrap_or_else(|| "NULL".to_string());
         format!("INSERT INTO agent_sessions (id,project_id,task_id,provider,state,started_at,ended_at,created_at) VALUES ('{id}','{project}','{task}','{provider}','COMPLETED','now',{ended_sql},'now');")
+    }
+
+    fn override_req(
+        task: &str,
+        from: WorkflowState,
+        to: WorkflowState,
+        id: &str,
+        refs: Vec<EvidenceRef>,
+    ) -> WorkflowOverrideRequest {
+        WorkflowOverrideRequest {
+            task_id: task.into(),
+            expected_from_state: from,
+            to_state: to,
+            request_id: id.into(),
+            rationale: format!("override {to}"),
+            evidence_refs: refs,
+        }
     }
 
     #[test]
@@ -1972,6 +2039,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
+            task_get(&db, task.clone()).unwrap().allowed_actors,
+            vec![ActorType::Human]
+        );
+        assert_eq!(
             transition(
                 &db,
                 req(
@@ -1989,6 +2060,318 @@ mod tests {
         );
         let _ = project;
     }
+
+    #[test]
+    fn m10_latest_event_is_truly_latest() {
+        let (_d, _p, db, _project, task) = fixture("- [ ] work\n");
+        seed(
+            &db,
+            &format!(
+                "INSERT INTO task_events (id,task_id,event_type,from_state,to_state,actor_type,summary,evidence_json,occurred_at) VALUES ('event-a','{task}','WORKFLOW_TRANSITION','BACKLOG','PLANNING_REQUIRED','HUMAN','first','{{}}','2026-01-01T00:00:00Z'),('event-b','{task}','WORKFLOW_TRANSITION','PLANNING_REQUIRED','PROMPT_REQUIRED','HUMAN','second','{{}}','2026-01-02T00:00:00Z'),('event-c','{task}','WORKFLOW_TRANSITION','PROMPT_REQUIRED','PROMPT_READY','HUMAN','final','{{}}','2026-01-03T00:00:00Z');"
+            ),
+        );
+        let model = task_get(&db, task.clone()).unwrap();
+        let latest = model.latest_event.unwrap();
+        assert_eq!(latest.id, "event-c");
+        assert_eq!(latest.to_state, Some(WorkflowState::PromptReady));
+        assert_eq!(latest.summary, "final");
+        assert_eq!(latest.occurred_at, "2026-01-03T00:00:00Z");
+        let ordered = history(
+            &db,
+            WorkflowHistoryQuery {
+                task_id: task,
+                limit: Some(10),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            ordered
+                .into_iter()
+                .map(|event| event.id)
+                .collect::<Vec<_>>(),
+            vec!["event-a", "event-b", "event-c"]
+        );
+    }
+
+    #[test]
+    fn m10_read_model_actor_policy_matches_builder_transition() {
+        let (_d, _p, db, project, task) = fixture("- [ ] work\n");
+        seed(
+            &db,
+            &format!(
+                "UPDATE tasks SET state='READY_FOR_IMPLEMENTATION' WHERE id='{task}'; {}",
+                session_sql(&project, &task, "builder-live", "CODEX", None)
+            ),
+        );
+        assert_eq!(
+            task_get(&db, task.clone()).unwrap().allowed_actors,
+            vec![ActorType::Codex, ActorType::Claude]
+        );
+        let error = transition(
+            &db,
+            req(
+                &task,
+                WorkflowState::ReadyForImplementation,
+                WorkflowState::BuilderRunning,
+                ActorType::Human,
+                "builder-human",
+                vec![ev(EvidenceKind::AgentSession, "builder-live")],
+            ),
+        )
+        .unwrap_err();
+        assert!(error.starts_with("WORKFLOW_ACTOR_NOT_ALLOWED"));
+    }
+
+    #[test]
+    fn m10_read_model_actor_policy_matches_audit_transition() {
+        let (_d, _p, db, project, task) = fixture("- [ ] work\n");
+        seed(
+            &db,
+            &format!(
+                "UPDATE tasks SET state='AUDIT_REQUIRED' WHERE id='{task}'; {}",
+                session_sql(&project, &task, "audit-live", "GPT_AUDIT", None)
+            ),
+        );
+        assert_eq!(
+            task_get(&db, task).unwrap().allowed_actors,
+            vec![ActorType::GptAudit, ActorType::Ci]
+        );
+    }
+
+    #[test]
+    fn m10_read_model_actor_policy_matches_verify_transition() {
+        let (_d, _p, db, project, task) = fixture("- [ ] work\n");
+        seed(&db, &format!("UPDATE tasks SET state='VERIFY_REQUIRED' WHERE id='{task}'; INSERT INTO test_runs (id,project_id,task_id,command,result,started_at) VALUES ('verify-live','{project}','{task}','cargo test','RUNNING','now');"));
+        assert_eq!(
+            task_get(&db, task).unwrap().allowed_actors,
+            vec![ActorType::Ci]
+        );
+    }
+
+    #[test]
+    fn m10_system_actor_is_rejected_outside_internal_allowlist() {
+        let (_d, _p, db, _project, task) = fixture("- [ ] work\n");
+        let error = transition(
+            &db,
+            req(
+                &task,
+                WorkflowState::Backlog,
+                WorkflowState::PlanningRequired,
+                ActorType::System,
+                "system-forged",
+                vec![],
+            ),
+        )
+        .unwrap_err();
+        assert!(error.starts_with("WORKFLOW_ACTOR_NOT_ALLOWED"));
+    }
+
+    #[test]
+    fn m10_override_to_waiting_human_is_readable_and_resumable() {
+        let (_d, _p, db, _project, task) = fixture("- [ ] work\n");
+        override_state(
+            &db,
+            override_req(
+                &task,
+                WorkflowState::Backlog,
+                WorkflowState::WaitingHuman,
+                "hold",
+                vec![],
+            ),
+        )
+        .unwrap();
+        let model = task_get(&db, task.clone()).unwrap();
+        assert_eq!(model.suspension_resume_state, Some(WorkflowState::Backlog));
+        let evidence = db
+            .open_connection()
+            .unwrap()
+            .query_row(
+                "SELECT evidence_json FROM task_events WHERE task_id=?1",
+                [&task],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&evidence)
+                .unwrap()
+                .get("resumeState")
+                .and_then(Value::as_str),
+            Some("BACKLOG")
+        );
+        assert_eq!(
+            transition(
+                &db,
+                req(
+                    &task,
+                    WorkflowState::WaitingHuman,
+                    WorkflowState::Backlog,
+                    ActorType::Human,
+                    "resume",
+                    vec![],
+                ),
+            )
+            .unwrap()
+            .to_state,
+            Some(WorkflowState::Backlog)
+        );
+    }
+
+    #[test]
+    fn m10_override_running_to_suspension_uses_safe_resume_prerequisite() {
+        let (_d, _p, db, _project, task) = fixture("- [ ] work\n");
+        seed(&db, &format!("UPDATE tasks SET state='BUILDER_RUNNING' WHERE id='{task}'; INSERT INTO task_events (id,task_id,event_type,from_state,to_state,actor_type,summary,evidence_json,occurred_at) VALUES ('builder-seed','{task}','WORKFLOW_TRANSITION','READY_FOR_IMPLEMENTATION','BUILDER_RUNNING','CODEX','builder','{{}}','now');"));
+        override_state(
+            &db,
+            override_req(
+                &task,
+                WorkflowState::BuilderRunning,
+                WorkflowState::WaitingHuman,
+                "hold-running",
+                vec![],
+            ),
+        )
+        .unwrap();
+        assert_eq!(
+            task_get(&db, task).unwrap().suspension_resume_state,
+            Some(WorkflowState::ReadyForImplementation)
+        );
+    }
+
+    #[test]
+    fn m10_override_hold_to_hold_preserves_original_resume_target() {
+        let (_d, _p, db, _project, task) = fixture("- [ ] work\n");
+        seed(&db, &format!("UPDATE tasks SET state='BUILDER_RUNNING' WHERE id='{task}'; INSERT INTO task_events (id,task_id,event_type,from_state,to_state,actor_type,summary,evidence_json,occurred_at) VALUES ('builder-seed','{task}','WORKFLOW_TRANSITION','READY_FOR_IMPLEMENTATION','BUILDER_RUNNING','CODEX','builder','{{}}','now');"));
+        override_state(
+            &db,
+            override_req(
+                &task,
+                WorkflowState::BuilderRunning,
+                WorkflowState::WaitingHuman,
+                "first-hold",
+                vec![],
+            ),
+        )
+        .unwrap();
+        override_state(
+            &db,
+            override_req(
+                &task,
+                WorkflowState::WaitingHuman,
+                WorkflowState::Blocked,
+                "second-hold",
+                vec![],
+            ),
+        )
+        .unwrap();
+        assert_eq!(
+            task_get(&db, task).unwrap().suspension_resume_state,
+            Some(WorkflowState::ReadyForImplementation)
+        );
+    }
+
+    #[test]
+    fn m10_override_waiting_external_requires_external_reference() {
+        let (_d, _p, db, _project, task) = fixture("- [ ] work\n");
+        let error = override_state(
+            &db,
+            override_req(
+                &task,
+                WorkflowState::Backlog,
+                WorkflowState::WaitingExternal,
+                "external-hold",
+                vec![],
+            ),
+        )
+        .unwrap_err();
+        assert!(error.starts_with("WORKFLOW_EVIDENCE_REQUIRED"));
+        let mut external = ev(EvidenceKind::ExternalReference, "ticket-1");
+        external.locator = Some("https://example.test/ticket-1".into());
+        assert!(override_state(
+            &db,
+            override_req(
+                &task,
+                WorkflowState::Backlog,
+                WorkflowState::WaitingExternal,
+                "external-hold-ok",
+                vec![external]
+            )
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn m10_audit_failed_accepts_fail_result() {
+        let (_d, _p, db, project, task) = fixture("- [ ] work\n");
+        seed(&db, &format!("UPDATE tasks SET state='AUDIT_RUNNING' WHERE id='{task}'; INSERT INTO audits (id,project_id,task_id,result,created_at) VALUES ('audit-fail','{project}','{task}','FAIL','now');"));
+        assert!(transition(
+            &db,
+            req(
+                &task,
+                WorkflowState::AuditRunning,
+                WorkflowState::AuditFailed,
+                ActorType::GptAudit,
+                "fail",
+                vec![ev(EvidenceKind::Audit, "audit-fail")]
+            )
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn m10_audit_failed_accepts_conditional_result() {
+        let (_d, _p, db, project, task) = fixture("- [ ] work\n");
+        seed(&db, &format!("UPDATE tasks SET state='AUDIT_RUNNING' WHERE id='{task}'; INSERT INTO audits (id,project_id,task_id,result,created_at) VALUES ('audit-conditional','{project}','{task}','conditional','now');"));
+        assert!(transition(
+            &db,
+            req(
+                &task,
+                WorkflowState::AuditRunning,
+                WorkflowState::AuditFailed,
+                ActorType::GptAudit,
+                "conditional",
+                vec![ev(EvidenceKind::Audit, "audit-conditional")]
+            )
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn m10_audit_failed_rejects_pass_result() {
+        let (_d, _p, db, project, task) = fixture("- [ ] work\n");
+        seed(&db, &format!("UPDATE tasks SET state='AUDIT_RUNNING' WHERE id='{task}'; INSERT INTO audits (id,project_id,task_id,result,created_at) VALUES ('audit-pass','{project}','{task}','PASS','now');"));
+        let error = transition(
+            &db,
+            req(
+                &task,
+                WorkflowState::AuditRunning,
+                WorkflowState::AuditFailed,
+                ActorType::GptAudit,
+                "pass-as-fail",
+                vec![ev(EvidenceKind::Audit, "audit-pass")],
+            ),
+        )
+        .unwrap_err();
+        assert!(error.starts_with("WORKFLOW_EVIDENCE_INCOMPATIBLE"));
+    }
+
+    #[test]
+    fn m10_audit_failed_rejects_unknown_nonfinal_result() {
+        let (_d, _p, db, project, task) = fixture("- [ ] work\n");
+        seed(&db, &format!("UPDATE tasks SET state='AUDIT_RUNNING' WHERE id='{task}'; INSERT INTO audits (id,project_id,task_id,result,created_at) VALUES ('audit-pending','{project}','{task}','PENDING','now');"));
+        let error = transition(
+            &db,
+            req(
+                &task,
+                WorkflowState::AuditRunning,
+                WorkflowState::AuditFailed,
+                ActorType::GptAudit,
+                "pending-as-fail",
+                vec![ev(EvidenceKind::Audit, "audit-pending")],
+            ),
+        )
+        .unwrap_err();
+        assert!(error.starts_with("WORKFLOW_EVIDENCE_INCOMPATIBLE"));
+    }
     #[test]
     fn m10_restart_recovery_demotes_stale_running_states() {
         let (_d, _p, db, _project, task) = fixture("- [ ] work\n");
@@ -2000,48 +2383,97 @@ mod tests {
             WorkflowState::ReadyForImplementation
         );
     }
+
+    #[test]
+    fn m10_restart_recovery_covers_all_transient_states_and_is_idempotent() {
+        for (index, (state, expected)) in [
+            (
+                WorkflowState::BuilderRunning,
+                WorkflowState::ReadyForImplementation,
+            ),
+            (WorkflowState::AuditRunning, WorkflowState::AuditRequired),
+            (WorkflowState::VerifyRunning, WorkflowState::VerifyRequired),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let (_d, _p, db, _project, task) = fixture("- [ ] work\n");
+            seed(
+                &db,
+                &format!(
+                    "UPDATE tasks SET state='{state}' WHERE id='{task}'; INSERT INTO task_events (id,task_id,event_type,from_state,to_state,actor_type,summary,evidence_json,occurred_at) VALUES ('seed-{index}','{task}','WORKFLOW_TRANSITION','READY_FOR_IMPLEMENTATION','{state}','SYSTEM','run','{{}}','now');"
+                ),
+            );
+            assert_eq!(recover_stale(&db).unwrap(), 1);
+            assert_eq!(task_get(&db, task.clone()).unwrap().current_state, expected);
+            assert_eq!(recover_stale(&db).unwrap(), 0);
+            let recovery_count: i64 = db
+                .open_connection()
+                .unwrap()
+                .query_row(
+                    "SELECT COUNT(*) FROM task_events WHERE task_id=?1 AND event_type='WORKFLOW_RECOVERY'",
+                    [&task],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(recovery_count, 1);
+        }
+    }
+
+    #[test]
+    fn m10_restart_recovery_repairs_archived_and_missing_roots() {
+        let (_d, _p, db, project, task) = fixture("- [ ] archived\n");
+        seed(&db, &format!("UPDATE tasks SET state='AUDIT_RUNNING' WHERE id='{task}'; INSERT INTO task_events (id,task_id,event_type,from_state,to_state,actor_type,summary,evidence_json,occurred_at) VALUES ('archived-seed','{task}','WORKFLOW_TRANSITION','AUDIT_REQUIRED','AUDIT_RUNNING','GPT_AUDIT','run','{{}}','now'); UPDATE projects SET status='ARCHIVED' WHERE id='{project}';"));
+        assert_eq!(recover_stale(&db).unwrap(), 1);
+        assert_eq!(
+            task_get(&db, task).unwrap().current_state,
+            WorkflowState::AuditRequired
+        );
+
+        let (_d, project_dir, db, project, task) = fixture("- [ ] missing\n");
+        seed(&db, &format!("UPDATE tasks SET state='VERIFY_RUNNING' WHERE id='{task}'; INSERT INTO task_events (id,task_id,event_type,from_state,to_state,actor_type,summary,evidence_json,occurred_at) VALUES ('missing-seed','{task}','WORKFLOW_TRANSITION','VERIFY_REQUIRED','VERIFY_RUNNING','CI','run','{{}}','now');"));
+        fs::remove_dir_all(project_dir.path()).unwrap();
+        assert_eq!(recover_stale(&db).unwrap(), 1);
+        assert_eq!(
+            task_get(&db, task).unwrap().current_state,
+            WorkflowState::VerifyRequired
+        );
+        let _ = project;
+    }
     #[test]
     fn m10_history_is_bounded_and_deterministically_ordered() {
         let (_d, _p, db, _project, task) = fixture("- [ ] work\n");
-        for i in 0..3 {
-            transition(
-                &db,
-                req(
-                    &task,
-                    if i == 0 {
-                        WorkflowState::Backlog
-                    } else if i == 1 {
-                        WorkflowState::PlanningRequired
-                    } else {
-                        WorkflowState::PromptRequired
-                    },
-                    if i == 0 {
-                        WorkflowState::PlanningRequired
-                    } else if i == 1 {
-                        WorkflowState::PromptRequired
-                    } else {
-                        WorkflowState::PromptReady
-                    },
-                    ActorType::Human,
-                    &format!("{i}"),
-                    if i == 2 {
-                        vec![ev(EvidenceKind::Prompt, "missing")]
-                    } else {
-                        vec![]
-                    },
-                ),
-            )
-            .ok();
-        }
-        let e = history(
+        seed(
+            &db,
+            &format!(
+                "INSERT INTO task_events (id,task_id,event_type,from_state,to_state,actor_type,summary,evidence_json,occurred_at) VALUES ('event-early','{task}','WORKFLOW_TRANSITION','BACKLOG','PLANNING_REQUIRED','HUMAN','early','{{}}','2026-01-01T00:00:00Z'),('event-middle','{task}','WORKFLOW_TRANSITION','PLANNING_REQUIRED','PROMPT_REQUIRED','HUMAN','middle','{{}}','2026-01-02T00:00:00Z'),('tie-a','{task}','WORKFLOW_TRANSITION','PROMPT_REQUIRED','PROMPT_READY','HUMAN','tie-a','{{}}','2026-01-03T00:00:00Z'),('tie-b','{task}','WORKFLOW_TRANSITION','PROMPT_READY','READY_FOR_IMPLEMENTATION','HUMAN','tie-b','{{}}','2026-01-03T00:00:00Z');"
+            ),
+        );
+        let full = history(
             &db,
             WorkflowHistoryQuery {
-                task_id: task,
-                limit: Some(1),
+                task_id: task.clone(),
+                limit: Some(10),
             },
         )
         .unwrap();
-        assert_eq!(e.len(), 1);
+        assert_eq!(
+            full.iter()
+                .map(|event| event.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["event-early", "event-middle", "tie-a", "tie-b"]
+        );
+        let bounded = history(
+            &db,
+            WorkflowHistoryQuery {
+                task_id: task,
+                limit: Some(2),
+            },
+        )
+        .unwrap();
+        assert_eq!(bounded.len(), 2);
+        assert_eq!(bounded[0].summary, "early");
+        assert_eq!(bounded[1].summary, "middle");
     }
     #[test]
     fn m10_archived_or_missing_project_rejects_mutation_but_allows_history_read() {
@@ -2087,6 +2519,47 @@ mod tests {
             .len(),
             1
         );
+
+        let (_d, project_dir, db, project, task) = fixture("- [ ] missing root\n");
+        transition(
+            &db,
+            req(
+                &task,
+                WorkflowState::Backlog,
+                WorkflowState::PlanningRequired,
+                ActorType::Human,
+                "missing-one",
+                vec![],
+            ),
+        )
+        .unwrap();
+        fs::remove_dir_all(project_dir.path()).unwrap();
+        let error = transition(
+            &db,
+            req(
+                &task,
+                WorkflowState::PlanningRequired,
+                WorkflowState::PromptRequired,
+                ActorType::Human,
+                "missing-two",
+                vec![],
+            ),
+        )
+        .unwrap_err();
+        assert!(error.starts_with("WORKFLOW_PROJECT_NOT_MUTABLE"));
+        assert_eq!(
+            history(
+                &db,
+                WorkflowHistoryQuery {
+                    task_id: task,
+                    limit: None
+                }
+            )
+            .unwrap()
+            .len(),
+            1
+        );
+        let _ = project;
     }
     #[test]
     fn m10_m09_reparse_preserves_workflow_state_and_events() {
@@ -2111,6 +2584,15 @@ mod tests {
                 .get::<_, String>(0))
                 .unwrap(),
             "PLANNING_REQUIRED"
+        );
+        assert_eq!(
+            c.query_row(
+                "SELECT json_extract(metadata_json,'$.task.title') FROM tasks WHERE id=?1",
+                [task.clone()],
+                |r| r.get::<_, String>(0)
+            )
+            .unwrap(),
+            "changed"
         );
         assert_eq!(
             c.query_row(
@@ -2139,6 +2621,11 @@ mod tests {
         .unwrap();
         fs::remove_file(dir.path().join("TASKS.md")).unwrap();
         task_intelligence::parse(&db, &project).unwrap();
+        assert!(!task_intelligence::list(&db, &project)
+            .unwrap()
+            .tasks
+            .iter()
+            .any(|parsed| parsed.id == task));
         let c = db.open_connection().unwrap();
         assert_eq!(
             c.query_row(
@@ -2202,6 +2689,15 @@ mod tests {
                 .get::<_, String>(0))
                 .unwrap(),
             "new"
+        );
+        assert_eq!(
+            c.query_row(
+                "SELECT source_id IS NOT NULL, json_extract(metadata_json,'$.sourceActive'), json_extract(metadata_json,'$.sourceRetired'), json_extract(metadata_json,'$.task.title') FROM tasks WHERE id=?1",
+                [task.clone()],
+                |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?, r.get::<_, String>(3)?))
+            )
+            .unwrap(),
+            (1, 1, 0, "new".to_string())
         );
         assert_eq!(
             c.query_row("SELECT state FROM tasks WHERE id=?1", [task.clone()], |r| r

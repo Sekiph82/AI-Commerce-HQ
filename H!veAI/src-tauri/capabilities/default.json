@@ -9,6 +9,7 @@
     "notification:default",
     "allow-native-status",
     "allow-frontend-ready",
+    "allow-akilta-external-link",
     "allow-startup-intro-claim",
     "allow-request-restart",
     "allow-runtime-status",

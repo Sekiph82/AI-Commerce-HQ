@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
+import { invoke } from "@tauri-apps/api/core";
 import {
   Activity,
   Bell,
@@ -20,6 +21,7 @@ import type React from "react";
 import hiveaiLogo from "../assets/hiveai-logo.png";
 import akiltaWordmark from "../assets/akilta-wordmark.svg";
 import { useProjectRegistry } from "../registryContext";
+import { isTauriDesktop } from "../projectRegistry";
 
 const MotionDiv = motion.div as React.ComponentType<any>;
 
@@ -72,6 +74,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     navigate(to);
     setSurface(null);
     setSidebarOpen(false);
+  };
+  const openAkilta = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!isTauriDesktop()) return;
+    event.preventDefault();
+    void invoke("hiveai_open_akilta");
   };
   return (
     <div className="app-shell">
@@ -224,7 +231,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <footer className="global-footer">
           <img src={akiltaWordmark} alt="Akilta" />
           <span>
-            Built with <b>♥</b> for maximum productivity by Akilta
+            Built with <b>♥</b> for maximum productivity by{" "}
+            <a
+              href="https://www.akilta.com/"
+              onClick={openAkilta}
+              rel="noreferrer"
+            >
+              Akilta
+            </a>
           </span>
         </footer>
       </main>

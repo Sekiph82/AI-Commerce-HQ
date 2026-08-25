@@ -23,6 +23,7 @@ html,body,#root{height:100%;min-height:0}
 .global-footer{align-items:center;color:var(--text-muted);display:flex;flex:0 0 27px;font-size:.58rem;gap:7px;justify-content:center;padding:0 0 7px}
 .global-footer img{height:13px;object-fit:contain;width:54px}
 .global-footer b{color:#f17d7d}
+.global-footer a{color:inherit}.global-footer a:focus-visible,.global-footer a:hover{color:var(--text-secondary)}
 .surface-panel{background:#121922;border:1px solid #3a465a;border-radius:8px;box-shadow:var(--shadow);max-width:540px;padding:18px;width:calc(100% - 32px)}
 .surface-panel .palette-head{align-items:center;display:flex;gap:9px;margin-bottom:14px}
 .surface-panel .palette-head h2{flex:1;font-size:1rem}

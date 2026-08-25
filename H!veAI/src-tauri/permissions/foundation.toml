@@ -11,6 +11,11 @@ description = "Allows the mounted H!veAI frontend to emit its bounded readiness 
 commands.allow = ["hiveai_frontend_ready"]
 
 [[permission]]
+identifier = "allow-akilta-external-link"
+description = "Allows the main window to open the fixed Akilta website in Google Chrome."
+commands.allow = ["hiveai_open_akilta"]
+
+[[permission]]
 identifier = "allow-startup-intro-claim"
 description = "Allows the native frontend to claim the one startup intro for this process lifecycle."
 commands.allow = ["hiveai_startup_intro_claim"]
