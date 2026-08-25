@@ -20,7 +20,7 @@ const SCHEMA_VERSION: u32 = 1;
 #[cfg(test)]
 static RETRY_FAILPOINT: OnceLock<Mutex<Option<PathBuf>>> = OnceLock::new();
 #[cfg(test)]
-static RETRY_PATH_FAILPOINT: OnceLock<Mutex<Option<PathBuf>>> = OnceLock::new();
+static RETRY_RELATIVE_PATH_FAILPOINT: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -266,33 +266,20 @@ fn read_authoritative_source(
     }
     let refreshed = task_sources::discover(database, project_id)
         .map_err(|error| warning("SOURCE_READ_FAILED", error, Some(&source.relative_path)))?;
-    let Some(current) = refreshed
+    let Some(mut current) = refreshed
         .into_iter()
         .find(|item| item.relative_path == source.relative_path && item.status == "AVAILABLE")
     else {
         return Ok(None);
     };
     #[cfg(test)]
-    if let Some(path) = RETRY_PATH_FAILPOINT
+    if let Some(relative_path) = RETRY_RELATIVE_PATH_FAILPOINT
         .get_or_init(|| Mutex::new(None))
         .lock()
         .unwrap()
         .take()
     {
-        fs::remove_file(&path).map_err(|error| {
-            warning(
-                "SOURCE_READ_FAILED",
-                error.to_string(),
-                Some(&source.relative_path),
-            )
-        })?;
-        fs::create_dir(&path).map_err(|error| {
-            warning(
-                "SOURCE_READ_FAILED",
-                error.to_string(),
-                Some(&source.relative_path),
-            )
-        })?;
+        current.relative_path = relative_path;
     }
     let refreshed_root =
         fs::canonicalize(Path::new(&project.normalized_path)).map_err(|error| {
@@ -438,7 +425,7 @@ fn parse_document(
         }
     }
     let mut tasks = Vec::new();
-    let mut duplicate_ordinals: HashMap<String, usize> = HashMap::new();
+    let mut duplicate_ordinals: HashMap<[u8; 32], usize> = HashMap::new();
     for (position, candidate) in candidates.iter().enumerate() {
         if tasks.len() >= task_budget {
             warnings.push(warning(
@@ -470,12 +457,13 @@ fn parse_document(
             &mut warnings,
             &source.relative_path,
         );
-        let key = if let Some(explicit) = &candidate.explicit_id {
-            format!("explicit|{}", explicit.to_ascii_lowercase())
-        } else {
-            format!("{}|{}", context.join("/"), normalize_text(&candidate.title))
-        };
-        let ordinal = duplicate_ordinals.entry(key.clone()).or_insert(0);
+        let key = duplicate_identity_key(
+            &source.project_id,
+            &source.relative_path,
+            &context,
+            candidate,
+        );
+        let ordinal = duplicate_ordinals.entry(key).or_insert(0);
         let current_ordinal = *ordinal;
         *ordinal += 1;
         let id = task_id(
@@ -1108,27 +1096,74 @@ fn task_id(
     candidate: &ParsedLineTask,
     ordinal: usize,
 ) -> String {
-    let identity = if let Some(explicit) = &candidate.explicit_id {
-        format!(
-            "{}|{}|explicit|{}|{ordinal}",
-            normalize_text(project),
-            normalize_path_identity(path),
-            normalize_text(explicit)
-        )
+    format!(
+        "m09task:{}",
+        hex_bytes(&identity_digest_bytes(
+            project,
+            path,
+            headings,
+            candidate,
+            Some(ordinal)
+        ))
+    )
+}
+fn duplicate_identity_key(
+    project: &str,
+    path: &str,
+    headings: &[String],
+    candidate: &ParsedLineTask,
+) -> [u8; 32] {
+    identity_digest_bytes(project, path, headings, candidate, None)
+}
+fn identity_digest_bytes(
+    project: &str,
+    path: &str,
+    headings: &[String],
+    candidate: &ParsedLineTask,
+    ordinal: Option<usize>,
+) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    update_normalized_text(&mut hasher, project);
+    hasher.update(b"|");
+    hasher.update(normalize_path_identity(path).as_bytes());
+    if let Some(explicit) = &candidate.explicit_id {
+        hasher.update(b"|explicit|");
+        update_normalized_text(&mut hasher, explicit);
     } else {
-        format!(
-            "{}|{}|{}|{}|{ordinal}",
-            normalize_text(project),
-            normalize_path_identity(path),
-            headings
-                .iter()
-                .map(|heading| normalize_text(heading))
-                .collect::<Vec<_>>()
-                .join("/"),
-            normalize_text(&candidate.title)
-        )
-    };
-    format!("m09task:{}", hash_bytes(identity.as_bytes()))
+        hasher.update(b"|");
+        for (index, heading) in headings.iter().enumerate() {
+            if index > 0 {
+                hasher.update(b"/");
+            }
+            update_normalized_text(&mut hasher, heading);
+        }
+        hasher.update(b"|");
+        update_normalized_text(&mut hasher, &candidate.title);
+    }
+    if let Some(ordinal) = ordinal {
+        hasher.update(b"|");
+        hasher.update(ordinal.to_string().as_bytes());
+    }
+    hasher.finalize().into()
+}
+fn update_normalized_text(hasher: &mut Sha256, value: &str) {
+    let mut first = true;
+    for token in value.split_whitespace() {
+        if !first {
+            hasher.update(b" ");
+        }
+        first = false;
+        for byte in token.bytes() {
+            hasher.update([if byte.is_ascii_uppercase() {
+                byte.to_ascii_lowercase()
+            } else {
+                byte
+            }]);
+        }
+    }
+}
+fn hex_bytes(bytes: &[u8; 32]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 fn normalize_path_identity(value: &str) -> String {
     let mut components = Vec::new();
@@ -1351,10 +1386,10 @@ mod tests {
             .find(|source| source.relative_path == "TASKS.md")
             .unwrap();
         fs::write(&target, "- [ ] changed\n").unwrap();
-        *RETRY_PATH_FAILPOINT
+        *RETRY_RELATIVE_PATH_FAILPOINT
             .get_or_init(|| Mutex::new(None))
             .lock()
-            .unwrap() = Some(target);
+            .unwrap() = Some("../outside.md".into());
         assert_eq!(
             read_authoritative_source(&db, &id, &source)
                 .unwrap_err()
@@ -1765,7 +1800,8 @@ mod tests {
     }
     #[test]
     fn p07_removed_task_and_source_reconcile_only_stale_m09_rows() {
-        let (_db_dir, dir, db, id) = fixture("- [ ] keep\n");
+        let (_db_dir, dir, db, id) =
+            fixture("- [ ] TASK-1: keep\n- [ ] TASK-2: child\n  Depends on: TASK-1\n");
         fs::write(dir.path().join("STALE.md"), "- [ ] remove\n").unwrap();
         task_sources::custom_path_add(
             &db,
@@ -1786,11 +1822,12 @@ mod tests {
         let legacy = db.open_connection().unwrap();
         legacy.execute("INSERT INTO task_sources (id, project_id, source_path, source_kind, locator, content_hash, discovered_at) VALUES ('legacy-source', ?1, 'legacy.md', 'LEGACY', 'legacy', 'legacy', 'now')", [&id]).unwrap();
         legacy.execute("INSERT INTO tasks (id, project_id, source_id, title, state, metadata_json, created_at, updated_at) VALUES ('legacy-task', ?1, 'legacy-source', 'Legacy', 'BACKLOG', '{\"legacy\":true}', 'now', 'now')", [&id]).unwrap();
+        legacy.execute("INSERT INTO settings (key, value_json, scope, created_at, updated_at) VALUES ('legacy-setting', '{\"keep\":true}', 'PROJECT', 'now', 'now')", []).unwrap();
         drop(legacy);
         task_sources::custom_path_remove(&db, &id, "STALE.md").unwrap();
         let after = parse(&db, &id).unwrap();
-        assert_eq!(after.tasks.len(), 1);
-        assert_eq!(after.tasks[0].title, "keep");
+        assert_eq!(after.tasks.len(), 2);
+        assert!(after.tasks.iter().any(|task| task.title == "keep"));
         let check = db.open_connection().unwrap();
         assert_eq!(check.query_row("SELECT COUNT(*) FROM task_sources WHERE id LIKE 'm09src:%' AND source_path='STALE.md'", [], |r| r.get::<_, i64>(0)).unwrap(), 0);
         assert_eq!(
@@ -1810,6 +1847,22 @@ mod tests {
                 .unwrap(),
             1
         );
+        assert_eq!(
+            check
+                .query_row("SELECT COUNT(*) FROM task_sources WHERE id LIKE 'm09src:%' AND source_path='TASKS.md'", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            check
+                .query_row("SELECT COUNT(*) FROM settings WHERE key='legacy-setting' AND value_json='{\"keep\":true}'", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            1
+        );
+        let (edge_count, distinct_edges): (i64, i64) = check
+            .query_row("SELECT COUNT(*), COUNT(DISTINCT task_id || '|' || depends_on_task_id) FROM task_dependencies WHERE dependency_kind='SOURCE_EXPLICIT'", [], |r| Ok((r.get(0)?, r.get(1)?)) )
+            .unwrap();
+        assert_eq!((edge_count, distinct_edges), (1, 1));
         assert_eq!(
             check
                 .query_row(
@@ -1867,6 +1920,87 @@ mod tests {
         assert_ne!(snapshot.tasks[0].source_path, snapshot.tasks[1].source_path);
         assert_ne!(snapshot.tasks[0].id, snapshot.tasks[1].id);
         assert_eq!(db.open_connection().unwrap().query_row("SELECT COUNT(*) FROM tasks WHERE project_id=?1 AND json_extract(metadata_json,'$.owner')=?2", params![id, OWNER], |r| r.get::<_, i64>(0)).unwrap(), 2);
+    }
+    #[test]
+    fn r02c_duplicate_identity_key_is_fixed_size_for_oversized_heading() {
+        let heading = "é".repeat(3000);
+        let headings = vec![heading.clone()];
+        let mut keys = HashSet::new();
+        for index in 0..64 {
+            let candidate = ParsedLineTask {
+                line: index + 1,
+                title: format!("task {index}"),
+                status: "OPEN".into(),
+                explicit_id: None,
+                checklist: true,
+            };
+            let key = duplicate_identity_key("project", "plans/tasks.md", &headings, &candidate);
+            assert_eq!(key.len(), 32);
+            assert!(!hex_bytes(&key).contains(&heading));
+            assert!(keys.insert(key));
+        }
+    }
+    #[test]
+    fn r02c_task_ids_remain_stable_after_identity_streaming_refactor() {
+        let (_db_dir, _dir, db, id) = fixture("# Work\n- [ ] stable\n- [ ] TASK-1: explicit\n");
+        let snapshot = parse(&db, &id).unwrap();
+        let fallback = snapshot
+            .tasks
+            .iter()
+            .find(|task| task.title == "stable")
+            .unwrap();
+        let explicit = snapshot
+            .tasks
+            .iter()
+            .find(|task| task.explicit_task_id.as_deref() == Some("TASK-1"))
+            .unwrap();
+        let fallback_identity = format!(
+            "{}|{}|{}|{}|0",
+            normalize_text(&id),
+            normalize_path_identity("TASKS.md"),
+            normalize_text("Work"),
+            normalize_text("stable")
+        );
+        let explicit_identity = format!(
+            "{}|{}|explicit|{}|0",
+            normalize_text(&id),
+            normalize_path_identity("TASKS.md"),
+            normalize_text("TASK-1")
+        );
+        assert_eq!(
+            fallback.id,
+            format!("m09task:{}", hash_bytes(fallback_identity.as_bytes()))
+        );
+        assert_eq!(
+            explicit.id,
+            format!("m09task:{}", hash_bytes(explicit_identity.as_bytes()))
+        );
+    }
+    #[test]
+    fn r02c_large_heading_many_tasks_remains_deterministic() {
+        let heading = "é".repeat(3000);
+        let body = format!(
+            "# {heading}\n{}",
+            (0..300)
+                .map(|index| format!("- [ ] task {index}\n"))
+                .collect::<String>()
+        );
+        let (_db_dir, _dir, db, id) = fixture(&body);
+        let first = parse(&db, &id).unwrap();
+        let second = parse(&db, &id).unwrap();
+        assert_eq!(first.tasks, second.tasks);
+        assert_eq!(first.warnings, second.warnings);
+        assert!(first
+            .tasks
+            .iter()
+            .all(
+                |task| task.milestone.as_ref().unwrap().len() <= MAX_FIELD_BYTES
+                    && task
+                        .evidence
+                        .heading_path
+                        .iter()
+                        .all(|part| part.len() <= MAX_FIELD_BYTES)
+            ));
     }
     #[test]
     fn r02_oversized_heading_is_bounded_without_snapshot_amplification() {

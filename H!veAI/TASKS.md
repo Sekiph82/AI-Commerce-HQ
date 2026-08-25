@@ -754,24 +754,33 @@ M08 PASS/CLOSED.
 - [x] M09A historical verdict = FAIL because R01/R02 remained.
 
 ### M09.18 - M09B bounded-identity micro-fix
-- [~] Add path-specific task identity normalization.
-- [~] Preserve meaningful repeated filename whitespace.
-- [~] Bound all source-derived persisted scalars.
-- [~] Add structured/deduplicated truncation evidence.
-- [~] Strengthen retry-containment evidence.
-- [~] Assert exact handoff merge order.
-- [~] Add real stale-source reconciliation evidence.
+- [x] Add path-specific task identity normalization.
+- [x] Preserve meaningful repeated filename whitespace.
+- [x] Bound all source-derived persisted scalars.
+- [x] Add structured/deduplicated truncation evidence.
+- [x] Strengthen retry-containment evidence.
+- [x] Assert exact handoff merge order.
+- [x] Add real stale-source reconciliation evidence.
 - [x] Record ScrubBots/FMCG convention status truthfully as UNVERIFIED.
 - [x] M09B implementation commit/log present.
-- [ ] Complete governed final publication/equality evidence if not already finalized by builder.
-- [ ] Independent strict M09B re-audit.
+- [x] Complete governed final publication/equality evidence.
+- [x] Independent strict M09B re-audit found residual R02C/E01C/E03C/E05 defects.
+
+### M09.19 - M09C final bounded identity micro-fix
+- [x] Replace raw duplicate-ordinal working keys with fixed-size digest keys.
+- [x] Stream task-ID identity hashing without giant formatted identity strings.
+- [x] Add direct R02C fixed-key/stability/determinism tests.
+- [x] Directly exercise refreshed retry containment rejection.
+- [x] Complete stale-source/settings/dependency SQL evidence.
+- [x] Run full regression, security, publisher, and final remote equality gates.
+- [ ] Independent strict M09C re-audit.
 
 ### M09.19 - M09 regression/publication closure
 - [~] Focused Rust parser tests green per current M09B builder evidence.
 - [~] Full Rust/frontend/typecheck/build/security gates green per builder evidence.
 - [~] Publisher failure harness green per builder evidence.
-- [ ] Independently verify final M09B branch/source truth.
-- [ ] Independently verify final publication/equality evidence.
+- [ ] Independently verify final M09C branch/source truth.
+- [ ] Independently verify final M09C publication/equality evidence.
 - [ ] Final M09 audit verdict.
 - [ ] Mark M09 PASS/CLOSED only if no BLOCKER/MAJOR remains.
 - [ ] Unlock M10 only after independent closure.
@@ -1457,7 +1466,7 @@ M20 PLANNED/BLOCKED until M19 and final hardening gates.
 # Milestone policy
 
 - M00-M08 are PASS/CLOSED.
-- M09 remains active until independent M09B re-audit/final closure.
+- M09 remains active until independent M09C re-audit/final closure.
 - M10 remains blocked until M09 and the queued pre-M10 native UX hotfix are closed.
 - M11-M20 remain planned and must not be treated as implemented because their roadmap entries are detailed.
 - Each future milestone should be executed as one bounded milestone unless an actual independent audit requires a remediation prompt.
