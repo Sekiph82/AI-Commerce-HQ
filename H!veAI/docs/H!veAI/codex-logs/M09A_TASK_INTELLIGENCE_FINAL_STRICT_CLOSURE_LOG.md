@@ -107,10 +107,9 @@ No visible UI production files, route layout, Command Center, startup intro, Git
 ## Commit and remote evidence
 
 - Starting HEAD: `247dd6707d7cb721a0909bcc2966e401e59c842b`.
-- Implementation commit: `20ed5a3` before this evidence-only amend.
-- Final local HEAD before this final log-record commit: `a7c228b5a4d72f844e23e756ff48c27d3f0d4164`.
-- Final `origin/H!veAI` HEAD: recorded after push below.
-- Local/origin equality: recorded after push below.
+- Implementation commit: `a7c228b5a4d72f844e23e756ff48c27d3f0d4164`.
+- Final local/origin equality was verified at `688898d0c67cb52616baa6587d248e446aef45f9` before this final log-record commit.
+- Final log-record commit is pushed after that equality verification.
 - Changed tracked files: `H!veAI/TASKS.md`, `H!veAI/src-tauri/src/task_intelligence.rs`, and this new log.
 - Historical M00-M09 logs remain unchanged.
 
