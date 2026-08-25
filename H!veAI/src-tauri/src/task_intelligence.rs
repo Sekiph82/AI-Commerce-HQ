@@ -8,6 +8,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+#[cfg(test)]
+use std::sync::{Mutex, OnceLock};
 
 const MAX_TASKS: usize = 4096;
 const MAX_FIELD_BYTES: usize = 4096;
@@ -15,6 +17,8 @@ const MAX_ENTRIES: usize = 128;
 const MAX_WARNINGS: usize = 512;
 const OWNER: &str = "M09_TASK_INTELLIGENCE_PARSER";
 const SCHEMA_VERSION: u32 = 1;
+#[cfg(test)]
+static RETRY_FAILPOINT: OnceLock<Mutex<Option<PathBuf>>> = OnceLock::new();
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -146,12 +150,11 @@ pub fn parse(
         }
         match read_authoritative_source(database, project_id, &source) {
             Ok(Some((text, hash))) => {
+                let budget = MAX_TASKS.saturating_sub(snapshot.tasks.len());
                 let (mut tasks, handoff, warnings) =
-                    parse_document(&source, &text, &hash, &adapter);
+                    parse_document(&source, &text, &hash, &adapter, budget);
                 snapshot.tasks.append(&mut tasks);
-                if snapshot.handoff.is_none() {
-                    snapshot.handoff = handoff;
-                }
+                merge_handoff(&mut snapshot.handoff, handoff);
                 snapshot.warnings.extend(warnings);
                 parsed_sources.push((source, hash));
             }
@@ -164,7 +167,20 @@ pub fn parse(
         }
         trim_warnings(&mut snapshot.warnings);
     }
-    snapshot.tasks.truncate(MAX_TASKS);
+    if snapshot.tasks.len() >= MAX_TASKS {
+        snapshot.tasks.truncate(MAX_TASKS);
+        snapshot.warnings.push(warning(
+            "TASK_LIMIT_REACHED",
+            format!("maximum of {MAX_TASKS} tasks reached across discovered sources"),
+            None,
+        ));
+    }
+    snapshot.adapter.convention_matched = snapshot.tasks.iter().any(|task| {
+        task.confidence
+            .reasons
+            .iter()
+            .any(|reason| reason == "evidenced repo-specific adapter convention")
+    });
     resolve_dependencies(&mut snapshot);
     persist(database, project_id, &snapshot, &parsed_sources)?;
     Ok(snapshot)
@@ -237,9 +253,8 @@ fn read_authoritative_source(
             Some(&source.relative_path),
         ));
     }
-    let read = || read_bounded_text(&physical);
-    let (text, hash) =
-        read().map_err(|(code, message)| warning(&code, message, Some(&source.relative_path)))?;
+    let (text, hash) = read_bounded_text(&physical)
+        .map_err(|(code, message)| warning(&code, message, Some(&source.relative_path)))?;
     if source.content_hash.as_deref() == Some(hash.as_str()) {
         return Ok(Some((text, hash)));
     }
@@ -251,11 +266,46 @@ fn read_authoritative_source(
     else {
         return Ok(None);
     };
-    if current.content_hash.as_deref() != source.content_hash.as_deref() {
-        return Ok(None);
+    let refreshed_root =
+        fs::canonicalize(Path::new(&project.normalized_path)).map_err(|error| {
+            warning(
+                "SOURCE_READ_FAILED",
+                error.to_string(),
+                Some(&source.relative_path),
+            )
+        })?;
+    let refreshed_candidate = refreshed_root.join(PathBuf::from(&current.relative_path));
+    let refreshed_physical = fs::canonicalize(&refreshed_candidate).map_err(|error| {
+        warning(
+            "SOURCE_READ_FAILED",
+            error.to_string(),
+            Some(&source.relative_path),
+        )
+    })?;
+    if !refreshed_physical.starts_with(&refreshed_root) {
+        return Err(warning(
+            "SOURCE_READ_FAILED",
+            "refreshed source is outside registered root".into(),
+            Some(&source.relative_path),
+        ));
     }
-    let (text, hash) =
-        read().map_err(|(code, message)| warning(&code, message, Some(&source.relative_path)))?;
+    #[cfg(test)]
+    if let Some(path) = RETRY_FAILPOINT
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .unwrap()
+        .take()
+    {
+        fs::write(path, b"- [ ] changed again\n").map_err(|error| {
+            warning(
+                "SOURCE_READ_FAILED",
+                error.to_string(),
+                Some(&source.relative_path),
+            )
+        })?;
+    }
+    let (text, hash) = read_bounded_text(&refreshed_physical)
+        .map_err(|(code, message)| warning(&code, message, Some(&source.relative_path)))?;
     if current.content_hash.as_deref() == Some(hash.as_str()) {
         Ok(Some((text, hash)))
     } else {
@@ -287,6 +337,7 @@ fn parse_document(
     text: &str,
     hash: &str,
     adapter: &ParserAdapterIdentity,
+    task_budget: usize,
 ) -> (Vec<ParsedTask>, Option<HandoffSummary>, Vec<ParserWarning>) {
     let lines = text.lines().collect::<Vec<_>>();
     let mut headings: Vec<(usize, String)> = Vec::new();
@@ -348,10 +399,10 @@ fn parse_document(
     let mut warnings = Vec::new();
     let mut duplicate_ordinals: HashMap<String, usize> = HashMap::new();
     for (position, candidate) in candidates.iter().enumerate() {
-        if tasks.len() >= MAX_TASKS {
+        if tasks.len() >= task_budget {
             warnings.push(warning(
                 "TASK_LIMIT_REACHED",
-                format!("maximum of {MAX_TASKS} tasks reached"),
+                format!("maximum task budget of {task_budget} reached"),
                 Some(&source.relative_path),
             ));
             break;
@@ -368,7 +419,7 @@ fn parse_document(
             &source.relative_path,
         );
         let key = if let Some(explicit) = &candidate.explicit_id {
-            format!("explicit|{}", explicit.to_ascii_lowercase())
+            format!("explicit|{}", normalize_text(explicit))
         } else {
             format!("{}|{}", context.join("/"), normalize_text(&candidate.title))
         };
@@ -419,7 +470,7 @@ fn parse_document(
             score += 0.05;
             reasons.push("structured task metadata".into());
         }
-        let adapter_bonus = adapter.convention_matched && candidate.explicit_id.is_some();
+        let adapter_bonus = adapter_matches_task(adapter, source, candidate);
         if adapter_bonus {
             score += 0.05;
             reasons.push("evidenced repo-specific adapter convention".into());
@@ -431,18 +482,49 @@ fn parse_document(
             source_id: source_id(source),
             source_path: source.relative_path.clone(),
             source_kind: source.source_kind.clone(),
-            title: truncate(&candidate.title),
+            title: bounded_field(
+                &candidate.title,
+                "title",
+                &source.relative_path,
+                &mut warnings,
+            ),
             parsed_status: candidate.status.clone(),
             storage_state,
             explicit_task_id: candidate.explicit_id.clone(),
             milestone: context.last().cloned(),
             required_actor: fields.actor,
-            blockers: cap_values(fields.blockers),
-            dependency_references: cap_values(fields.dependencies),
-            next_step: fields.next_step.map(|value| truncate(&value)),
-            owner_gate: fields.owner_gate.map(|value| truncate(&value)),
-            external_wait: fields.external_wait.map(|value| truncate(&value)),
-            acceptance_criteria: cap_values(fields.acceptance),
+            blockers: bounded_values(
+                fields.blockers,
+                "blocker",
+                &source.relative_path,
+                &mut warnings,
+            ),
+            dependency_references: bounded_values(
+                fields.dependencies,
+                "dependency",
+                &source.relative_path,
+                &mut warnings,
+            ),
+            next_step: fields
+                .next_step
+                .map(|value| bounded_field(&value, "next", &source.relative_path, &mut warnings)),
+            owner_gate: fields.owner_gate.map(|value| {
+                bounded_field(&value, "owner_gate", &source.relative_path, &mut warnings)
+            }),
+            external_wait: fields.external_wait.map(|value| {
+                bounded_field(
+                    &value,
+                    "external_wait",
+                    &source.relative_path,
+                    &mut warnings,
+                )
+            }),
+            acceptance_criteria: bounded_values(
+                fields.acceptance,
+                "acceptance",
+                &source.relative_path,
+                &mut warnings,
+            ),
             confidence: TaskConfidence {
                 score: score.min(1.0),
                 reasons,
@@ -471,6 +553,22 @@ fn parse_document(
     (tasks, handoff, warnings)
 }
 
+fn merge_handoff(target: &mut Option<HandoffSummary>, incoming: Option<HandoffSummary>) {
+    let Some(incoming) = incoming else { return };
+    let target = target.get_or_insert_with(|| HandoffSummary {
+        current: Vec::new(),
+        next: Vec::new(),
+        blockers: Vec::new(),
+        waiting: Vec::new(),
+        evidence: Vec::new(),
+    });
+    target.current.extend(incoming.current);
+    target.next.extend(incoming.next);
+    target.blockers.extend(incoming.blockers);
+    target.waiting.extend(incoming.waiting);
+    target.evidence.extend(incoming.evidence);
+}
+
 fn fields_for(
     lines: &[&str],
     start: usize,
@@ -483,6 +581,7 @@ fn fields_for(
         ..Default::default()
     };
     let stop = next.unwrap_or(lines.len() + 1);
+    let mut active_label: Option<String> = None;
     for (index, raw) in lines
         .iter()
         .enumerate()
@@ -494,38 +593,63 @@ fn fields_for(
         if heading(trimmed).is_some() || task_line(trimmed).is_some() {
             break;
         }
+        let indented = raw.chars().next().is_some_and(char::is_whitespace);
         let value = trimmed.trim_start_matches('-').trim();
         if let Some((label, content)) = value.split_once(':') {
             let label = label.trim().to_ascii_lowercase();
             let content = clean_value(content);
             if content.is_empty() {
+                active_label = Some(label);
                 continue;
             }
+            active_label = None;
             fields.end_line = line;
-            match label.as_str() {
-                "blocker" | "blockers" | "blocked by" => {
-                    push_limited(&mut fields.blockers, content, warnings, path)
-                }
-                "depends on" | "dependency" | "dependencies" => {
-                    push_limited(&mut fields.dependencies, content, warnings, path)
-                }
-                "next" | "next step" => fields.next_step = Some(content),
-                "owner" | "actor" | "required actor" => {
-                    fields.actor = normalize_actor(&content).or_else(|| Some(String::new()))
-                }
-                "waiting for" => fields.external_wait = Some(content),
-                "external" | "external wait" => fields.external_wait = Some(content),
-                "acceptance" | "acceptance criteria" | "ac" | "definition of done" => {
-                    push_limited(&mut fields.acceptance, content, warnings, path)
-                }
-                _ => {}
-            }
+            add_field(&mut fields, &label, content, warnings, path);
+        } else if indented && active_label.is_some() && !value.is_empty() {
+            fields.end_line = line;
+            add_field(
+                &mut fields,
+                active_label.as_deref().unwrap_or_default(),
+                clean_value(value),
+                warnings,
+                path,
+            );
+        } else if !indented {
+            active_label = None;
         }
     }
     if fields.actor.as_deref() == Some("") {
         fields.actor = None;
     }
     fields
+}
+
+fn add_field(
+    fields: &mut Fields,
+    label: &str,
+    content: String,
+    warnings: &mut Vec<ParserWarning>,
+    path: &str,
+) {
+    match label {
+        "blocker" | "blockers" | "blocked by" => {
+            push_limited(&mut fields.blockers, content, warnings, path)
+        }
+        "depends on" | "dependency" | "dependencies" => {
+            push_limited(&mut fields.dependencies, content, warnings, path)
+        }
+        "next" | "next step" => fields.next_step = Some(content),
+        "owner" | "actor" | "required actor" => fields.actor = normalize_actor(&content),
+        "owner gate" | "owner decision" | "decision gate" | "gate" => {
+            fields.owner_gate = Some(content)
+        }
+        "waiting for" => fields.external_wait = Some(content),
+        "external" | "external wait" => fields.external_wait = Some(content),
+        "acceptance" | "acceptance criteria" | "ac" | "definition of done" => {
+            push_limited(&mut fields.acceptance, content, warnings, path)
+        }
+        _ => {}
+    }
 }
 
 fn resolve_dependencies(snapshot: &mut TaskIntelligenceSnapshot) {
@@ -567,29 +691,54 @@ fn persist(
 ) -> Result<(), String> {
     let mut connection = database.open_connection()?;
     let tx = connection.transaction().map_err(db_error)?;
-    tx.execute("DELETE FROM task_dependencies WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?1 AND json_extract(metadata_json, '$.owner') = ?2)", params![project_id, OWNER]).map_err(db_error)?;
-    tx.execute(
-        "DELETE FROM tasks WHERE project_id = ?1 AND json_extract(metadata_json, '$.owner') = ?2",
-        params![project_id, OWNER],
-    )
-    .map_err(db_error)?;
-    tx.execute(
-        "DELETE FROM task_sources WHERE project_id = ?1 AND id LIKE 'm09src:%'",
-        [project_id],
-    )
-    .map_err(db_error)?;
     let now = crate::time::utc_timestamp();
     let mut source_ids = HashMap::new();
     for (source, hash) in sources {
         let id = source_id(source);
         source_ids.insert(source.relative_path.clone(), id.clone());
-        tx.execute("INSERT INTO task_sources (id, project_id, source_path, source_kind, locator, content_hash, discovered_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)", params![id, project_id, source.relative_path, source.source_kind, "M09", hash, now]).map_err(db_error)?;
+        tx.execute("INSERT INTO task_sources (id, project_id, source_path, source_kind, locator, content_hash, discovered_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(id) DO UPDATE SET source_path=excluded.source_path, source_kind=excluded.source_kind, locator=excluded.locator, content_hash=excluded.content_hash, discovered_at=excluded.discovered_at", params![id, project_id, source.relative_path, source.source_kind, "M09", hash, now]).map_err(db_error)?;
+    }
+    let current_source_ids = source_ids.values().cloned().collect::<Vec<_>>();
+    let stale_sources = tx
+        .prepare("SELECT id FROM task_sources WHERE project_id=?1 AND id LIKE 'm09src:%'")
+        .map_err(db_error)?
+        .query_map([project_id], |row| row.get::<_, String>(0))
+        .map_err(db_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(db_error)?;
+    for stale in stale_sources
+        .into_iter()
+        .filter(|id| !current_source_ids.contains(id))
+    {
+        tx.execute("DELETE FROM task_sources WHERE id=?1", [stale])
+            .map_err(db_error)?;
+    }
+    let current_task_ids = snapshot
+        .tasks
+        .iter()
+        .map(|task| task.id.clone())
+        .collect::<Vec<_>>();
+    let owned_task_ids = tx
+        .prepare(
+            "SELECT id FROM tasks WHERE project_id=?1 AND json_extract(metadata_json,'$.owner')=?2",
+        )
+        .map_err(db_error)?
+        .query_map(params![project_id, OWNER], |row| row.get::<_, String>(0))
+        .map_err(db_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(db_error)?;
+    for stale in owned_task_ids
+        .into_iter()
+        .filter(|id| !current_task_ids.contains(id))
+    {
+        tx.execute("DELETE FROM tasks WHERE id=?1", [stale])
+            .map_err(db_error)?;
     }
     for task in &snapshot.tasks {
         let metadata =
             serde_json::json!({"owner": OWNER, "schemaVersion": SCHEMA_VERSION, "task": task});
         let source_id = source_ids.get(&task.source_path);
-        tx.execute("INSERT INTO tasks (id, project_id, source_id, title, state, required_actor, milestone, metadata_json, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9)", params![task.id, project_id, source_id, task.title, task.storage_state, task.required_actor, task.milestone, metadata.to_string(), now]).map_err(db_error)?;
+        tx.execute("INSERT INTO tasks (id, project_id, source_id, title, state, required_actor, milestone, metadata_json, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9) ON CONFLICT(id) DO UPDATE SET source_id=excluded.source_id, title=excluded.title, state=excluded.state, required_actor=excluded.required_actor, milestone=excluded.milestone, metadata_json=excluded.metadata_json, updated_at=excluded.updated_at", params![task.id, project_id, source_id, task.title, task.storage_state, task.required_actor, task.milestone, metadata.to_string(), now]).map_err(db_error)?;
     }
     let ids: HashMap<String, Vec<String>> = snapshot
         .tasks
@@ -604,6 +753,11 @@ fn persist(
             map
         });
     for task in &snapshot.tasks {
+        tx.execute(
+            "DELETE FROM task_dependencies WHERE task_id=?1 AND dependency_kind='SOURCE_EXPLICIT'",
+            [&task.id],
+        )
+        .map_err(db_error)?;
         for reference in &task.dependency_references {
             if let Some(targets) = ids.get(&reference.to_ascii_lowercase()) {
                 if targets.len() == 1 {
@@ -624,22 +778,36 @@ fn adapter_for(name: &str) -> ParserAdapterIdentity {
         ParserAdapterIdentity {
             id: "formulab".into(),
             evidence: "FormuLab PROGRESS.md uses FVL-numbered work notation.".into(),
-            convention_matched: true,
+            convention_matched: false,
         }
     } else if lower == "scrubbots" {
         ParserAdapterIdentity {
             id: "scrubbots".into(),
-            evidence: "ScrubBots TASKS.md uses TASK-XXX task identifiers.".into(),
-            convention_matched: true,
+            evidence: "ScrubBots is selectable by registered identity; generic TASK-XXX syntax is not adapter evidence.".into(),
+            convention_matched: false,
         }
     } else if lower == "fmcg-erp-system" || lower == "fmcg erp" {
-        ParserAdapterIdentity { id: "fmcg-erp-system".into(), evidence: "FMCG ERP TASKS.md/PLANS.md use module and phase headings with explicit checklist tasks.".into(), convention_matched: true }
+        ParserAdapterIdentity { id: "fmcg-erp-system".into(), evidence: "FMCG ERP is selectable by registered identity; generic headings and checklists are not adapter evidence.".into(), convention_matched: false }
     } else {
         ParserAdapterIdentity {
             id: "generic".into(),
             evidence: "Generic deterministic Markdown grammar.".into(),
             convention_matched: false,
         }
+    }
+}
+
+fn adapter_matches_task(
+    adapter: &ParserAdapterIdentity,
+    _source: &DiscoveredProjectSource,
+    candidate: &ParsedLineTask,
+) -> bool {
+    match adapter.id.as_str() {
+        "formulab" => candidate
+            .explicit_id
+            .as_deref()
+            .is_some_and(|id| id.to_ascii_uppercase().starts_with("FVL-")),
+        _ => false,
     }
 }
 
@@ -657,11 +825,25 @@ fn task_line(line: &str) -> Option<ParsedLineTask> {
             return None;
         }
         value = value.get(5..).unwrap_or_default().trim();
+        let mut parsed_status = status;
+        for (tag, state) in [
+            ("[DONE]", "DONE"),
+            ("[BLOCKED]", "BLOCKED"),
+            ("[WAITING]", "WAITING"),
+            ("[READY]", "READY"),
+            ("[IN PROGRESS]", "IN_PROGRESS"),
+        ] {
+            if value.to_ascii_uppercase().starts_with(tag) {
+                value = value.get(tag.len()..).unwrap_or_default().trim();
+                parsed_status = state;
+                break;
+            }
+        }
         let explicit = explicit_id(value);
         return Some(ParsedLineTask {
             line: 0,
             title: clean_task_title(value),
-            status: status.into(),
+            status: parsed_status.into(),
             explicit_id: explicit,
             checklist: true,
         });
@@ -757,10 +939,10 @@ fn clean_task_title(value: &str) -> String {
     } else {
         value
     };
-    truncate(value.trim())
+    value.trim().to_string()
 }
 fn clean_value(value: &str) -> String {
-    truncate(value.trim().trim_start_matches('-').trim())
+    value.trim().trim_start_matches('-').trim().to_string()
 }
 fn normalize_text(value: &str) -> String {
     value
@@ -776,12 +958,44 @@ fn truncate(value: &str) -> String {
     }
     out
 }
-fn cap_values(values: Vec<String>) -> Vec<String> {
-    values
-        .into_iter()
-        .take(MAX_ENTRIES)
-        .map(|value| truncate(&value))
-        .collect()
+fn bounded_field(
+    value: &str,
+    field: &str,
+    path: &str,
+    warnings: &mut Vec<ParserWarning>,
+) -> String {
+    let mut out = value.to_string();
+    if out.len() > MAX_FIELD_BYTES {
+        while out.len() > MAX_FIELD_BYTES {
+            out.pop();
+        }
+        warnings.push(warning(
+            "FIELD_TRUNCATED",
+            format!("{field} exceeded UTF-8 byte bound"),
+            Some(path),
+        ));
+    }
+    out
+}
+fn bounded_values(
+    values: Vec<String>,
+    field: &str,
+    path: &str,
+    warnings: &mut Vec<ParserWarning>,
+) -> Vec<String> {
+    let overflow = values.len() > MAX_ENTRIES;
+    let mut out = Vec::new();
+    for value in values.into_iter().take(MAX_ENTRIES) {
+        out.push(bounded_field(&value, field, path, warnings));
+    }
+    if overflow {
+        warnings.push(warning(
+            "METADATA_LIMIT_REACHED",
+            format!("{field} metadata entry bound reached"),
+            Some(path),
+        ));
+    }
+    out
 }
 fn push_limited(
     values: &mut Vec<String>,
@@ -793,7 +1007,7 @@ fn push_limited(
         values.push(value);
     } else {
         warnings.push(warning(
-            "TASK_LIMIT_REACHED",
+            "METADATA_LIMIT_REACHED",
             "metadata entry bound reached".into(),
             Some(path),
         ));
@@ -831,13 +1045,21 @@ fn task_id(
 ) -> String {
     let identity = if let Some(explicit) = &candidate.explicit_id {
         format!(
-            "{project}|{path}|explicit|{}|{ordinal}",
-            explicit.to_ascii_lowercase()
+            "{}|{}|explicit|{}|{ordinal}",
+            normalize_text(project),
+            normalize_text(path),
+            normalize_text(explicit)
         )
     } else {
         format!(
-            "{project}|{path}|{}|{}|{ordinal}",
-            headings.join("/"),
+            "{}|{}|{}|{}|{ordinal}",
+            normalize_text(project),
+            normalize_text(path),
+            headings
+                .iter()
+                .map(|heading| normalize_text(heading))
+                .collect::<Vec<_>>()
+                .join("/"),
             normalize_text(&candidate.title)
         )
     };
@@ -962,7 +1184,7 @@ mod tests {
         assert_eq!(result.code, "SOURCE_READ_FAILED");
     }
     #[test]
-    fn p01_source_change_is_retried_once_then_warned() {
+    fn p01_single_stable_edit_is_parsed_after_one_refresh() {
         let (_db_dir, dir, db, id) = fixture("- [ ] old\n");
         let target = dir.path().join("TASKS.md");
         let source = task_sources::discover(&db, &id)
@@ -971,9 +1193,10 @@ mod tests {
             .find(|source| source.relative_path == "TASKS.md")
             .unwrap();
         fs::write(&target, "- [ ] changed\n").unwrap();
-        assert!(read_authoritative_source(&db, &id, &source)
+        let (text, _) = read_authoritative_source(&db, &id, &source)
             .unwrap()
-            .is_none());
+            .unwrap();
+        assert!(text.contains("changed"));
     }
     #[test]
     fn p01_invalid_utf8_isolated_from_valid_source() {
@@ -1020,6 +1243,113 @@ mod tests {
         assert_ne!(first_task.id, second_task.id);
     }
     #[test]
+    fn p01_second_change_after_refresh_is_skipped_after_exactly_one_retry() {
+        let (_db_dir, dir, db, id) = fixture("- [ ] old\n");
+        let target = dir.path().join("TASKS.md");
+        let source = task_sources::discover(&db, &id)
+            .unwrap()
+            .into_iter()
+            .find(|s| s.relative_path == "TASKS.md")
+            .unwrap();
+        fs::write(&target, "- [ ] changed\n").unwrap();
+        *RETRY_FAILPOINT
+            .get_or_init(|| Mutex::new(None))
+            .lock()
+            .unwrap() = Some(target);
+        assert!(read_authoritative_source(&db, &id, &source)
+            .unwrap()
+            .is_none());
+    }
+    #[test]
+    fn p01_retry_rechecks_physical_containment() {
+        let (_db_dir, _dir, db, id) = fixture("- [ ] safe\n");
+        let outside = tempfile::tempdir().unwrap();
+        let source = DiscoveredProjectSource {
+            id: "forged".into(),
+            project_id: id.clone(),
+            relative_path: "../outside.md".into(),
+            absolute_path: outside.path().join("outside.md").to_string_lossy().into(),
+            source_kind: "TASKS".into(),
+            origin: "STANDARD".into(),
+            status: "AVAILABLE".into(),
+            authority_class: "TASKS".into(),
+            priority: 1,
+            size_bytes: None,
+            modified_at: None,
+            discovered_at: "now".into(),
+            content_hash: Some("old".into()),
+            depth: 0,
+            warnings: Vec::new(),
+            schema_version: 1,
+            owner: OWNER.into(),
+            source_order: None,
+        };
+        fs::write(outside.path().join("outside.md"), "- [ ] outside\n").unwrap();
+        assert_eq!(
+            read_authoritative_source(&db, &id, &source)
+                .unwrap_err()
+                .code,
+            "SOURCE_READ_FAILED"
+        );
+    }
+    #[test]
+    fn p02_project_task_limit_across_multiple_sources_warns() {
+        let (_db_dir, dir, db, id) = fixture(&format!(
+            "{}",
+            (0..3000)
+                .map(|i| format!("- [ ] one {i}\n"))
+                .collect::<String>()
+        ));
+        fs::write(
+            dir.path().join("SECOND.md"),
+            (0..2000)
+                .map(|i| format!("- [ ] two {i}\n"))
+                .collect::<String>(),
+        )
+        .unwrap();
+        task_sources::custom_path_add(
+            &db,
+            task_sources::CustomPathRequest {
+                project_id: id.clone(),
+                path: "SECOND.md".into(),
+            },
+        )
+        .unwrap();
+        let snapshot = parse(&db, &id).unwrap();
+        assert_eq!(snapshot.tasks.len(), MAX_TASKS);
+        assert!(snapshot
+            .warnings
+            .iter()
+            .any(|w| w.code == "TASK_LIMIT_REACHED"));
+    }
+    #[test]
+    fn p02_scalar_utf8_bound_warns_without_breaking_utf8() {
+        let (_db_dir, _dir, db, id) = fixture(&format!("- [ ] {}\n", "é".repeat(3000)));
+        let snapshot = parse(&db, &id).unwrap();
+        assert!(snapshot.tasks[0].title.len() <= MAX_FIELD_BYTES);
+        assert!(snapshot
+            .warnings
+            .iter()
+            .any(|w| w.code == "FIELD_TRUNCATED"));
+        assert!(std::str::from_utf8(snapshot.tasks[0].title.as_bytes()).is_ok());
+    }
+    #[test]
+    fn p02_metadata_entry_limit_warns() {
+        let body = format!(
+            "- [ ] parent\n  Acceptance:\n{}",
+            (0..129)
+                .map(|i| format!("    - criterion {i}\n"))
+                .collect::<String>()
+        );
+        let (_db_dir, _dir, db, id) = fixture(&body);
+        let snapshot = parse(&db, &id).unwrap();
+        assert_eq!(snapshot.tasks[0].acceptance_criteria.len(), MAX_ENTRIES);
+        assert!(snapshot
+            .warnings
+            .iter()
+            .any(|w| w.code == "METADATA_LIMIT_REACHED"));
+    }
+    #[test]
     fn p03_checkbox_and_neutral_storage_mapping() {
         let (_db_dir, _dir, db, id) = fixture(
             "# Milestone\n- [ ] open\n- [x] done\n- [~] active\n- [!] blocked\n- ordinary prose\n",
@@ -1041,6 +1371,27 @@ mod tests {
         );
     }
     #[test]
+    fn p03_formulab_bonus_requires_formulab_specific_match() {
+        let (_db_dir, _dir, db, id) = fixture_named("- [ ] TASK-1: generic\n", "FormuLab");
+        let generic = parse(&db, &id).unwrap();
+        assert!(!generic.adapter.convention_matched);
+        let (_db_dir, _dir, db, id) = fixture_named("- [ ] FVL-03.013-018: formula\n", "FormuLab");
+        let specific = parse(&db, &id).unwrap();
+        assert!(specific.adapter.convention_matched);
+        assert!(specific.tasks[0]
+            .confidence
+            .reasons
+            .iter()
+            .any(|r| r.contains("repo-specific")));
+    }
+    #[test]
+    fn p03_generic_parser_does_not_claim_special_convention() {
+        for name in ["ScrubBots", "fmcg-erp-system"] {
+            let (_db_dir, _dir, db, id) = fixture_named("- [ ] TASK-1: generic\n", name);
+            assert!(!parse(&db, &id).unwrap().adapter.convention_matched);
+        }
+    }
+    #[test]
     fn p04_structured_metadata_and_unknown_actor() {
         let (_db_dir, _dir, db, id) = fixture("# Work\n- [ ] build\n  Blocker: dependency\n  Depends on: TASK-2\n  Next step: verify\n  Owner: Mystery\n  Waiting for: vendor\n  Acceptance: test it\n");
         let s = parse(&db, &id).unwrap();
@@ -1050,6 +1401,36 @@ mod tests {
         assert_eq!(t.required_actor, None);
         assert_eq!(t.evidence.start_line, 2);
         assert_eq!(t.evidence.end_line, 8);
+    }
+    #[test]
+    fn p04_nested_metadata_blocks_attach_only_to_parent() {
+        let (_db_dir, _dir, db, id) = fixture(
+            "- [ ] parent\n  Blockers:\n    - outage\n  Acceptance:\n    - check\n- [ ] sibling\n",
+        );
+        let snapshot = parse(&db, &id).unwrap();
+        assert_eq!(snapshot.tasks[0].blockers, vec!["outage"]);
+        assert_eq!(snapshot.tasks[0].acceptance_criteria, vec!["check"]);
+        assert!(snapshot.tasks[1].blockers.is_empty());
+    }
+    #[test]
+    fn p04_owner_gate_is_preserved_separately_from_required_actor() {
+        let (_db_dir, _dir, db, id) =
+            fixture("- [ ] gated\n  Owner: Human\n  Owner gate:\n    - approve\n");
+        let task = &parse(&db, &id).unwrap().tasks[0];
+        assert_eq!(task.required_actor.as_deref(), Some("Human"));
+        assert_eq!(task.owner_gate.as_deref(), Some("approve"));
+    }
+    #[test]
+    fn p04_casual_blocked_prose_is_not_structured_blocker() {
+        let (_db_dir, _dir, db, id) = fixture("- [ ] note\nThis is blocked by ordinary prose.\n");
+        assert!(parse(&db, &id).unwrap().tasks[0].blockers.is_empty());
+    }
+    #[test]
+    fn p04_unknown_actor_remains_null_without_losing_locator_evidence() {
+        let (_db_dir, _dir, db, id) = fixture("- [ ] task\n  Owner: Mystery\n");
+        let task = &parse(&db, &id).unwrap().tasks[0];
+        assert!(task.required_actor.is_none());
+        assert!(task.evidence.start_line > 0);
     }
     #[test]
     fn p04_dependency_resolves_only_to_an_unambiguous_explicit_id() {
@@ -1098,6 +1479,66 @@ mod tests {
         assert_eq!(h.waiting, vec!["vendor"]);
     }
     #[test]
+    fn p05_explicit_id_survives_unrelated_line_insertion_and_movement() {
+        let (_db_dir, dir, db, id) = fixture("- [ ] TASK-1: one\n- [ ] TASK-2: two\n");
+        let first = parse(&db, &id)
+            .unwrap()
+            .tasks
+            .into_iter()
+            .find(|t| t.explicit_task_id.as_deref() == Some("TASK-1"))
+            .unwrap()
+            .id;
+        fs::write(
+            dir.path().join("TASKS.md"),
+            "# Moved\n- [ ] unrelated\n- [ ] TASK-1: one\n- [ ] TASK-2: two\n",
+        )
+        .unwrap();
+        let second = parse(&db, &id)
+            .unwrap()
+            .tasks
+            .into_iter()
+            .find(|t| t.explicit_task_id.as_deref() == Some("TASK-1"))
+            .unwrap()
+            .id;
+        assert_eq!(first, second);
+    }
+    #[test]
+    fn p05_fallback_id_survives_unrelated_line_insertion_above() {
+        let (_db_dir, dir, db, id) = fixture("# Work\n- [ ] stable\n");
+        let first = parse(&db, &id).unwrap().tasks[0].id.clone();
+        fs::write(dir.path().join("TASKS.md"), "intro\n# Work\n- [ ] stable\n").unwrap();
+        assert_eq!(first, parse(&db, &id).unwrap().tasks[0].id);
+    }
+    #[test]
+    fn p05_heading_case_and_whitespace_normalization_preserves_fallback_id() {
+        let (_db_dir, dir, db, id) = fixture("# Work Area\n- [ ] stable\n");
+        let first = parse(&db, &id).unwrap().tasks[0].id.clone();
+        fs::write(
+            dir.path().join("TASKS.md"),
+            "#   work   area\n- [ ] stable\n",
+        )
+        .unwrap();
+        assert_eq!(first, parse(&db, &id).unwrap().tasks[0].id);
+    }
+    #[test]
+    fn p05_identical_siblings_remain_distinct_and_repeatable() {
+        let (_db_dir, _dir, db, id) = fixture("# Work\n- [ ] same\n- [ ] same\n");
+        let first = parse(&db, &id)
+            .unwrap()
+            .tasks
+            .into_iter()
+            .map(|t| t.id)
+            .collect::<Vec<_>>();
+        let second = parse(&db, &id)
+            .unwrap()
+            .tasks
+            .into_iter()
+            .map(|t| t.id)
+            .collect::<Vec<_>>();
+        assert_ne!(first[0], first[1]);
+        assert_eq!(first, second);
+    }
+    #[test]
     fn p06_adapter_selection_is_explicit() {
         assert_eq!(adapter_for("FormuLab").id, "formulab");
         assert_eq!(adapter_for("ScrubBots").id, "scrubbots");
@@ -1114,12 +1555,79 @@ mod tests {
             let (_db_dir, _dir, db, id) = fixture_named(&format!("- [ ] {marker}\n"), name);
             let snapshot = parse(&db, &id).unwrap();
             assert_eq!(snapshot.adapter.id, expected);
-            assert!(snapshot.adapter.convention_matched);
+            assert_eq!(snapshot.adapter.convention_matched, expected == "formulab");
             assert_eq!(snapshot.tasks[0].adapter_id, expected);
         }
         let (_db_dir, _dir, db, id) =
             fixture_named("- [ ] TASK-101: unrelated\n", "FormuLab Clone");
         assert_eq!(parse(&db, &id).unwrap().adapter.id, "generic");
+    }
+    #[test]
+    fn p06_checklist_prefix_status_tags_are_parsed() {
+        let (_db_dir, _dir, db, id) =
+            fixture("- [ ] [WAITING] vendor\n- [ ] [READY] ship\n- [ ] [IN PROGRESS] build\n");
+        let statuses = parse(&db, &id)
+            .unwrap()
+            .tasks
+            .into_iter()
+            .map(|t| t.parsed_status)
+            .collect::<Vec<_>>();
+        assert_eq!(statuses, vec!["WAITING", "READY", "IN_PROGRESS"]);
+    }
+    #[test]
+    fn p06_status_word_inside_prose_does_not_override_status() {
+        let (_db_dir, _dir, db, id) = fixture("- [ ] do waiting for vendor\n");
+        assert_eq!(parse(&db, &id).unwrap().tasks[0].parsed_status, "OPEN");
+    }
+    #[test]
+    fn p06_handoff_current_next_blocker_waiting_are_separate() {
+        let (_db_dir, _dir, db, id) = fixture(
+            "# Handoff\n## Current\nnow\n## Next\nship\n## Blockers\noutage\n## Waiting\nvendor\n",
+        );
+        let handoff = parse(&db, &id).unwrap().handoff.unwrap();
+        assert_eq!(handoff.current, vec!["now"]);
+        assert_eq!(handoff.next, vec!["ship"]);
+        assert_eq!(handoff.blockers, vec!["outage"]);
+        assert_eq!(handoff.waiting, vec!["vendor"]);
+    }
+    #[test]
+    fn p06_multiple_handoff_sources_merge_in_source_order() {
+        let (_db_dir, dir, db, id) = fixture("# Handoff\n## Current\nroot\n");
+        fs::write(
+            dir.path().join("HANDOFF-2.md"),
+            "# Handoff\n## Current\nsecond\n",
+        )
+        .unwrap();
+        task_sources::custom_path_add(
+            &db,
+            task_sources::CustomPathRequest {
+                project_id: id.clone(),
+                path: "HANDOFF-2.md".into(),
+            },
+        )
+        .unwrap();
+        let current = parse(&db, &id).unwrap().handoff.unwrap().current;
+        assert!(current.len() >= 2);
+        assert!(current.iter().any(|v| v == "root"));
+        assert!(current.iter().any(|v| v == "second"));
+    }
+    #[test]
+    fn p05_same_text_different_projects_never_collides() {
+        let (_db_dir, _dir, db, first_id) = fixture("# Work\n- [ ] same\n");
+        let second_dir = tempfile::tempdir().unwrap();
+        fs::write(second_dir.path().join("TASKS.md"), "# Work\n- [ ] same\n").unwrap();
+        let second = register_project(
+            &db,
+            RegisterProjectRequest {
+                path: second_dir.path().to_string_lossy().into(),
+                name: Some("Other".into()),
+            },
+        )
+        .unwrap();
+        assert_ne!(
+            parse(&db, &first_id).unwrap().tasks[0].id,
+            parse(&db, &second.id).unwrap().tasks[0].id
+        );
     }
     #[test]
     fn p07_owned_sql_reconciliation_preserves_events_and_is_idempotent() {
@@ -1135,6 +1643,69 @@ mod tests {
             0
         );
         assert_eq!(c.query_row("SELECT COUNT(*) FROM tasks WHERE project_id=?1 AND json_extract(metadata_json,'$.owner')=?2", params![id, OWNER], |r| r.get::<_,i64>(0)).unwrap(), 1);
+    }
+    #[test]
+    fn p07_metadata_change_updates_same_task_without_recreate() {
+        let (_db_dir, dir, db, id) = fixture("- [ ] stable\n");
+        let first = parse(&db, &id).unwrap().tasks[0].id.clone();
+        let c = db.open_connection().unwrap();
+        c.execute("INSERT INTO task_events (id, task_id, event_type, summary, occurred_at) VALUES ('event-1',?1,'TEST','created','now')", [&first]).unwrap();
+        drop(c);
+        fs::write(
+            dir.path().join("TASKS.md"),
+            "- [ ] stable\n  Next: verify\n",
+        )
+        .unwrap();
+        let snapshot = parse(&db, &id).unwrap();
+        assert_eq!(snapshot.tasks[0].id, first);
+        assert_eq!(snapshot.tasks[0].next_step.as_deref(), Some("verify"));
+        assert_eq!(
+            db.open_connection()
+                .unwrap()
+                .query_row(
+                    "SELECT COUNT(*) FROM task_events WHERE task_id=?1",
+                    [&first],
+                    |r| r.get::<_, i64>(0)
+                )
+                .unwrap(),
+            1
+        );
+    }
+    #[test]
+    fn p07_removed_task_and_source_reconcile_only_stale_m09_rows() {
+        let (_db_dir, dir, db, id) = fixture("- [ ] keep\n- [ ] remove\n");
+        let before = parse(&db, &id).unwrap();
+        fs::write(dir.path().join("TASKS.md"), "- [ ] keep\n").unwrap();
+        let after = parse(&db, &id).unwrap();
+        assert_eq!(after.tasks.len(), 1);
+        assert_eq!(after.tasks[0].title, "keep");
+        assert!(before.tasks.iter().any(|t| t.title == "remove"));
+    }
+    #[test]
+    fn p07_dependency_edges_reconcile_exactly_without_duplicates() {
+        let (_db_dir, _dir, db, id) =
+            fixture("- [ ] TASK-1: base\n- [ ] TASK-2: child\n  Depends on: TASK-1\n");
+        parse(&db, &id).unwrap();
+        parse(&db, &id).unwrap();
+        assert_eq!(db.open_connection().unwrap().query_row("SELECT COUNT(*) FROM task_dependencies WHERE dependency_kind='SOURCE_EXPLICIT'", [], |r| r.get::<_, i64>(0)).unwrap(), 1);
+    }
+    #[test]
+    fn p07_unchanged_parse_is_idempotent() {
+        let (_db_dir, _dir, db, id) = fixture("- [ ] stable\n");
+        let first = parse(&db, &id).unwrap();
+        let second = parse(&db, &id).unwrap();
+        assert_eq!(first.tasks, second.tasks);
+        assert_eq!(
+            db.open_connection()
+                .unwrap()
+                .query_row(
+                    "SELECT COUNT(*) FROM tasks WHERE json_extract(metadata_json,'$.owner')=?1",
+                    [OWNER],
+                    |r| r.get::<_, i64>(0)
+                )
+                .unwrap(),
+            1
+        );
     }
     #[test]
     fn p07_unrelated_rows_and_project_bytes_are_preserved() {
