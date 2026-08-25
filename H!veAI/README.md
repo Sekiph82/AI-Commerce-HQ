@@ -40,7 +40,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is used for traceability and 
 - X02 startup intro audio/replay behavior: accepted fixed; audio works and the intro does not replay during same-process route navigation.
 - Strict completed roadmap progress remains 10/20 = 50% because the pre-M10 hotfix is not a numbered milestone.
 - M10 original strict audit: historical FAIL with 5 MAJOR findings.
-- M10A strict-closure remediation: ACTIVE; M10 remains IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT.
+- M10A strict-closure remediation: IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT; M10 remains pending independent re-audit.
 - Akilta footer link: implementation in this run; native click acceptance remains PENDING USER ACCEPTANCE.
 - M11/M12 remain planned behind M10; Project Dashboard manifest ingestion is reserved for their runtime implementation.
 

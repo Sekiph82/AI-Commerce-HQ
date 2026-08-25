@@ -30,7 +30,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition
   - X02: startup intro audio/replay behavior accepted fixed; audio works and same-process route navigation does not replay the intro.
 - Strict completed milestone count remains **10 / 20 = 50%** because the pre-M10 hotfix is not a numbered roadmap milestone.
 - M10 original strict audit = historical FAIL with 5 MAJOR findings.
-- M10A strict-closure remediation = ACTIVE; M10 remains IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT.
+- M10A strict-closure remediation = IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT; M10 remains pending independent re-audit.
 - Akilta footer link implementation is in this run; native click acceptance remains PENDING USER ACCEPTANCE.
 - M11/M12 remain planned behind M10. Their runtime scope must incorporate the `.hiveai/PROJECT_DASHBOARD.md` authority manifest system without pretending the current manifest documentation is already a live Dashboard engine.
 
@@ -888,7 +888,7 @@ Pre-M10 Native UX Hotfix X01/X02 PASS/CLOSED.
 
 M10 IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT.
 
-M10A strict-closure remediation ACTIVE; Akilta footer native click acceptance PENDING USER ACCEPTANCE.
+M10A strict-closure remediation IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT; Akilta footer native click acceptance PENDING USER ACCEPTANCE.
 
 ---
 
@@ -1499,7 +1499,7 @@ M20 PLANNED/BLOCKED until M19 and final hardening gates.
 
 - M00-M09 are PASS/CLOSED.
 - Pre-M10 Native UX Hotfix X01/X02 is PASS/CLOSED after independent audit and user native acceptance.
-- M10 original strict audit is historical FAIL; M10A remediation is ACTIVE and M10 remains pending independent re-audit.
+- M10 original strict audit is historical FAIL; M10A remediation is IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT.
 - M11-M20 remain planned and must not be treated as implemented because their roadmap entries are detailed.
 - M11/M12 must implement the Project Dashboard manifest authority resolver before treating `.hiveai/PROJECT_DASHBOARD.md` as live runtime truth.
 - Each future milestone should be executed as one bounded milestone unless an actual independent audit requires a remediation prompt.

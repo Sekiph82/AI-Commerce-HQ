@@ -12,7 +12,7 @@ User-facing roadmap denominator remains **20**. `M00` is the historical rebuild/
 - M09 Task Intelligence Parser: PASS/CLOSED after the independent M09D final strict audit.
 - Pre-M10 Native UX Hotfix X01/X02: PASS/CLOSED after independent source audit plus user native acceptance.
 - M10 original strict audit: historical FAIL with 5 MAJOR findings.
-- M10A strict-closure remediation: ACTIVE; M10 remains IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT.
+- M10A strict-closure remediation: IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT; M10 remains pending independent re-audit.
 - Akilta footer link: implementation in this run; native click acceptance PENDING USER ACCEPTANCE.
 - M11-M20: planned/blocked.
 - Strict completed progress remains 10/20 = 50% because the pre-M10 hotfix is not a numbered roadmap milestone.
@@ -230,7 +230,7 @@ Packages:
 
 Current status:
 - Original M10 strict audit: historical FAIL with 5 MAJOR findings.
-- M10A strict-closure remediation: ACTIVE; the Akilta footer native click remains PENDING USER ACCEPTANCE.
+- M10A strict-closure remediation: IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT; the Akilta footer native click remains PENDING USER ACCEPTANCE.
 - Original M09: historical FAIL.
 - M09A: historical FAIL after exposing R01/R02.
 - M09B/M09C: historical remediation records preserved.
