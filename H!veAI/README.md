@@ -39,7 +39,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is used for traceability and 
 - X01 terminal/console popup suppression: accepted fixed after approximately 45 minutes of native runtime with no unwanted terminal windows.
 - X02 startup intro audio/replay behavior: accepted fixed; audio works and the intro does not replay during same-process route navigation.
 - Strict completed roadmap progress remains 10/20 = 50% because the pre-M10 hotfix is not a numbered milestone.
-- M10 Workflow State Machine: READY / UNSTARTED.
+- M10 Workflow State Machine: IMPLEMENTATION COMPLETE / PENDING INDEPENDENT AUDIT.
 - M11/M12 remain planned behind M10; Project Dashboard manifest ingestion is reserved for their runtime implementation.
 
 For exact live status, acceptance state, and every completed/planned package from M00 through M20, use `TASKS.md` as the canonical source of truth.

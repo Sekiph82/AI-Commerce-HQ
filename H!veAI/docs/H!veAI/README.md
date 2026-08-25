@@ -83,7 +83,7 @@ Chronological builder logs. Builder logs are claims/evidence records, not indepe
 - X01 terminal/console popup suppression: accepted fixed after approximately 45 minutes of native runtime with no unwanted terminal windows.
 - X02 startup intro audio/replay behavior: accepted fixed; startup audio works and same-process navigation does not replay the intro.
 - Strict completed milestone count remains 10/20 = 50% because the pre-M10 hotfix is not a numbered roadmap milestone.
-- M10 Workflow State Machine is READY / UNSTARTED.
+- M10 Workflow State Machine is IMPLEMENTATION COMPLETE / PENDING INDEPENDENT AUDIT.
 - M11/M12 remain planned behind M10. Their runtime implementation must incorporate the `.hiveai/PROJECT_DASHBOARD.md` authority manifest system without pretending the current manifest documentation is already a live dashboard engine.
 
 For exact current status, always defer to `H!veAI/TASKS.md`.

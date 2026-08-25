@@ -11,7 +11,7 @@ User-facing roadmap denominator remains **20**. `M00` is the historical rebuild/
 - M00-M09: PASS/CLOSED.
 - M09 Task Intelligence Parser: PASS/CLOSED after the independent M09D final strict audit.
 - Pre-M10 Native UX Hotfix X01/X02: PASS/CLOSED after independent source audit plus user native acceptance.
-- M10 Workflow State Machine: READY/UNSTARTED.
+- M10 Workflow State Machine: IMPLEMENTATION COMPLETE / PENDING INDEPENDENT AUDIT.
 - M11-M20: planned/blocked.
 - Strict completed progress remains 10/20 = 50% because the pre-M10 hotfix is not a numbered roadmap milestone.
 
@@ -274,7 +274,7 @@ Packages:
 
 Exit: every task operational state is explainable, evidence-backed and recoverable.
 
-Status: READY/UNSTARTED.
+Status: IMPLEMENTATION COMPLETE / PENDING INDEPENDENT AUDIT.
 
 ---
 

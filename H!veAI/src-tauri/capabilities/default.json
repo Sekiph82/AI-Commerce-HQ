@@ -17,6 +17,7 @@
     "allow-git-engine-read",
     "allow-filesystem-watcher",
     "allow-task-source-discovery",
-    "allow-task-intelligence"
+    "allow-task-intelligence",
+    "allow-workflow-state-machine"
   ]
 }

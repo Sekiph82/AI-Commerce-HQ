@@ -29,7 +29,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition
   - X01: terminal/console popup suppression accepted fixed after approximately 45 minutes of native runtime with no unwanted terminal windows.
   - X02: startup intro audio/replay behavior accepted fixed; audio works and same-process route navigation does not replay the intro.
 - Strict completed milestone count remains **10 / 20 = 50%** because the pre-M10 hotfix is not a numbered roadmap milestone.
-- M10 Workflow State Machine is READY / UNSTARTED.
+- M10 Workflow State Machine is IMPLEMENTATION COMPLETE / PENDING INDEPENDENT AUDIT.
 - M11/M12 remain planned behind M10. Their runtime scope must incorporate the `.hiveai/PROJECT_DASHBOARD.md` authority manifest system without pretending the current manifest documentation is already a live Dashboard engine.
 
 ---
@@ -827,64 +827,64 @@ Pre-M10 Native UX Hotfix X01/X02 PASS/CLOSED.
 # M10 - Workflow State Machine
 
 ### M10.01 - Canonical workflow states
-- [ ] Define canonical task states from backlog through completion.
-- [ ] Define builder/auditor/verification states.
-- [ ] Define blocked/waiting/design-gate states.
-- [ ] Separate parser truth from operational workflow truth.
+- [x] Define canonical task states from backlog through completion.
+- [x] Define builder/auditor/verification states.
+- [x] Define blocked/waiting/design-gate states.
+- [x] Separate parser truth from operational workflow truth.
 
 ### M10.02 - Actor model
-- [ ] Define Human/Codex/Claude/GPT Audit/CI/External actors.
-- [ ] Define required actor rules per transition.
-- [ ] Preserve unknown/external actor evidence safely.
+- [x] Define Human/Codex/Claude/GPT Audit/CI/External actors.
+- [x] Define required actor rules per transition.
+- [x] Preserve unknown/external actor evidence safely.
 
 ### M10.03 - Transition matrix
-- [ ] Define allowed state transitions.
-- [ ] Reject invalid direct jumps.
-- [ ] Define happy path.
-- [ ] Define audit-failure/remediation/re-audit loop.
-- [ ] Define blocked/waiting resume transitions.
+- [x] Define allowed state transitions.
+- [x] Reject invalid direct jumps.
+- [x] Define happy path.
+- [x] Define audit-failure/remediation/re-audit loop.
+- [x] Define blocked/waiting resume transitions.
 
 ### M10.04 - Evidence requirements
-- [ ] Define evidence required for each transition.
-- [ ] Link source/task/test/audit/session evidence.
-- [ ] Prevent transition on missing/insufficient evidence.
+- [x] Define evidence required for each transition.
+- [x] Link source/task/test/audit/session evidence.
+- [x] Prevent transition on missing/insufficient evidence.
 
 ### M10.05 - Human override
-- [ ] Add explicit human override event.
-- [ ] Require rationale.
-- [ ] Preserve immutable transition history.
-- [ ] Avoid silent state mutation.
+- [x] Add explicit human override event.
+- [x] Require rationale.
+- [x] Preserve immutable transition history.
+- [x] Avoid silent state mutation.
 
 ### M10.06 - Persistent task events
-- [ ] Persist workflow transition events in `task_events`.
-- [ ] Preserve chronological state history.
-- [ ] Keep stable M09 task IDs as event anchors.
+- [x] Persist workflow transition events in `task_events`.
+- [x] Preserve chronological state history.
+- [x] Keep stable M09 task IDs as event anchors.
 
 ### M10.07 - Restart recovery
-- [ ] Reconstruct current operational state after app restart.
-- [ ] Detect interrupted/running states safely.
-- [ ] Avoid falsely claiming agents/audits are still running.
+- [x] Reconstruct current operational state after app restart.
+- [x] Detect interrupted/running states safely.
+- [x] Avoid falsely claiming agents/audits are still running.
 
 ### M10.08 - Native service/IPC
-- [ ] Add narrow state-machine operations.
-- [ ] Add list/current-state operations.
-- [ ] Add permission boundaries for mutating transitions.
+- [x] Add narrow state-machine operations.
+- [x] Add list/current-state operations.
+- [x] Add permission boundaries for mutating transitions.
 
 ### M10.09 - Direct state-machine tests
-- [ ] Happy-path matrix tests.
-- [ ] Invalid-transition tests.
-- [ ] Evidence-gate tests.
-- [ ] Human-override tests.
-- [ ] blocked/waiting tests.
-- [ ] restart-recovery tests.
+- [x] Happy-path matrix tests.
+- [x] Invalid-transition tests.
+- [x] Evidence-gate tests.
+- [x] Human-override tests.
+- [x] blocked/waiting tests.
+- [x] restart-recovery tests.
 
 ### M10.10 - Regression/audit/closure
-- [ ] Full Rust/frontend/security regression.
-- [ ] Production QA publication.
+- [x] Full Rust/frontend/security regression.
+- [x] Production QA publication.
 - [ ] Independent strict audit.
 - [ ] Close M10 before M11/M12 live operational UI is unlocked.
 
-M10 READY/UNSTARTED.
+M10 IMPLEMENTATION COMPLETE / PENDING INDEPENDENT AUDIT.
 
 ---
 

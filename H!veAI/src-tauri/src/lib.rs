@@ -11,6 +11,7 @@ mod task_intelligence;
 mod task_sources;
 mod time;
 mod watcher;
+mod workflow;
 use db::{DatabaseState, DatabaseStatus};
 use projects::{
     ProjectListQuery, ProjectRecord, RegisterProjectRequest, RepairProjectPathRequest,
@@ -22,6 +23,10 @@ use task_sources::{
     CustomPathRequest, CustomPathUpdateRequest, CustomSourcePath, DiscoveredProjectSource,
 };
 use watcher::{ProjectWatcherStatus, WatcherManager, WatcherStatusSummary};
+use workflow::{
+    WorkflowEvent, WorkflowHistoryQuery, WorkflowOverrideRequest, WorkflowProjectList,
+    WorkflowProjectListQuery, WorkflowTask, WorkflowTransitionRequest,
+};
 
 use git_engine::{GitDiff, GitDiffRequest, GitSnapshot, GitSnapshotRequest, MutationStatus};
 
@@ -280,6 +285,46 @@ fn hiveai_task_intelligence_list(
     task_intelligence::list(&database, &project_id)
 }
 
+#[tauri::command]
+fn hiveai_workflow_task_get(
+    database: tauri::State<'_, DatabaseState>,
+    task_id: String,
+) -> Result<WorkflowTask, String> {
+    workflow::task_get(&database, task_id)
+}
+
+#[tauri::command]
+fn hiveai_workflow_project_list(
+    database: tauri::State<'_, DatabaseState>,
+    query: WorkflowProjectListQuery,
+) -> Result<WorkflowProjectList, String> {
+    workflow::project_list(&database, query)
+}
+
+#[tauri::command]
+fn hiveai_workflow_history(
+    database: tauri::State<'_, DatabaseState>,
+    query: WorkflowHistoryQuery,
+) -> Result<Vec<WorkflowEvent>, String> {
+    workflow::history(&database, query)
+}
+
+#[tauri::command]
+fn hiveai_workflow_transition(
+    database: tauri::State<'_, DatabaseState>,
+    request: WorkflowTransitionRequest,
+) -> Result<WorkflowEvent, String> {
+    workflow::transition(&database, request)
+}
+
+#[tauri::command]
+fn hiveai_workflow_override(
+    database: tauri::State<'_, DatabaseState>,
+    request: WorkflowOverrideRequest,
+) -> Result<WorkflowEvent, String> {
+    workflow::override_state(&database, request)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -319,7 +364,12 @@ pub fn run() {
             hiveai_task_source_custom_path_remove,
             hiveai_task_source_custom_path_update,
             hiveai_task_intelligence_parse,
-            hiveai_task_intelligence_list
+            hiveai_task_intelligence_list,
+            hiveai_workflow_task_get,
+            hiveai_workflow_project_list,
+            hiveai_workflow_history,
+            hiveai_workflow_transition,
+            hiveai_workflow_override
         ])
         .setup(|app| {
             app.manage(StartupIntroState::default());
@@ -330,6 +380,8 @@ pub fn run() {
                 .map_err(|error| format!("resolve H!veAI app-data directory: {error}"))?;
             let database = DatabaseState::initialize(app_data_dir.clone())
                 .map_err(|error| format!("H!veAI persistence initialization failed: {error}"))?;
+            workflow::recover_stale(&database)
+                .map_err(|error| format!("H!veAI workflow recovery failed: {error}"))?;
             let database_status = database.status();
             let watcher_manager = WatcherManager::initialize(database.clone())
                 .map_err(|error| format!("H!veAI watcher initialization failed: {error}"))?;

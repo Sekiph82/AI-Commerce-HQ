@@ -54,3 +54,8 @@ commands.allow = ["hiveai_task_sources_discover", "hiveai_task_sources_list", "h
 identifier = "allow-task-intelligence"
 description = "Allows the main window to explicitly parse and list bounded M09 task intelligence for registered projects."
 commands.allow = ["hiveai_task_intelligence_parse", "hiveai_task_intelligence_list"]
+
+[[permission]]
+identifier = "allow-workflow-state-machine"
+description = "Allows the main window to read and mutate the bounded M10 workflow state machine through evidence-backed native commands."
+commands.allow = ["hiveai_workflow_task_get", "hiveai_workflow_project_list", "hiveai_workflow_history", "hiveai_workflow_transition", "hiveai_workflow_override"]

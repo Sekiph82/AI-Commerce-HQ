@@ -783,14 +783,76 @@ fn persist(
         .into_iter()
         .filter(|id| !current_task_ids.contains(id))
     {
-        tx.execute("DELETE FROM tasks WHERE id=?1", [stale])
+        let has_workflow_history: i64 = tx
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM task_events WHERE task_id=?1 AND event_type LIKE 'WORKFLOW_%')",
+                [&stale],
+                |row| row.get(0),
+            )
             .map_err(db_error)?;
+        if has_workflow_history == 0 {
+            tx.execute("DELETE FROM tasks WHERE id=?1", [&stale])
+                .map_err(db_error)?;
+        } else {
+            let existing_metadata: String = tx
+                .query_row(
+                    "SELECT metadata_json FROM tasks WHERE id=?1",
+                    [&stale],
+                    |row| row.get(0),
+                )
+                .map_err(db_error)?;
+            let mut metadata = serde_json::from_str::<serde_json::Value>(&existing_metadata)
+                .unwrap_or_else(|_| serde_json::json!({}));
+            metadata["sourceActive"] = serde_json::Value::Bool(false);
+            metadata["sourceRetired"] = serde_json::Value::Bool(true);
+            metadata["sourceRetiredAt"] = serde_json::Value::String(now.clone());
+            tx.execute(
+                "UPDATE tasks SET source_id=NULL, metadata_json=?2, updated_at=?3 WHERE id=?1",
+                params![stale, metadata.to_string(), now],
+            )
+            .map_err(db_error)?;
+        }
     }
     for task in &snapshot.tasks {
-        let metadata =
-            serde_json::json!({"owner": OWNER, "schemaVersion": SCHEMA_VERSION, "task": task});
+        let existing: Option<(String, String)> = tx
+            .query_row(
+                "SELECT state, metadata_json FROM tasks WHERE id=?1 AND project_id=?2",
+                params![task.id, project_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(db_error)?;
+        let managed_state = if let Some((state, _)) = &existing {
+            let managed: i64 = tx
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM task_events WHERE task_id=?1 AND event_type LIKE 'WORKFLOW_%')",
+                    [&task.id],
+                    |row| row.get(0),
+                )
+                .map_err(db_error)?;
+            if managed != 0 {
+                Some(state.clone())
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        let mut metadata = serde_json::json!({
+            "owner": OWNER,
+            "schemaVersion": SCHEMA_VERSION,
+            "sourceActive": true,
+            "sourceRetired": false,
+            "task": task
+        });
+        let storage_state = managed_state
+            .clone()
+            .unwrap_or_else(|| task.storage_state.clone());
+        if let Some(state) = managed_state {
+            metadata["workflowManagedState"] = serde_json::Value::String(state);
+        }
         let source_id = source_ids.get(&task.source_path);
-        tx.execute("INSERT INTO tasks (id, project_id, source_id, title, state, required_actor, milestone, metadata_json, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9) ON CONFLICT(id) DO UPDATE SET source_id=excluded.source_id, title=excluded.title, state=excluded.state, required_actor=excluded.required_actor, milestone=excluded.milestone, metadata_json=excluded.metadata_json, updated_at=excluded.updated_at", params![task.id, project_id, source_id, task.title, task.storage_state, task.required_actor, task.milestone, metadata.to_string(), now]).map_err(db_error)?;
+        tx.execute("INSERT INTO tasks (id, project_id, source_id, title, state, required_actor, milestone, metadata_json, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9) ON CONFLICT(id) DO UPDATE SET source_id=excluded.source_id, title=excluded.title, state=CASE WHEN EXISTS(SELECT 1 FROM task_events WHERE task_id=tasks.id AND event_type LIKE 'WORKFLOW_%') THEN tasks.state ELSE excluded.state END, required_actor=excluded.required_actor, milestone=excluded.milestone, metadata_json=excluded.metadata_json, updated_at=excluded.updated_at", params![task.id, project_id, source_id, task.title, storage_state, task.required_actor, task.milestone, metadata.to_string(), now]).map_err(db_error)?;
     }
     let ids: HashMap<String, Vec<String>> = snapshot
         .tasks
