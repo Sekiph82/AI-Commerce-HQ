@@ -1,319 +1,1465 @@
 # H!veAI MASTER TASKS
 
-Legend: [x] validated complete, [~] active, [ ] planned/not started, [!] blocked.
+Legend: `[x]` validated complete, `[~]` active/in progress, `[ ]` planned/pending, `[!]` blocked.
+
+Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition only. It does **not** mean a milestone must be split into separate Codex prompts. A milestone may still be implemented from one whole-milestone prompt.
+
+## Canonical tracking rules
+
+- This file is the canonical detailed milestone/task ledger.
+- `CODEX_ROADMAP.md` mirrors milestone scope/dependencies at roadmap level.
+- `docs/H!veAI/prompts/` contains authoritative builder prompts.
+- `docs/H!veAI/codex-logs/` contains immutable builder execution claims/evidence logs.
+- `docs/H!veAI/audits/` contains independent strict audits and final acceptance decisions.
+- Builder logs are claims, not acceptance evidence.
+- Historical failed prompts/logs/audits remain immutable and do not become active tasks again unless an independent later audit explicitly reopens a production defect.
+- User-facing roadmap denominator remains **20** even though the historical baseline is labeled `M00` and release is `M20`.
 
 ## Current truth
 
 - M00 through M08 are PASS/CLOSED.
-- M01 real native Settings restart is PASS and user-accepted.
-- M08.00/M08.00B presentation bootstrap is PASS/CLOSED, including opening video, post-sidebar hive background alignment, and restrained glass/glow styling.
-- M08 Task Source Discovery final closure is PASS, including the M08A/M08B/M08C remediation chain and native `/tasks` user acceptance.
-- M09 Task Intelligence Parser is ACTIVE; M10+ remain BLOCKED/UNSTARTED.
-- Strict completed milestone count: 9 / 20 = 45%.
-
-Historical M07 and M08 remediation details remain preserved in `docs/H!veAI/audits/`, `docs/H!veAI/prompts/`, and `docs/H!veAI/codex-logs/`. They are audit history only and are not active work.
+- M08 presentation bootstrap, Task Source Discovery, remediation chain, and native `/tasks` manual acceptance are PASS/CLOSED.
+- M09 original strict audit = historical FAIL.
+- M09A strict re-audit = historical FAIL after closing the original seven findings but exposing two residual production defects.
+- M09B bounded-identity micro-fix implementation is present; independent strict re-audit and final closure remain pending.
+- M09 is ACTIVE / NOT CLOSED.
+- M10+ remain BLOCKED/UNSTARTED until M09 closes.
+- Strict completed milestone count remains **9 / 20 = 45%**.
+- Pre-M10 UX hotfix queue remains open:
+  - X01: repeated visible Windows terminal/console windows from spawned Git child processes.
+  - X02: startup intro video is muted even though the canonical video contains audio.
 
 ---
 
-## M00 Fresh start with dedicated application root
-- [x] Prove Git root and H!veAI child application root
-- [x] Verify official repository and branch
-- [x] Correct remote to `Sekiph82/AI-Commerce-HQ`
-- [x] Inspect old parent AI-Commerce-HQ application as source material
-- [x] Establish H!veAI foundation docs, child-root governance, and migration baseline
+# M00 - Fresh start with dedicated application root
+
+### M00.01 - Repository/root proof
+- [x] Prove the actual Git root.
+- [x] Prove the dedicated `H!veAI` application child root.
+- [x] Verify that `H!veAI` is not a nested Git repository.
+- [x] Prevent accidental creation/use of `H!veAI/.git`.
+
+### M00.02 - Canonical repository/branch
+- [x] Verify GitHub repository `Sekiph82/AI-Commerce-HQ`.
+- [x] Verify canonical branch `H!veAI`.
+- [x] Correct/confirm remote configuration.
+- [x] Establish safe synchronization rules without reset/rebase/force-push.
+
+### M00.03 - Legacy source-material audit
+- [x] Inspect the old parent AI-Commerce-HQ application.
+- [x] Identify reusable desktop/runtime patterns.
+- [x] Identify obsolete commerce/game-domain code that must not define H!veAI.
+- [x] Treat the previous app as source material rather than the target architecture.
+
+### M00.04 - Canonical documentation layout
+- [x] Establish `H!veAI/docs/H!veAI/prompts/`.
+- [x] Establish `H!veAI/docs/H!veAI/audits/`.
+- [x] Establish `H!veAI/docs/H!veAI/codex-logs/`.
+- [x] Establish version-controlled development protocol documentation.
+
+### M00.05 - Governance baseline
+- [x] Establish `AGENTS.md` audit/build governance.
+- [x] Establish `CONSTITUTION.md` product/development constraints.
+- [x] Establish builder-log-is-claim policy.
+- [x] Establish independent audit before milestone closure.
+- [x] Preserve user-owned root files outside milestone scope.
+
+### M00.06 - Architecture/rebuild baseline
+- [x] Establish H!veAI as a local-first AI Development Command Center.
+- [x] Establish Tauri + React + TypeScript + Rust-native direction.
+- [x] Establish future SQLite/domain/adapters roadmap.
+- [x] Preserve parent repository as the Git root while application code stays under `H!veAI/`.
 
 M00 PASS/CLOSED.
 
-## M01 Tauri 2 foundation
-- [x] Upgrade Tauri packages and Rust APIs
-- [x] Add Tauri 2 capabilities
-- [x] Rename active app identity to H!veAI
-- [x] Define app-data migration policy
-- [x] Add native logging/notifications
-- [x] Verify Windows launch/close/restart through real Settings -> Restart H!veAI flow
+---
 
-M01 PASS/CLOSED. Native restart acceptance is documented in `docs/H!veAI/audits/M07.07B_NATIVE_RESTART_MANUAL_ACCEPTANCE.md`.
+# M01 - Tauri 2 foundation
 
-## M02 UI shell/design system
-- [x] Remove GameWorld from root flow
-- [x] Remove Three.js from primary bundle
-- [x] Dark-first design system
-- [x] Sidebar/top command bar/router
-- [x] Routes: Command Center, Projects, Cockpit, Agents, Audits, Settings
-- [x] Accessible reusable UI primitives + Framer Motion
-- [x] Loading/error/empty states
+### M01.01 - Tauri 2 modernization
+- [x] Upgrade Tauri dependencies/APIs to Tauri 2.
+- [x] Establish Windows-native desktop entry point.
+- [x] Preserve React/Vite integration.
+
+### M01.02 - Capability/permission foundation
+- [x] Add Tauri 2 capabilities.
+- [x] Establish command allowlisting.
+- [x] Avoid unrestricted frontend shell/filesystem privileges.
+
+### M01.03 - H!veAI native identity
+- [x] Rename active product identity to H!veAI.
+- [x] Align native/application metadata.
+- [x] Establish stable local application identity/path expectations.
+
+### M01.04 - Native logging/notifications
+- [x] Add native logging plugin foundation.
+- [x] Add native notification foundation.
+- [x] Establish native application log output location.
+
+### M01.05 - Native status/readiness
+- [x] Add bounded native status command.
+- [x] Add frontend-ready signal.
+- [x] Keep readiness independent from later startup visual effects.
+
+### M01.06 - App-data migration policy
+- [x] Define safe app-data migration policy.
+- [x] Avoid destructive implicit migration behavior.
+- [x] Preserve future database/runtime upgrade path.
+
+### M01.07 - Native restart flow
+- [x] Add native restart request command.
+- [x] Route Settings restart through Tauri native lifecycle.
+- [x] Avoid browser-only reload semantics.
+
+### M01.08 - Real restart acceptance
+- [x] Verify Windows launch/close behavior.
+- [x] Verify Settings -> Restart H!veAI.
+- [x] Obtain real user acceptance of native restart behavior.
+
+M01 PASS/CLOSED.
+
+---
+
+# M02 - UI shell and design system
+
+### M02.01 - Remove obsolete game-root experience
+- [x] Remove GameWorld from the primary root flow.
+- [x] Remove Three.js from the primary bundle/path where no longer needed.
+- [x] Remove game/achievement-first presentation from the new command-center shell.
+
+### M02.02 - Dark-first shell
+- [x] Establish dark-first H!veAI design system.
+- [x] Establish persistent application shell.
+- [x] Establish sidebar and top command bar.
+
+### M02.03 - Routing baseline
+- [x] Add BrowserRouter routing.
+- [x] Add Command Center route.
+- [x] Add Projects route.
+- [x] Add Project Cockpit route.
+- [x] Add Tasks route foundation.
+- [x] Add Agents route.
+- [x] Add Audits route.
+- [x] Add Activity route.
+- [x] Add Settings route.
+
+### M02.04 - Reusable UI primitives
+- [x] Establish reusable accessible UI primitives.
+- [x] Integrate controlled Framer Motion usage.
+- [x] Establish keyboard/focus-friendly interaction baseline.
+
+### M02.05 - Truthful application states
+- [x] Add loading states.
+- [x] Add bounded error states.
+- [x] Add empty states.
+- [x] Avoid fake live operational claims in placeholder content.
+
+### M02.06 - Desktop shell geometry
+- [x] Establish professional AI command-center composition.
+- [x] Establish ~220px sidebar geometry.
+- [x] Establish primary desktop viewport behavior.
+- [x] Prevent inappropriate outer body overflow in accepted core layouts.
 
 M02 PASS/CLOSED.
 
-## M03 Runtime refactor
-- [x] Stop commerce-specific orchestrators from H!veAI startup
-- [x] Inventory Python responsibilities
-- [x] Select Rust-native runtime architecture
-- [x] Remove always-on sidecar requirement
-- [x] Document final runtime boundary
+---
+
+# M03 - Runtime refactor
+
+### M03.01 - Remove commerce startup coupling
+- [x] Stop commerce-specific orchestrators from H!veAI startup.
+- [x] Remove assumptions that H!veAI launches a commerce automation runtime.
+
+### M03.02 - Runtime responsibility inventory
+- [x] Inventory historical Python/backend responsibilities.
+- [x] Separate genuinely reusable responsibilities from obsolete sidecar behavior.
+
+### M03.03 - Rust-native runtime decision
+- [x] Select Rust-native runtime architecture.
+- [x] Define privileged host work as native Rust responsibility.
+- [x] Keep frontend focused on UI/contracts.
+
+### M03.04 - Remove always-on sidecar requirement
+- [x] Remove always-on Python sidecar dependency.
+- [x] Avoid Python as a mandatory desktop runtime dependency.
+- [x] Preserve local-first app operation.
+
+### M03.05 - Runtime documentation
+- [x] Document final runtime boundary.
+- [x] Document frontend/native responsibility split.
+- [x] Preserve architecture basis for Git/watcher/process milestones.
 
 M03 PASS/CLOSED.
 
-## M04 SQLite + migrations
-- [x] Versioned migration framework
-- [x] projects/repositories/sources/snapshots
-- [x] tasks/dependencies/events
-- [x] prompts/versions
-- [x] agent sessions/events/tool calls/permissions
-- [x] audits/findings/test_runs/alerts/decisions
-- [x] GitHub cache/settings
-- [x] corruption-safe integrity preflight, migration backup, rollback, contention, and failure evidence
+---
+
+# M04 - SQLite and migrations
+
+### M04.01 - Versioned migration framework
+- [x] Add versioned migration framework.
+- [x] Add schema version tracking.
+- [x] Add migration reporting.
+
+### M04.02 - Project/repository/source tables
+- [x] Add `projects`.
+- [x] Add `repositories`.
+- [x] Add `project_sources`.
+- [x] Add `git_snapshots`.
+
+### M04.03 - Task/workflow foundation tables
+- [x] Add `tasks`.
+- [x] Add `task_dependencies`.
+- [x] Add `task_sources`.
+- [x] Add `task_events`.
+- [x] Establish required foreign-key behavior.
+
+### M04.04 - Prompt tables
+- [x] Add `prompts`.
+- [x] Add immutable `prompt_versions` foundation.
+- [x] Add task/project relationships.
+
+### M04.05 - Agent/session tables
+- [x] Add `agent_sessions`.
+- [x] Add `agent_events`.
+- [x] Add `agent_tool_calls`.
+- [x] Add `permission_requests`.
+
+### M04.06 - Audit/test/decision tables
+- [x] Add `audits`.
+- [x] Add `audit_findings`.
+- [x] Add `test_runs`.
+- [x] Add `alerts`.
+- [x] Add `decisions`.
+
+### M04.07 - GitHub/settings tables and indexes
+- [x] Add `github_sync_state`.
+- [x] Add scoped `settings`.
+- [x] Add required indexes for project/task/session/audit/settings access.
+
+### M04.08 - Corruption/migration safety
+- [x] Add corruption-safe integrity preflight.
+- [x] Add migration backup behavior.
+- [x] Add rollback evidence.
+- [x] Add contention behavior/evidence.
+- [x] Add failure-path evidence.
 
 M04 PASS/CLOSED.
 
-## M05 Project Registry
-- [x] Add existing folder without mutation
-- [x] Detect git/remotes/default branch/GitHub identity
-- [x] Priority/builder/auditor/task-source settings
-- [x] Path repair/archive/remove-from-registry
-- [x] Search/sort/filter
-- [x] Registry identity repair evidence matrix
+---
+
+# M05 - Project Registry
+
+### M05.01 - Register existing folders safely
+- [x] Register an existing local project folder.
+- [x] Avoid mutating registered project files.
+- [x] Normalize/canonicalize registered path.
+- [x] Create stable project identity.
+
+### M05.02 - Git/GitHub identity discovery
+- [x] Detect Git repository status.
+- [x] Detect remotes.
+- [x] Detect default branch information.
+- [x] Derive GitHub owner/repository identity where available.
+
+### M05.03 - Project settings
+- [x] Add project priority.
+- [x] Add preferred builder setting foundation.
+- [x] Add preferred auditor setting foundation.
+- [x] Add task-source policy/settings foundation.
+
+### M05.04 - Registry lifecycle
+- [x] Add path repair.
+- [x] Add archive operation.
+- [x] Add remove-from-registry without deleting project files.
+- [x] Handle moved/missing roots truthfully.
+
+### M05.05 - Registry search/sort/filter
+- [x] Add project search.
+- [x] Add deterministic sort/filter behavior.
+- [x] Preserve Registry-backed project selection.
+
+### M05.06 - Registry identity evidence
+- [x] Add direct production-path Registry tests.
+- [x] Prove path/identity repair behavior.
+- [x] Prove unrelated project data remains isolated.
 
 M05 PASS/CLOSED.
 
-## M06 Local Git Engine
-- [x] branch/HEAD/status/staged/unstaged/untracked
-- [x] remote/ahead-behind/commits/diff/conflicts/worktrees
-- [x] deterministic safe diff with `--no-ext-diff` / `--no-textconv`
-- [x] binary diff metadata handling
-- [x] default-denied mutation boundary
-- [x] temp-repo/direct production-path tests
+---
+
+# M06 - Local Git Engine
+
+### M06.01 - Repository status snapshot
+- [x] Read current branch.
+- [x] Read HEAD SHA.
+- [x] Read staged changes.
+- [x] Read unstaged changes.
+- [x] Read untracked files.
+
+### M06.02 - Remote divergence
+- [x] Detect remotes.
+- [x] Detect upstream relationship.
+- [x] Compute ahead/behind.
+- [x] Handle absent upstream safely.
+
+### M06.03 - Commit/history inspection
+- [x] Read bounded recent commits.
+- [x] Read worktree information.
+- [x] Detect conflict state.
+
+### M06.04 - Safe diff engine
+- [x] Generate deterministic bounded diffs.
+- [x] Use `--no-ext-diff`.
+- [x] Use `--no-textconv`.
+- [x] Preserve binary diff metadata without treating binary content as text.
+
+### M06.05 - Read-only/default-denied mutation boundary
+- [x] Expose read-only Git inspection by default.
+- [x] Keep write/mutation operations default-denied.
+- [x] Reserve future Git mutations for permission-gated workflows.
+
+### M06.06 - Native IPC/ACL
+- [x] Add bounded Git snapshot command.
+- [x] Add bounded Git diff command.
+- [x] Add mutation-status boundary.
+- [x] Add narrow Tauri permission/capability entries.
+
+### M06.07 - Direct Git evidence
+- [x] Use temporary real Git repositories in tests.
+- [x] Exercise production command paths.
+- [x] Validate status/diff/remote/worktree edge cases.
+- [x] Validate binary diff handling.
 
 M06 PASS/CLOSED.
 
-## M07 Filesystem Watcher + snapshots
-- [x] watch registered project roots/task-relevant files/.hiveai
-- [x] debounce and bounded watcher lifecycle
-- [x] detect moved/missing repos
-- [x] project snapshots/evidence timestamps
-- [x] trigger bounded task/git refresh categories
-- [x] large-repo protections
-- [x] repaired-root reattachment and actual event evidence
-- [x] Git-category / non-Git-category snapshot evidence
-- [x] watcher failure, persistence failure, drop cleanup, containment evidence
-- [x] production no-bundle publisher, rollback, launcher, frontend-ready, and UI closure
-- [x] real Settings restart acceptance
-- [x] final enlarged one-piece H!veAI sidebar logo acceptance
+---
 
-M07 PASS/CLOSED. Final strict closure is documented in `docs/H!veAI/audits/M07.07C_SIDEBAR_LOGO_SCALE_VISUAL_CORRECTION_STRICT_AUDIT.md` and the manual logo acceptance in `docs/H!veAI/audits/M07.07C_SIDEBAR_LOGO_MANUAL_ACCEPTANCE.md`.
+# M07 - Filesystem Watcher and snapshots
 
-### Historical M07 remediation chain
+### M07.01 - Watch registered projects
+- [x] Watch Registry-backed project roots.
+- [x] Watch task-relevant files/paths.
+- [x] Watch `.hiveai`-relevant changes within bounded scope.
 
-The following are superseded historical gates, not active tasks:
+### M07.02 - Debounce and lifecycle bounds
+- [x] Debounce filesystem event bursts.
+- [x] Bound watcher count/lifecycle.
+- [x] Avoid leaking watcher resources.
+- [x] Clean up watchers on drop/shutdown.
 
-- M07.02: historical strict-remediation continuation, superseded.
-- M07.03: historical consolidated strict closure attempt, failed and superseded.
-- M07.04: historical automated remediation attempt, superseded.
-- M07.05: historical bounded correctness/evidence remediation, superseded.
-- M07.06: historical focused evidence closure, strict audit FAIL and superseded.
-- M07.07: historical Claude surgical remediation, strict audit FAIL because several named tests did not exercise the claimed failures.
-- M07.07A: historical evidence-integrity closure stage, superseded by later closure work.
-- M07.07B: historical final visual/restart closure, CONDITIONAL before final logo scale acceptance.
-- M07.07C: PASS and final M07 closure.
+### M07.03 - Missing/moved project detection
+- [x] Detect moved/missing project roots.
+- [x] Surface truthful watcher state.
+- [x] Support repaired-root reattachment.
 
-Do not treat any historical M07 subsection as active work. Detailed evidence remains immutable in its original audit/log/prompt files.
+### M07.04 - Snapshot categories
+- [x] Persist watcher/project snapshot evidence.
+- [x] Distinguish Git-relevant refresh category.
+- [x] Distinguish task/source-relevant refresh category.
+- [x] Keep unrelated filesystem noise bounded.
+
+### M07.05 - Git refresh integration
+- [x] Trigger bounded Git snapshot refresh from Git-category changes.
+- [x] Preserve Git Engine as the Git authority.
+- [x] Record actual event evidence.
+
+### M07.06 - Failure and persistence evidence
+- [x] Exercise watcher failure behavior.
+- [x] Exercise persistence failure behavior.
+- [x] Exercise repaired-root behavior.
+- [x] Exercise drop/cleanup behavior.
+- [x] Exercise containment behavior.
+
+### M07.07 - Production QA publisher
+- [x] Establish production `--no-bundle` QA build flow.
+- [x] Add publisher failure/rollback harness.
+- [x] Publish stable `H!veAI/dev-bin/H!veAI.exe`.
+- [x] Preserve stable desktop launcher/shortcut.
+- [x] Validate frontend-ready marker.
+- [x] Avoid dev-server dependency/forbidden dev ports.
+
+### M07.08 - Launcher/icon behavior
+- [x] Desktop shortcut targets stable EXE directly.
+- [x] Shortcut does not launch BAT/CMD/PowerShell/npm/cargo/browser.
+- [x] Shortcut uses stable H!veAI icon derived from canonical small logo.
+
+### M07.09 - Global brand shell acceptance
+- [x] Use one-piece H!veAI sidebar logo.
+- [x] Remove separate emblem/text duplication.
+- [x] Enlarge sidebar logo to accepted scale.
+- [x] Obtain final manual logo acceptance.
+
+### M07.10 - Restart/publisher closure
+- [x] Verify native restart in published QA application.
+- [x] Verify publisher rollback behavior.
+- [x] Close remediation/evidence loop through final independent audit.
+
+### Historical M07 remediation record
+- [x] M07.02 historical strict-remediation continuation preserved.
+- [x] M07.03 historical consolidated strict closure attempt preserved.
+- [x] M07.04 historical automated remediation attempt preserved.
+- [x] M07.05 historical bounded correctness/evidence remediation preserved.
+- [x] M07.06 historical focused evidence closure preserved.
+- [x] M07.07 historical Claude surgical remediation preserved.
+- [x] M07.07A historical evidence-integrity stage preserved.
+- [x] M07.07B native restart/final visual stage preserved.
+- [x] M07.07C final PASS closure preserved.
+
+M07 PASS/CLOSED.
 
 ---
 
-## M08.00 App presentation bootstrap
-- [x] Copy and verify canonical global hive background asset
-- [x] Copy and verify canonical native opening video asset
-- [x] Mount startup intro over immediately mounted App
-- [x] Preserve frontend-ready independence
-- [x] Add restrained neon liquid-glass styling to buttons, panels, tables, and focus states
-- [x] Preserve M07 Command Center geometry and behavior
-- [x] Run focused and full frontend/native/publisher gates
-- [x] Publish the validated no-bundle desktop QA build
-- [x] Independent M08.00 audit
-- [x] User visual and lifecycle acceptance
+# M08 - Task Source Discovery
 
-M08.00 presentation + neon-glass bootstrap is PASS/CLOSED with independent audit and user visual/lifecycle acceptance.
+### M08.00 - Presentation bootstrap
+- [x] Copy/verify canonical global hive background asset.
+- [x] Copy/verify canonical opening video asset.
+- [x] Mount startup intro over the immediately mounted application.
+- [x] Keep frontend-ready independent from intro duration.
+- [x] Add restrained dark-glass/cyan-blue-violet styling.
+- [x] Preserve accepted Command Center geometry.
+- [x] Publish production QA build.
+- [x] Obtain independent audit and user visual/lifecycle acceptance.
 
-## M08.00B Background alignment and native intro remediation
-- [x] Move the canonical background to the post-sidebar main workspace
-- [x] Add a fixed fullscreen startup overlay with contained video and no normal-flow overflow
-- [x] Add a native process-scoped startup claim command and narrow ACL permission
-- [x] Add focused frontend and Rust evidence for claim, failure, lifecycle, and layout behavior
-- [x] Independent M08.00B strict audit
-- [x] User manual acceptance of the refreshed native build
-- [x] Run focused/full frontend, Rust, publisher and no-bundle publication gates
-- [x] Fix startup video normal-flow/scrollbar defect
-- [x] Cold-launch intro manual acceptance
-- [x] Native restart intro replay manual acceptance
-- [x] Post-sidebar background alignment manual acceptance
+### M08.01 - Background alignment/native intro correction
+- [x] Move canonical background to post-sidebar workspace.
+- [x] Make startup intro a fixed fullscreen overlay rather than normal flow.
+- [x] Remove intro-caused outer scrollbars.
+- [x] Add process-scoped native startup-intro claim.
+- [x] Show intro once per native process.
+- [x] Replay intro on real native restart/new process.
+- [x] Skip native-only intro behavior in browser preview.
+- [x] Obtain user acceptance for video/background lifecycle.
 
-M08.00/M08.00B PASS/CLOSED. Strict audit: `docs/H!veAI/audits/M08.00B_BACKGROUND_ALIGNMENT_AND_NATIVE_INTRO_FIX_STRICT_AUDIT.md`. Manual acceptance: `docs/H!veAI/audits/M08.00B_MANUAL_ACCEPTANCE.md`.
+### M08.02 - Discovery source contract
+- [x] Make M08 the sole source-discovery authority for later parser milestones.
+- [x] Define source metadata contract.
+- [x] Define source status model: AVAILABLE/MISSING/UNREADABLE/TOO_LARGE/LIMIT_REACHED.
+- [x] Define source origin/authority/priority/order semantics.
 
-## M08 Task Source Discovery
-- [x] Original bounded source-discovery implementation
-- [x] Native `/tasks` Task Sources workspace and narrow ACL
-- [x] Final independent strict closure across M08/M08A/M08B/M08C
-- [x] User visual acceptance of the native Task Sources workspace
+### M08.03 - Root standard sources
+- [x] Discover `TASKS.md` / `TASK.md`.
+- [x] Discover `PLANS.md` / `PLAN.md`.
+- [x] Discover `PROGRESS.md`.
+- [x] Discover `ROADMAP.md`.
+- [x] Discover `HANDOFF.md` / `SESSION_HANDOFF.md`.
+- [x] Discover general root `*handoff*.md` family.
+- [x] Discover `AGENTS.md` and `CLAUDE.md` as instruction-class sources.
 
-M08 PASS/CLOSED. Final closure audit: `docs/H!veAI/audits/M08_TASK_SOURCE_DISCOVERY_FINAL_CLOSURE_AUDIT.md`. Manual acceptance: `docs/H!veAI/audits/M08_TASK_SOURCE_DISCOVERY_MANUAL_ACCEPTANCE.md`.
+### M08.04 - Approved recursive directories
+- [x] Recursively inspect `tasks/`.
+- [x] Recursively inspect `plans/`.
+- [x] Recursively inspect `handoffs/`.
+- [x] Recursively inspect `.hiveai/` within discovery bounds.
+- [x] Ignore `.git`, node_modules, dist/build/target/.next/coverage/cache/venv/vendor families.
+- [x] Restrict discovery to plausible task-source file types.
 
-### Historical M08 remediation chain
+### M08.05 - Filesystem work bounds
+- [x] Maximum discovery depth = 4.
+- [x] Maximum visited entries = 4096.
+- [x] Maximum candidate files = 512.
+- [x] Maximum source size/hash read = 2 MiB.
+- [x] Maximum configured custom paths = 64.
+- [x] Fix depth off-by-one behavior.
+- [x] Emit structured discovery warning when a bound is reached.
+- [x] Count actual filesystem work, not only accepted files.
 
-#### M08A Task Source Discovery Strict Closure
-- [x] Close F01 filesystem work bounds and structured warning evidence
-- [x] Close F02 custom update, persisted order, and equivalent-path removal
-- [x] Close F03 M08-owned, versioned, non-destructive `project_sources` reconciliation
-- [x] Close F04-F05 mounted stale list/mutation transitions and truthful UI evidence
-- [x] Close F06 direct SQLite, unreadable-source, limits, status, and containment evidence
-- [x] Close F07 immutable remediation log with individual test/equality evidence
-- [x] Close N01 archived-project boundary and N02 containment-aware custom status
+### M08.06 - Physical containment and safety
+- [x] Canonicalize registered project root.
+- [x] Canonicalize physical source target.
+- [x] Reject traversal outside root.
+- [x] Reject absolute custom path outside root.
+- [x] Reject physical symlink/junction escape outside root.
+- [x] Isolate unreadable sources.
+- [x] Preserve Windows OS-1314 link-test limitation as UNVERIFIED where applicable.
 
-M08A strict re-audit remained historical FAIL and was superseded by M08B.
+### M08.07 - Hash/evidence metadata
+- [x] Compute SHA-256 for AVAILABLE source.
+- [x] Record relative/absolute path.
+- [x] Record source kind/origin/status/authority/priority.
+- [x] Record size/modified/discovered time.
+- [x] Record depth/warnings/schemaVersion/owner/sourceOrder.
+- [x] Preserve deterministic source identity.
+- [x] Prove persisted hash changes when source content changes.
 
-#### M08B Task Source Discovery Final Strict Closure
-- [x] Fix true positional custom reorder semantics
-- [x] Narrow safe pre-version M08 inventory adoption
-- [x] Add direct persisted hash, deletion, legacy-preservation, and ordering SQL evidence
-- [x] Add mounted custom add-refresh and multi-item reorder-visible-order evidence
-- [x] Run focused/full regression and production no-bundle publication
-- [x] Create the immutable M08B closure log
+### M08.08 - Custom source path CRUD
+- [x] List custom source paths.
+- [x] Add custom source path.
+- [x] Remove custom source path.
+- [x] Update/rename custom source path.
+- [x] Reject duplicate/equivalent paths.
+- [x] Handle case-equivalent path comparisons safely.
+- [x] Surface CONFIGURED/MISSING/OUTSIDE_ROOT/UNREADABLE status.
 
-M08B strict re-audit remained historical FAIL because one backward-compatibility defect and one minor evidence mismatch remained; both were superseded by M08C.
+### M08.09 - Positional custom ordering
+- [x] Persist explicit custom order.
+- [x] Implement true positional remove -> insert -> renumber semantics.
+- [x] Prevent lexical tie-break from undoing requested reorder.
+- [x] Keep custom sources before standard sources.
+- [x] Prove visible UI order changes after native reorder.
 
-#### M08C Custom Order Backward-Compatibility Micro Fix
-- [x] Normalize legacy custom settings without valid explicit order by persisted vector position
-- [x] Preserve normalized position during path-only rename and persist contiguous order on mutation
-- [x] Extend combined custom/standard ordering evidence to three CUSTOM sources
-- [x] Run focused/full frontend, Rust, publisher and no-bundle publication gates
-- [x] Create the immutable M08C micro-fix log
-- [x] Independent strict re-audit: CONDITIONAL PASS with 0 BLOCKER / 0 MAJOR
-- [x] User visual acceptance of the remediated native Task Sources workspace
+### M08.10 - Legacy custom-order compatibility
+- [x] Read pre-order M08 custom settings that lack `order`.
+- [x] Normalize missing orders by persisted vector position.
+- [x] Preserve normalized position during path-only rename.
+- [x] Persist explicit contiguous `0..n` order on next mutation.
+- [x] Directly verify normalized JSON/order persistence.
 
-M08C final source-level closure and manual acceptance are complete. Historical earlier FAIL audits remain immutable evidence only and do not reopen M08.
+### M08.11 - SQLite `project_sources` reconciliation
+- [x] Persist M08 inventory to `project_sources`.
+- [x] Add explicit M08 owner/schema metadata.
+- [x] Avoid blanket `DELETE WHERE project_id=?`.
+- [x] Reconcile only M08-owned/current rows.
+- [x] Narrow pre-version M08 adoption predicate.
+- [x] Preserve unrelated/legacy rows.
+- [x] Remove stale STANDARD source row when the physical source disappears.
+- [x] Prove idempotent unchanged discovery.
 
-## M09 Task Intelligence Parser
-- [x] headings/checklists/milestones/status tags/task IDs
-- [x] blockers/next-step/owner-gate/external-wait parsing
-- [x] handoff current/next session parsing
-- [x] confidence/evidence locator
-- [x] generic adapter
-- [x] FormuLab/Scrubbots/FMCG adapters
-- [x] regression fixtures
-- [x] M08-owned source boundary and explicit on-demand IPC
-- [x] M09-owned SQLite reconciliation and preservation evidence
-- [ ] Independent strict audit
+### M08.12 - Project lifecycle boundary
+- [x] ACTIVE project may discover.
+- [x] MISSING project returns bounded unavailable error.
+- [x] ARCHIVED project is rejected.
+- [x] Missing registered root is handled safely.
 
-M09 original implementation and M09A strict re-audit remain historical FAIL. M09B bounded identity micro-fix implementation is complete, PENDING INDEPENDENT STRICT RE-AUDIT. M10 remains
-BLOCKED/UNSTARTED.
+### M08.13 - Native IPC and ACL
+- [x] `hiveai_task_sources_discover`.
+- [x] `hiveai_task_sources_list`.
+- [x] `hiveai_task_source_custom_paths_list`.
+- [x] `hiveai_task_source_custom_path_add`.
+- [x] `hiveai_task_source_custom_path_remove`.
+- [x] `hiveai_task_source_custom_path_update`.
+- [x] Register narrow `allow-task-source-discovery` permission/capability.
 
-M09A F01-F07 remediation and M09B R01/R02 plus E01-E04 evidence are implemented and evidence-tested; do not treat this builder result as M09 PASS/CLOSED. Do not start M10.
+### M08.14 - Task Sources workspace
+- [x] Implement native `/tasks` Task Sources workspace.
+- [x] Use Registry selected project.
+- [x] Render source inventory table.
+- [x] Render path/kind/origin/authority/priority/modified/status metadata.
+- [x] Render Custom Source Paths panel.
+- [x] Provide add/remove/update/reorder actions.
+- [x] Provide Rescan Sources action.
+- [x] Provide loading/error/empty states.
+- [x] Avoid fake live task/workflow claims.
 
-## M10 Workflow State Machine
-- [ ] canonical task/actor states
-- [ ] transition matrix
-- [ ] evidence requirements
-- [ ] human override event
-- [ ] blocked/waiting/design-gate states
-- [ ] audit/fix/re-audit loop
-- [ ] restart recovery
+### M08.15 - Project-switch race safety
+- [x] Add selected-project reference guard.
+- [x] Add request-generation guard.
+- [x] Prevent stale A-list response from overwriting B.
+- [x] Prevent stale A-add refresh from overwriting B.
+- [x] Prevent stale A-remove refresh from overwriting B.
+- [x] Keep reorder refresh scoped to the current project.
 
-## M11 Global Command Center
-- [ ] KPI strip backed by live task intelligence
-- [ ] project operation cards
-- [ ] current task/progress/health/state
-- [ ] last action/next action/required actor
-- [ ] primary action
-- [ ] Needs Your Attention
-- [ ] Active Work Queue
-- [ ] active agents/audits/waits
-- [ ] live activity/search/filter/motion
+### M08.16 - Frontend visible-state evidence
+- [x] Prove rescan changes visible DOM inventory.
+- [x] Prove custom add becomes visible after refresh.
+- [x] Prove custom remove disappears after refresh.
+- [x] Prove custom reorder changes DOM order.
+- [x] Prove metadata columns render correctly.
+- [x] Prove error state actually renders.
 
-## M12 Project Cockpit
-- [ ] Overview/Tasks/Workflow/Agents/Audit/Git/Tests/Activity/Files/Settings
-- [ ] Current Task hero
-- [ ] pipeline
-- [ ] evidence drawer
-- [ ] last completed / last activity / next action
-- [ ] manual correction controls
+### M08.17 - Rust direct evidence matrix
+- [x] Root standard source discovery.
+- [x] Recursive approved-directory discovery.
+- [x] Handoff wildcard family.
+- [x] Visited-entry/candidate/depth limits.
+- [x] Too-large/unreadable isolation.
+- [x] Hash-change persistence.
+- [x] AVAILABLE -> MISSING transition.
+- [x] Removed STANDARD reconciliation.
+- [x] Legacy row preservation.
+- [x] Owner/schema persistence.
+- [x] Custom add/remove/update/reorder.
+- [x] Multi-CUSTOM + multi-STANDARD exact order.
+- [x] Legacy no-order backward compatibility.
+- [x] ACTIVE/MISSING/ARCHIVED boundaries.
+- [x] Idempotency.
 
-## M13 Codex adapter
-- [ ] discover/version/auth readiness
-- [ ] common agent interface
-- [ ] start in repo/worktree cwd
-- [ ] stdout/stderr/exit capture
-- [ ] persist/resume/stop/recover
-- [ ] stream events
-- [ ] task/session mapping
-- [ ] permissions
+### M08.18 - Regression/publication
+- [x] Focused Rust tests.
+- [x] Focused frontend tests.
+- [x] Full frontend suite.
+- [x] Full Rust suite.
+- [x] Typecheck/build/npm audit.
+- [x] cargo fmt/check/build.
+- [x] Publisher failure harness.
+- [x] Production Tauri `--no-bundle` QA publication.
+- [x] Stable EXE/desktop shortcut validation.
+- [x] Canonical asset hash validation.
+- [x] No installer.
 
-## M14 Agent Session Center
-- [ ] PTY + xterm.js
-- [ ] active sessions/status/timer/terminal
-- [ ] event timeline/diff/changed files
-- [ ] stop/retry
-- [ ] restart recovery
-- [ ] permission UI + notifications
+### M08.19 - Native visual/manual acceptance and closure
+- [x] Open Task Sources in native app.
+- [x] Switch among multiple registered projects.
+- [x] Confirm correct per-project inventory.
+- [x] Confirm readable table/panel layout.
+- [x] Confirm no sidebar/topbar/background/glass regression.
+- [x] Preserve historical M08/M08A/M08B/M08C evidence.
+- [x] Final M08 PASS/CLOSED.
+- [x] Unlock M09.
 
-## M15 Prompt Engine
-- [ ] schemas/types/versioning
-- [ ] immutable used versions
-- [ ] context collector
-- [ ] implementation/remediation prompts
-- [ ] review/edit/approve/dispatch
-- [ ] prompt-session provenance
-
-## M16 GPT Audit Engine
-- [ ] audit context + structured result
-- [ ] diff/files/tests/architecture inspection
-- [ ] findings/severity/coverage/confidence/risk
-- [ ] PASS/FAIL transitions
-- [ ] remediation prompt
-- [ ] re-audit
-- [ ] Audit Center
-
-## M17 Claude Code adapter
-- [ ] discover/version/auth
-- [ ] start/resume/continue/stop
-- [ ] structured stream/log mapping
-- [ ] waiting permission/user detection
-- [ ] completion/crash/orphan detection
-- [ ] common adapter compliance
-
-## M18 GitHub integration
-- [ ] repositories/branches/commits/PRs/issues/Actions/releases
-- [ ] local/remote reconciliation
-- [ ] rate limits/offline cache
-- [ ] failed-CI inspection/retry
-- [ ] permission-gated PR creation
-
-## M19 Next Best Task AI + Engineering Brief
-- [ ] priority/dependency/blocker scoring
-- [ ] owner/external gate awareness
-- [ ] agent availability
-- [ ] audit/CI priority
-- [ ] critical-path/context-switch heuristic
-- [ ] explainable project + portfolio recommendations
-- [ ] morning brief / since-last-visit / attention synthesis
-
-## M20 Project Chat + hardening + release
-- [ ] portfolio/project Q&A
-- [ ] action-capable chat with execution preview
-- [ ] command palette
-- [ ] keyboard navigation
-- [ ] credential security/log redaction/process allowlisting
-- [ ] DB backup/restore
-- [ ] performance and large-task tests
-- [ ] installer + clean-machine Windows test
-- [ ] user/security/privacy docs
-- [ ] release audit
-- [ ] H!veAI v1.0.0
+M08 PASS/CLOSED.
 
 ---
 
-## Milestone policy
+# M09 - Task Intelligence Parser
 
-- M00 through M08 are PASS/CLOSED.
-- M09 Task Intelligence Parser implementation is complete pending independent strict audit.
-- M10 remains blocked/unstarted until M09 is independently audited.
-- Builder logs are claims, not acceptance evidence.
-- Historical audits/logs/prompts are immutable evidence and remain the authoritative record for failed/superseded remediation stages.
+### M09.01 - M08-to-M09 source boundary
+- [x] Consume only M08-owned AVAILABLE inventory.
+- [x] Exclude instruction-only AGENTS/CLAUDE sources from task production.
+- [x] Reconstruct source path under Registry root.
+- [x] Canonicalize/contain physical target.
+- [x] Bounded UTF-8 read with SHA-256 verification.
+- [x] Avoid a second independent filesystem crawler.
+
+### M09.02 - Source-change retry
+- [x] Detect hash mismatch between M08 evidence and read body.
+- [x] Perform exactly one M08 rediscovery.
+- [x] Re-resolve/re-canonicalize refreshed path.
+- [x] Perform one second bounded read.
+- [x] Accept stable single edit.
+- [x] Skip after a second mutation with structured warning.
+
+### M09.03 - Normalized task model
+- [x] Define deterministic task snapshot model.
+- [x] Include project/source identity.
+- [x] Include title/status/storage state.
+- [x] Include explicit ID/milestone/actor.
+- [x] Include blockers/dependencies/next step/owner gate/external wait/acceptance criteria.
+- [x] Include confidence/evidence/warnings/adapter ID.
+
+### M09.04 - Generic Markdown parser
+- [x] Parse headings/milestone context.
+- [x] Parse `[ ]`, `[x]`, `[~]`, `[!]` checklist markers.
+- [x] Parse explicit task rows/IDs.
+- [x] Parse WAITING/READY/IN PROGRESS prefix status tags.
+- [x] Keep status words in casual prose from overriding structured status.
+- [x] Use neutral M09 storage mapping rather than implementing M10.
+
+### M09.05 - Structured metadata
+- [x] Parse inline blocker/dependency/next/actor/wait/acceptance labels.
+- [x] Parse nested metadata blocks.
+- [x] Keep nested values attached to the nearest task.
+- [x] Parse owner gate separately from required actor.
+- [x] Normalize known actors.
+- [x] Preserve unknown actor source evidence without inventing canonical actor.
+- [x] Avoid free-prose blocker inference.
+
+### M09.06 - Handoff intelligence
+- [x] Parse Current summary.
+- [x] Parse Next summary.
+- [x] Parse Blocker summary.
+- [x] Parse Waiting/External summary.
+- [x] Keep narrative summary separate from checklist tasks.
+- [x] Merge multiple HANDOFF sources deterministically in M08 order.
+- [x] Preserve one-based evidence locators.
+
+### M09.07 - Deterministic task identity
+- [x] Explicit-ID task identity survives unrelated line insertion/movement.
+- [x] Fallback identity uses normalized heading path/title.
+- [x] Identical sibling tasks remain distinct/repeatable.
+- [x] Same text across different projects never collides.
+- [x] Normalize heading case/whitespace for semantic identity.
+- [~] M09B path-specific identity collision fix implemented; independent audit pending.
+
+### M09.08 - Source/path identity correctness
+- [~] Preserve meaningful filesystem whitespace in path identity.
+- [~] Normalize separators/path syntax without prose whitespace collapse.
+- [~] Apply platform-equivalent case policy safely.
+- [~] Prove `plans/a b.md` and `plans/a  b.md` produce distinct task IDs and both survive SQLite persistence.
+- [ ] Independent M09B audit acceptance of R01.
+
+### M09.09 - Parser bounds and warning model
+- [x] Project-wide max task budget = 4096.
+- [x] Structured `TASK_LIMIT_REACHED`.
+- [x] UTF-8-safe 4096-byte field bounds for task-body fields.
+- [x] Metadata entry bound = 128 with specific warning.
+- [x] Project warning cap = 512.
+- [~] M09B bounds explicit ID, milestone/headings, evidence heading path, locator text, handoff values and other source-derived persisted scalars.
+- [~] Deduplicate repeated equivalent truncation warnings.
+- [ ] Independent M09B audit acceptance of R02.
+
+### M09.10 - Adapter boundary
+- [x] Generic adapter safe fallback.
+- [x] Exact Registry identity selects eligible special adapter.
+- [x] `conventionMatched` stays false until actual structure matches.
+- [x] FormuLab FVL-specific convention evidenced and bonus-gated.
+- [x] Generic TASK syntax in FormuLab receives no FormuLab bonus.
+- [x] ScrubBots generic-safe adapter selection.
+- [x] FMCG ERP generic-safe adapter selection.
+- [x] ScrubBots distinct non-generic convention truthfully UNVERIFIED.
+- [x] FMCG distinct non-generic convention truthfully UNVERIFIED.
+
+### M09.11 - Confidence/evidence locators
+- [x] Deterministic confidence score/reasons.
+- [x] Explicit ID/context/metadata reasons.
+- [x] Adapter bonus only for evidenced per-task match.
+- [x] Source path/content hash/start/end lines/heading path locator.
+- [~] M09B bounds all source-derived evidence scalars; independent audit pending.
+
+### M09.12 - SQLite persistence
+- [x] Persist M09-owned `m09src:` task sources.
+- [x] Persist M09-owned `m09task:` tasks.
+- [x] Persist owner/schema metadata.
+- [x] Preserve unrelated/legacy tasks/sources/settings.
+- [x] Do not write `task_events` from M09.
+- [x] UPSERT stable tasks rather than delete/reinsert.
+- [x] Preserve `created_at`/existing task events for stable identity.
+- [x] Selectively remove only stale M09-owned tasks/sources.
+
+### M09.13 - Dependency persistence
+- [x] Resolve unambiguous explicit task references.
+- [x] Keep unresolved/ambiguous references in metadata with warning.
+- [x] Persist `SOURCE_EXPLICIT` dependency edges transactionally.
+- [x] Reconcile dependency edges idempotently without duplicates.
+
+### M09.14 - Native IPC/ACL
+- [x] `hiveai_task_intelligence_parse`.
+- [x] `hiveai_task_intelligence_list`.
+- [x] Narrow `allow-task-intelligence` permission/capability.
+- [x] No route-driven automatic parser worker.
+- [x] TypeScript native contract wrappers.
+
+### M09.15 - Direct evidence matrix
+- [x] Stable one-edit retry.
+- [x] Second mutation after retry.
+- [x] Outside-root/invalid UTF-8 isolation.
+- [x] Project-wide task limit.
+- [x] Multibyte scalar bound.
+- [x] Metadata bound.
+- [x] Nested metadata/owner gate/casual prose negative evidence.
+- [x] ID movement/heading normalization/project isolation.
+- [x] Prefix status tags.
+- [x] Handoff section separation/merge.
+- [x] Stable UPSERT/event-history preservation.
+- [x] Stale task/source reconciliation.
+- [x] Dependency idempotency.
+- [~] M09B path-collision regression test implemented.
+- [~] M09B oversized heading/handoff/explicit-ID/determinism tests implemented.
+- [~] M09B strengthened retry containment/handoff exact order/stale-source evidence implemented.
+
+### M09.16 - M09 original strict audit history
+- [x] Original M09 implementation completed by builder.
+- [x] Independent strict audit found 7 MAJOR findings.
+- [x] Historical M09 audit preserved as FAIL.
+
+### M09.17 - M09A remediation history
+- [x] Fix real source-change retry.
+- [x] Fix project/scalar bounds for initial covered fields.
+- [x] Fix name-only adapter bonus behavior.
+- [x] Fix nested metadata/owner gate.
+- [x] Fix movement identity tests/heading normalization.
+- [x] Fix checklist status/handoff merge.
+- [x] Fix delete/reinsert persistence with stable UPSERT.
+- [x] Independent M09A re-audit completed.
+- [x] M09A historical verdict = FAIL because R01/R02 remained.
+
+### M09.18 - M09B bounded-identity micro-fix
+- [~] Add path-specific task identity normalization.
+- [~] Preserve meaningful repeated filename whitespace.
+- [~] Bound all source-derived persisted scalars.
+- [~] Add structured/deduplicated truncation evidence.
+- [~] Strengthen retry-containment evidence.
+- [~] Assert exact handoff merge order.
+- [~] Add real stale-source reconciliation evidence.
+- [x] Record ScrubBots/FMCG convention status truthfully as UNVERIFIED.
+- [x] M09B implementation commit/log present.
+- [ ] Complete governed final publication/equality evidence if not already finalized by builder.
+- [ ] Independent strict M09B re-audit.
+
+### M09.19 - M09 regression/publication closure
+- [~] Focused Rust parser tests green per current M09B builder evidence.
+- [~] Full Rust/frontend/typecheck/build/security gates green per builder evidence.
+- [~] Publisher failure harness green per builder evidence.
+- [ ] Independently verify final M09B branch/source truth.
+- [ ] Independently verify final publication/equality evidence.
+- [ ] Final M09 audit verdict.
+- [ ] Mark M09 PASS/CLOSED only if no BLOCKER/MAJOR remains.
+- [ ] Unlock M10 only after independent closure.
+
+M09 ACTIVE / NOT CLOSED.
+
+---
+
+# PRE-M10 NATIVE UX HOTFIX QUEUE
+
+### X01 - Suppress spawned Git console windows
+- [ ] Apply Windows `CREATE_NO_WINDOW`-style creation flags to Git child processes.
+- [ ] Preserve stdout/stderr capture and exit handling.
+- [ ] Prove watcher-triggered Git refresh still works.
+- [ ] Prove no visible console/terminal windows appear while H!veAI stays open.
+- [ ] Run Git Engine/watcher/full regression and republish QA EXE.
+
+### X02 - Restore startup intro audio
+- [ ] Remove unconditional muted startup-video playback.
+- [ ] Configure reliable audible WebView2 autoplay without weakening unrelated security settings.
+- [ ] Preserve canonical opening video bytes.
+- [ ] Cold launch: intro video + audio.
+- [ ] Native restart/new process: intro video + audio.
+- [ ] SPA navigation: intro does not replay.
+- [ ] Obtain user manual acceptance.
+
+These are product defects, not M09 parser tasks. Complete before M10 work begins.
+
+---
+
+# M10 - Workflow State Machine
+
+### M10.01 - Canonical workflow states
+- [ ] Define canonical task states from backlog through completion.
+- [ ] Define builder/auditor/verification states.
+- [ ] Define blocked/waiting/design-gate states.
+- [ ] Separate parser truth from operational workflow truth.
+
+### M10.02 - Actor model
+- [ ] Define Human/Codex/Claude/GPT Audit/CI/External actors.
+- [ ] Define required actor rules per transition.
+- [ ] Preserve unknown/external actor evidence safely.
+
+### M10.03 - Transition matrix
+- [ ] Define allowed state transitions.
+- [ ] Reject invalid direct jumps.
+- [ ] Define happy path.
+- [ ] Define audit-failure/remediation/re-audit loop.
+- [ ] Define blocked/waiting resume transitions.
+
+### M10.04 - Evidence requirements
+- [ ] Define evidence required for each transition.
+- [ ] Link source/task/test/audit/session evidence.
+- [ ] Prevent transition on missing/insufficient evidence.
+
+### M10.05 - Human override
+- [ ] Add explicit human override event.
+- [ ] Require rationale.
+- [ ] Preserve immutable transition history.
+- [ ] Avoid silent state mutation.
+
+### M10.06 - Persistent task events
+- [ ] Persist workflow transition events in `task_events`.
+- [ ] Preserve chronological state history.
+- [ ] Keep stable M09 task IDs as event anchors.
+
+### M10.07 - Restart recovery
+- [ ] Reconstruct current operational state after app restart.
+- [ ] Detect interrupted/running states safely.
+- [ ] Avoid falsely claiming agents/audits are still running.
+
+### M10.08 - Native service/IPC
+- [ ] Add narrow state-machine operations.
+- [ ] Add list/current-state operations.
+- [ ] Add permission boundaries for mutating transitions.
+
+### M10.09 - Direct state-machine tests
+- [ ] Happy-path matrix tests.
+- [ ] Invalid-transition tests.
+- [ ] Evidence-gate tests.
+- [ ] Human-override tests.
+- [ ] blocked/waiting tests.
+- [ ] restart-recovery tests.
+
+### M10.10 - Regression/audit/closure
+- [ ] Full Rust/frontend/security regression.
+- [ ] Production QA publication.
+- [ ] Independent strict audit.
+- [ ] Close M10 before M11/M12 live operational UI is unlocked.
+
+M10 BLOCKED/UNSTARTED pending M09 closure and pre-M10 UX hotfix.
+
+---
+
+# M11 - Global Command Center
+
+### M11.01 - Live portfolio data model
+- [ ] Replace placeholder KPI data with Registry/task/workflow-backed data.
+- [ ] Define portfolio aggregation contract.
+- [ ] Avoid fake live metrics.
+
+### M11.02 - KPI strip
+- [ ] Project count/health.
+- [ ] Active tasks.
+- [ ] Blocked/waiting attention counts.
+- [ ] Running agents/audits when real.
+- [ ] CI/audit health indicators where available.
+
+### M11.03 - Project operation cards
+- [ ] Current task.
+- [ ] Current workflow state.
+- [ ] Last action.
+- [ ] Next action.
+- [ ] Required actor.
+- [ ] Project health/progress.
+
+### M11.04 - Needs Your Attention
+- [ ] Human decisions/gates.
+- [ ] Blocked tasks.
+- [ ] External waits.
+- [ ] Failed audits/CI.
+- [ ] Permission requests.
+
+### M11.05 - Active Work Queue
+- [ ] Active builder sessions.
+- [ ] Active audits.
+- [ ] Pending verification.
+- [ ] Waiting/blocked work.
+
+### M11.06 - AI Engineering Brief surface
+- [ ] Create deterministic data contract for brief inputs.
+- [ ] Surface current project/portfolio situation.
+- [ ] Keep AI-generated recommendations clearly separate from factual state.
+
+### M11.07 - Recent Activity
+- [ ] Show real task/workflow/agent/audit/Git activity.
+- [ ] Add search/filter.
+- [ ] Bound long histories.
+
+### M11.08 - Selected-project interaction
+- [ ] Keep project rail names-only.
+- [ ] Click selects in place.
+- [ ] Current Project panel updates.
+- [ ] `Open cockpit` remains the explicit navigation action.
+- [ ] Session remembers selected project.
+
+### M11.09 - Layout/performance/accessibility
+- [ ] Preserve accepted sidebar/background/glass system.
+- [ ] Avoid outer-body overflow at accepted desktop viewports.
+- [ ] Avoid unnecessary nested scrollbars.
+- [ ] Preserve keyboard/focus behavior.
+
+### M11.10 - Tests/audit/closure
+- [ ] Mounted live-data tests.
+- [ ] Stale project-switch/race tests.
+- [ ] Full regression/publication.
+- [ ] User visual acceptance if layout materially changes.
+- [ ] Independent strict audit.
+
+M11 PLANNED/BLOCKED until M10.
+
+---
+
+# M12 - Project Cockpit
+
+### M12.01 - Cockpit shell/data loading
+- [ ] Project-specific route loading.
+- [ ] Async loading skeleton.
+- [ ] No fallback to another project on missing/late data.
+- [ ] Truthful missing/archived state.
+
+### M12.02 - Overview tab
+- [ ] Project identity/health.
+- [ ] Current task hero.
+- [ ] Current workflow state.
+- [ ] Last completed action.
+- [ ] Next action/required actor.
+
+### M12.03 - Tasks tab
+- [ ] Parsed tasks with status/state distinction.
+- [ ] Dependencies/blockers/acceptance criteria.
+- [ ] Evidence drawer.
+- [ ] Source locator navigation foundation.
+
+### M12.04 - Workflow tab
+- [ ] State pipeline.
+- [ ] Transition history.
+- [ ] Evidence requirements.
+- [ ] Human override visibility/control.
+
+### M12.05 - Agents tab
+- [ ] Project-scoped sessions.
+- [ ] Session status/duration/provider.
+- [ ] Permission/wait state.
+
+### M12.06 - Audit tab
+- [ ] Latest audit verdict.
+- [ ] Findings/severity.
+- [ ] Requirement coverage.
+- [ ] Re-audit/remediation history.
+
+### M12.07 - Git tab
+- [ ] Branch/HEAD/status.
+- [ ] Ahead/behind.
+- [ ] Changed files/diff.
+- [ ] Conflicts/worktrees.
+
+### M12.08 - Tests/Activity/Files tabs
+- [ ] Test-run history.
+- [ ] Activity timeline.
+- [ ] Bounded relevant-file inventory.
+- [ ] Evidence links.
+
+### M12.09 - Project Settings tab
+- [ ] Registry settings.
+- [ ] Preferred builder/auditor.
+- [ ] Task-source policy/custom source entry points.
+- [ ] Path repair/archive/remove-from-registry controls.
+
+### M12.10 - Manual correction controls
+- [ ] Controlled human corrections.
+- [ ] Require rationale/evidence.
+- [ ] Record correction event.
+- [ ] Avoid silent state rewriting.
+
+### M12.11 - Tests/audit/closure
+- [ ] Mounted project-switch/race tests.
+- [ ] Evidence rendering tests.
+- [ ] Full regression/publication.
+- [ ] User visual acceptance.
+- [ ] Independent strict audit.
+
+M12 PLANNED/BLOCKED until M10/M11 foundation.
+
+---
+
+# M13 - Codex Adapter
+
+### M13.01 - Codex availability/readiness
+- [ ] Detect Codex installation/version.
+- [ ] Detect auth/readiness without exposing credentials.
+- [ ] Surface unavailable/misconfigured state truthfully.
+
+### M13.02 - Common agent adapter contract
+- [ ] Implement provider-neutral availability/start/resume/stop/status contract.
+- [ ] Map Codex to common session/event model.
+
+### M13.03 - Project-scoped process start
+- [ ] Start Codex in registered project/worktree cwd.
+- [ ] Validate cwd containment.
+- [ ] Avoid arbitrary shell execution.
+
+### M13.04 - Session output capture
+- [ ] Capture stdout.
+- [ ] Capture stderr.
+- [ ] Capture exit code.
+- [ ] Stream bounded structured events.
+
+### M13.05 - Task/session mapping
+- [ ] Attach session to one project.
+- [ ] Attach session to one task or explicit freeform operation.
+- [ ] Preserve prompt/version provenance when available.
+
+### M13.06 - Resume/stop/recovery
+- [ ] Resume supported Codex session where safe.
+- [ ] Stop process cleanly.
+- [ ] Detect crashed/orphaned process.
+- [ ] Recover truthful state after H!veAI restart.
+
+### M13.07 - Permission boundary
+- [ ] Define allowed process launch arguments.
+- [ ] Block arbitrary command injection.
+- [ ] Record permission-sensitive operations.
+
+### M13.08 - Direct process tests
+- [ ] Availability tests.
+- [ ] cwd/containment tests.
+- [ ] stdout/stderr/exit tests.
+- [ ] stop/crash/recovery tests.
+- [ ] malformed/injection input tests.
+
+### M13.09 - Regression/audit/closure
+- [ ] Full security/process regression.
+- [ ] Production QA publication.
+- [ ] Independent strict audit.
+
+M13 PLANNED/BLOCKED until M12 workflow surfaces are ready.
+
+---
+
+# M14 - Agent Session Center
+
+### M14.01 - PTY foundation
+- [ ] Add Rust PTY/process manager.
+- [ ] Add xterm.js terminal surface.
+- [ ] Keep process ownership native.
+
+### M14.02 - Session list/status
+- [ ] Active sessions.
+- [ ] Provider/project/task.
+- [ ] Status/timer/start/end.
+- [ ] Waiting/permission/crash state.
+
+### M14.03 - Live terminal
+- [ ] Stream terminal output.
+- [ ] Bound retained buffer/history.
+- [ ] Handle terminal resize.
+- [ ] Prevent secret leakage where possible.
+
+### M14.04 - Session timeline
+- [ ] Agent events.
+- [ ] Tool calls.
+- [ ] Prompt/version reference.
+- [ ] Git/diff/test events.
+
+### M14.05 - Diff/changed files
+- [ ] Project/session changed-file view.
+- [ ] Reuse Git Engine diff authority.
+- [ ] Avoid trusting agent claims alone.
+
+### M14.06 - Stop/retry/recovery
+- [ ] Stop running session.
+- [ ] Retry failed operation with provenance.
+- [ ] Recover orphaned sessions after restart.
+
+### M14.07 - Permission UI
+- [ ] Show permission request.
+- [ ] Approve/deny explicitly.
+- [ ] Record decision.
+- [ ] Use notifications for waiting attention.
+
+### M14.08 - Tests/audit/closure
+- [ ] PTY/process lifecycle tests.
+- [ ] UI stream tests.
+- [ ] restart recovery tests.
+- [ ] security/redaction tests.
+- [ ] Full regression/publication.
+- [ ] Independent strict audit.
+
+M14 PLANNED/BLOCKED until M13.
+
+---
+
+# M15 - Prompt Engine
+
+### M15.01 - Prompt schemas/types
+- [ ] Define prompt kinds.
+- [ ] Define implementation/remediation/audit-support prompt structures.
+- [ ] Define project/task/session provenance.
+
+### M15.02 - Versioning
+- [ ] Persist prompt versions.
+- [ ] Never mutate a prompt version already used by a session.
+- [ ] Track current version separately.
+
+### M15.03 - Context collector
+- [ ] Collect task requirements.
+- [ ] Collect project/source evidence.
+- [ ] Collect architecture/governance constraints.
+- [ ] Collect relevant Git/test/audit context.
+- [ ] Keep context bounded and explainable.
+
+### M15.04 - Implementation prompt generation
+- [ ] Generate builder-ready prompt from current task/context.
+- [ ] Include exact acceptance behavior/tests.
+- [ ] Avoid irrelevant governance noise.
+
+### M15.05 - Remediation prompt generation
+- [ ] Consume audit findings.
+- [ ] Generate defect-focused remediation prompt.
+- [ ] Require tests that fail on pre-fix behavior.
+
+### M15.06 - Review/edit/approve
+- [ ] Human can review prompt.
+- [ ] Human can edit before dispatch.
+- [ ] Human approval/dispatch is explicit.
+
+### M15.07 - Dispatch/provenance
+- [ ] Dispatch approved prompt to selected adapter.
+- [ ] Attach exact prompt version to session.
+- [ ] Preserve immutable provenance.
+
+### M15.08 - Tests/audit/closure
+- [ ] Version immutability tests.
+- [ ] Context-bound tests.
+- [ ] Prompt/session provenance tests.
+- [ ] Full regression/publication.
+- [ ] Independent strict audit.
+
+M15 PLANNED/BLOCKED until M14.
+
+---
+
+# M16 - GPT Audit Engine
+
+### M16.01 - Audit input contract
+- [ ] Task requirements/acceptance criteria.
+- [ ] Actual Git diff/changed files.
+- [ ] Test results.
+- [ ] Architecture/governance rules.
+- [ ] Builder logs as secondary claims only.
+
+### M16.02 - Structured audit result
+- [ ] PASS/CONDITIONAL/FAIL verdict.
+- [ ] BLOCKER/MAJOR/MINOR/NOTE severity.
+- [ ] Requirement coverage.
+- [ ] Confidence.
+- [ ] Regression risk.
+
+### M16.03 - Source-level verification
+- [ ] Inspect production symbols/configuration.
+- [ ] Inspect direct test bodies.
+- [ ] Detect misleading test names/claims.
+- [ ] Verify final branch/diff scope.
+
+### M16.04 - Audit persistence
+- [ ] Persist audit.
+- [ ] Persist findings.
+- [ ] Link project/task/session/test evidence.
+- [ ] Preserve re-audit history.
+
+### M16.05 - Remediation loop
+- [ ] Convert failed findings into bounded remediation input.
+- [ ] Dispatch through Prompt Engine after review/approval.
+- [ ] Re-audit resulting implementation.
+
+### M16.06 - Audit Center UI
+- [ ] Current verdict.
+- [ ] Findings/severity.
+- [ ] Coverage/confidence/risk.
+- [ ] Historical audit/remediation chain.
+
+### M16.07 - Security/truthfulness
+- [ ] Never allow advertiser/network influence on audit outcome.
+- [ ] Never treat builder self-assessment as independent evidence.
+- [ ] Clearly mark UNVERIFIED evidence.
+
+### M16.08 - Tests/audit/closure
+- [ ] Known-good/known-bad fixture audits.
+- [ ] Misleading-test detection cases.
+- [ ] Remediation/re-audit loop tests.
+- [ ] Full regression/publication.
+- [ ] Independent release-gate audit of the audit engine itself.
+
+M16 PLANNED/BLOCKED until M15.
+
+---
+
+# M17 - Claude Code Adapter
+
+### M17.01 - Claude availability/readiness
+- [ ] Detect Claude Code installation/version.
+- [ ] Detect auth/readiness safely.
+- [ ] Surface unavailable/quota/waiting states truthfully.
+
+### M17.02 - Common adapter compliance
+- [ ] Implement same provider-neutral interface as Codex.
+- [ ] Keep project/task/session identity consistent.
+
+### M17.03 - Start/resume/continue/stop
+- [ ] Start in registered project/worktree cwd.
+- [ ] Resume/continue supported session.
+- [ ] Stop cleanly.
+
+### M17.04 - Structured stream mapping
+- [ ] Map Claude output/events to common session events.
+- [ ] Capture stdout/stderr/exit.
+- [ ] Preserve bounded logs.
+
+### M17.05 - Permission/wait detection
+- [ ] Detect waiting-for-user state.
+- [ ] Detect permission request.
+- [ ] Detect rate/quota limitation where observable.
+- [ ] Surface actionable attention state.
+
+### M17.06 - Crash/orphan recovery
+- [ ] Detect completion/crash/orphan.
+- [ ] Recover truthful state after H!veAI restart.
+
+### M17.07 - Security/process tests
+- [ ] cwd containment.
+- [ ] argument injection resistance.
+- [ ] output/event mapping.
+- [ ] stop/resume/recovery.
+
+### M17.08 - Regression/audit/closure
+- [ ] Full process/UI/security regression.
+- [ ] Production QA publication.
+- [ ] Independent strict audit.
+
+M17 PLANNED/BLOCKED until common session/prompt/audit infrastructure exists.
+
+---
+
+# M18 - GitHub Integration
+
+### M18.01 - Repository/branch/commit reads
+- [ ] Read repository identity.
+- [ ] Read branches/commits.
+- [ ] Reconcile local branch/HEAD with remote.
+
+### M18.02 - Pull requests
+- [ ] Read PR metadata/diff/status/comments.
+- [ ] Link PR to project/task/session where possible.
+- [ ] Permission-gated PR creation only.
+
+### M18.03 - Issues
+- [ ] Read project-relevant issues.
+- [ ] Map explicit issue/task relationships.
+- [ ] Avoid guessing implicit ownership.
+
+### M18.04 - GitHub Actions
+- [ ] Read workflow runs/jobs/steps/log summaries.
+- [ ] Surface failed CI.
+- [ ] Permission-gated retry where supported.
+
+### M18.05 - Releases
+- [ ] Read releases/tags.
+- [ ] Surface release state for project context.
+
+### M18.06 - Cache/rate limits/offline behavior
+- [ ] Persist bounded GitHub cache/sync cursor.
+- [ ] Respect rate limits.
+- [ ] Degrade truthfully when offline/stale.
+
+### M18.07 - Local/remote reconciliation
+- [ ] Compare local Git Engine state to GitHub remote state.
+- [ ] Detect divergence/stale data.
+- [ ] Never overwrite local work automatically.
+
+### M18.08 - Security/permissions
+- [ ] Least-privilege connector actions.
+- [ ] Human approval for remote mutations.
+- [ ] Secret/token redaction.
+
+### M18.09 - Tests/audit/closure
+- [ ] Mocked/fixture remote tests.
+- [ ] rate-limit/offline tests.
+- [ ] local/remote reconciliation tests.
+- [ ] Full regression/publication.
+- [ ] Independent strict audit.
+
+M18 PLANNED/BLOCKED until M17/core agent flows.
+
+---
+
+# M19 - Next Best Task AI and Engineering Brief
+
+### M19.01 - Candidate task eligibility
+- [ ] Use M09 task intelligence + M10 workflow state.
+- [ ] Exclude completed/ineligible tasks.
+- [ ] Respect dependencies/blockers/gates.
+
+### M19.02 - Priority scoring
+- [ ] Project/task priority.
+- [ ] Dependency critical path.
+- [ ] Audit/CI failure urgency.
+- [ ] Human/external wait penalties.
+- [ ] Context-switch cost.
+
+### M19.03 - Agent availability awareness
+- [ ] Consider Codex/Claude availability.
+- [ ] Avoid recommending work requiring unavailable actor.
+- [ ] Surface Human-required work separately.
+
+### M19.04 - Explainable recommendation
+- [ ] Recommend next project/task.
+- [ ] Explain why.
+- [ ] Show blockers/dependencies/evidence.
+- [ ] Show why alternatives ranked lower where useful.
+
+### M19.05 - Portfolio recommendation
+- [ ] Rank work across projects.
+- [ ] Avoid starving lower-priority critical work.
+- [ ] Respect explicit human project focus when set.
+
+### M19.06 - Engineering Brief
+- [ ] Morning brief.
+- [ ] Since-last-visit summary.
+- [ ] What changed.
+- [ ] What needs attention.
+- [ ] Recommended next actions.
+
+### M19.07 - Truthfulness and AI boundary
+- [ ] Separate factual state from AI recommendation.
+- [ ] Cite project/task/audit/Git/CI evidence.
+- [ ] Mark uncertain/unavailable data.
+
+### M19.08 - Tests/audit/closure
+- [ ] Deterministic scoring fixture tests.
+- [ ] blocker/dependency/actor tests.
+- [ ] explanation consistency tests.
+- [ ] Full regression/publication.
+- [ ] Independent strict audit.
+
+M19 PLANNED/BLOCKED until M18.
+
+---
+
+# M20 - Project Chat, hardening and release
+
+### M20.01 - Project/portfolio chat
+- [ ] Portfolio Q&A.
+- [ ] Project-specific Q&A.
+- [ ] Task/workflow/audit/Git/test grounded answers.
+- [ ] Evidence-aware responses.
+
+### M20.02 - Action-capable chat
+- [ ] Translate chat intent into bounded action proposal.
+- [ ] Show execution preview before mutation.
+- [ ] Require permission/human approval for sensitive actions.
+- [ ] Record provenance/result.
+
+### M20.03 - Command palette
+- [ ] Global command palette.
+- [ ] Search projects/tasks/actions.
+- [ ] Keyboard-first operation.
+
+### M20.04 - Accessibility/keyboard navigation
+- [ ] Complete keyboard navigation audit.
+- [ ] Focus management.
+- [ ] Accessible labels/states.
+- [ ] Motion/reduced-motion behavior.
+
+### M20.05 - Credential/process security hardening
+- [ ] Credential storage review.
+- [ ] Secret/log redaction.
+- [ ] Process executable/argument allowlisting.
+- [ ] Permission review.
+- [ ] Tauri capability review.
+
+### M20.06 - Database backup/restore
+- [ ] User-accessible backup.
+- [ ] Restore validation.
+- [ ] Corruption/recovery test.
+- [ ] Version compatibility policy.
+
+### M20.07 - Performance/scale hardening
+- [ ] Large Registry test.
+- [ ] Large task/source test.
+- [ ] Large activity/session/audit history test.
+- [ ] Memory/CPU/startup responsiveness review.
+
+### M20.08 - UX hardening
+- [ ] Final layout/scrollbar audit.
+- [ ] Error/offline/missing-project states.
+- [ ] Notification quality.
+- [ ] Remove stale placeholders/fake data.
+- [ ] Final canonical branding check.
+
+### M20.09 - Installer/clean-machine Windows test
+- [ ] Create installer only at this milestone.
+- [ ] Install on clean Windows environment.
+- [ ] Validate shortcut/icon/startup/restart.
+- [ ] Validate no dev tooling/server requirement.
+- [ ] Validate uninstall behavior.
+
+### M20.10 - User/security/privacy documentation
+- [ ] User guide.
+- [ ] Project/agent/audit workflow guide.
+- [ ] Security/privacy behavior.
+- [ ] Backup/restore instructions.
+- [ ] Troubleshooting.
+
+### M20.11 - Release audit
+- [ ] Full milestone regression M00-M20.
+- [ ] Security audit.
+- [ ] Dependency audit.
+- [ ] Installer/clean-machine evidence.
+- [ ] No unresolved BLOCKER/MAJOR findings.
+
+### M20.12 - H!veAI v1.0.0
+- [ ] Version/tag/release notes.
+- [ ] Final production build/installers.
+- [ ] Release artifacts verified.
+- [ ] Final human acceptance.
+- [ ] H!veAI v1.0.0 released.
+
+M20 PLANNED/BLOCKED until M19 and final hardening gates.
+
+---
+
+# Milestone policy
+
+- M00-M08 are PASS/CLOSED.
+- M09 remains active until independent M09B re-audit/final closure.
+- M10 remains blocked until M09 and the queued pre-M10 native UX hotfix are closed.
+- M11-M20 remain planned and must not be treated as implemented because their roadmap entries are detailed.
+- Each future milestone should be executed as one bounded milestone unless an actual independent audit requires a remediation prompt.
+- Subpackage numbering is for traceability, source/evidence mapping, and progress visibility, not an instruction to generate many tiny prompts.
+- Every milestone closes only after production implementation, direct evidence, full regression, governed publication where applicable, and independent audit acceptance.
