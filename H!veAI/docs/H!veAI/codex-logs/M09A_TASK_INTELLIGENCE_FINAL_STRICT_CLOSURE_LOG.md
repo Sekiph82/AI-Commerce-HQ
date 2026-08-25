@@ -32,7 +32,7 @@ Status: PASS
 
 F03
 Production symbol(s) changed: `adapter_for`, `adapter_matches_task`, and per-task convention confidence calculation.
-Exact direct test(s): `p03_formulab_bonus_requires_formulab_specific_match`, `p03_generic_parser_does_not_claim_special_convention`, `p06_registered_adapter_fixtures_use_evidenced_conventions`.
+Exact direct test(s): `p03_formulab_bonus_requires_formulab_specific_match`, `p03_similarly_named_project_never_selects_special_adapter`, `p03_generic_parser_does_not_claim_special_convention`, `p06_registered_adapter_fixtures_use_evidenced_conventions`.
 Pre-fix behavior that fails these tests: adapter identity alone set `convention_matched=true` and granted a bonus to any explicit ID.
 Post-fix behavior proved: FormuLab receives a bonus only for evidenced `FVL-` structure; generic TASK syntax in FormuLab, ScrubBots, and FMCG remains generic-safe and unbonused.
 Would these tests fail on cdac3774a403a04ae94db707483a8dfad27efa52? YES + why: the historical name-only adapter flags would claim matches for generic IDs.
@@ -72,7 +72,7 @@ Status: PASS
 
 ## Focused test results
 
-All 44 `task_intelligence::tests` passed, including every direct test named above. The full Rust suite passed: 181 tests passed, 0 failed.
+All 45 `task_intelligence::tests` passed, including every direct test named above. The full Rust suite passed after the final named-test addition, with 182 tests passed and 0 failed.
 
 ## Regression and security gates
 

@@ -1392,6 +1392,14 @@ mod tests {
         }
     }
     #[test]
+    fn p03_similarly_named_project_never_selects_special_adapter() {
+        let (_db_dir, _dir, db, id) =
+            fixture_named("- [ ] TASK-101: unrelated\n", "FormuLab Clone");
+        let snapshot = parse(&db, &id).unwrap();
+        assert_eq!(snapshot.adapter.id, "generic");
+        assert!(!snapshot.adapter.convention_matched);
+    }
+    #[test]
     fn p04_structured_metadata_and_unknown_actor() {
         let (_db_dir, _dir, db, id) = fixture("# Work\n- [ ] build\n  Blocker: dependency\n  Depends on: TASK-2\n  Next step: verify\n  Owner: Mystery\n  Waiting for: vendor\n  Acceptance: test it\n");
         let s = parse(&db, &id).unwrap();
