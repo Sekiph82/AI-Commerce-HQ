@@ -16,7 +16,9 @@ use projects::{
     UpdateProjectSettingsRequest,
 };
 use runtime::{RuntimeStatus, RuntimeSupervisor};
-use task_sources::{CustomPathRequest, CustomSourcePath, DiscoveredProjectSource};
+use task_sources::{
+    CustomPathRequest, CustomPathUpdateRequest, CustomSourcePath, DiscoveredProjectSource,
+};
 use watcher::{ProjectWatcherStatus, WatcherManager, WatcherStatusSummary};
 
 use git_engine::{GitDiff, GitDiffRequest, GitSnapshot, GitSnapshotRequest, MutationStatus};
@@ -252,6 +254,14 @@ fn hiveai_task_source_custom_path_remove(
     task_sources::custom_path_remove(&database, &project_id, &path_or_id)
 }
 
+#[tauri::command]
+fn hiveai_task_source_custom_path_update(
+    database: tauri::State<'_, DatabaseState>,
+    request: CustomPathUpdateRequest,
+) -> Result<Vec<CustomSourcePath>, String> {
+    task_sources::custom_path_update(&database, request)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -288,7 +298,8 @@ pub fn run() {
             hiveai_task_sources_list,
             hiveai_task_source_custom_paths_list,
             hiveai_task_source_custom_path_add,
-            hiveai_task_source_custom_path_remove
+            hiveai_task_source_custom_path_remove,
+            hiveai_task_source_custom_path_update
         ])
         .setup(|app| {
             app.manage(StartupIntroState::default());

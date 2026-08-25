@@ -156,26 +156,27 @@ M08.00B is PASS/CLOSED with independent audit and user manual acceptance.
 M08.00/M08.00B PASS/CLOSED. Strict audit: `docs/H!veAI/audits/M08.00B_BACKGROUND_ALIGNMENT_AND_NATIVE_INTRO_FIX_STRICT_AUDIT.md`. Manual acceptance: `docs/H!veAI/audits/M08.00B_MANUAL_ACCEPTANCE.md`.
 
 ## M08 Task Source Discovery
-- [x] Discover standard task-source files: TASKS/TASK/PLANS/PLAN/PROGRESS/ROADMAP/AGENTS/CLAUDE/HANDOFF variants
-- [x] Discover bounded task-relevant directories: `tasks/`, `plans/`, `handoffs/`, `.hiveai/`
-- [x] Support safe project-scoped custom source paths
-- [x] Enforce physical containment, traversal rejection, symlink/junction escape protection, ignore trees, depth/file-size limits
-- [x] Classify source kind, origin, authority/priority, freshness evidence, status, size, mtime, SHA-256
-- [x] Persist/reconcile source inventory idempotently in H!veAI-owned SQLite `project_sources`
-- [x] Keep M08 strictly at source-discovery level; do not parse tasks or infer workflow semantics
-- [x] Add narrow native Rust IPC and Tauri permission/capability
-- [x] Reuse M07 watcher boundary without creating a second watcher subsystem
-- [x] Replace native `/tasks` placeholder with real Task Sources workspace for selected live Registry project
-- [x] Add truthful loading/empty/error/missing/custom-path states
-- [x] Add mounted-app selected-project transition and stale-response-race tests
-- [x] Add direct Rust production-path discovery/persistence/security evidence matrix
-- [x] Run full frontend/Rust/security/publisher regression
-- [x] Publish stable no-bundle QA build
-- [x] Create `docs/H!veAI/codex-logs/M08_TASK_SOURCE_DISCOVERY_LOG.md`
-- [ ] Independent strict audit after implementation
+- [x] Original bounded source-discovery implementation
+- [x] Native `/tasks` Task Sources workspace and narrow ACL
+- [ ] Independent strict audit closure: original M08 audit is FAIL
 - [ ] User visual acceptance of the native Task Sources workspace
 
-M08 Task Source Discovery implementation is complete and published pending independent strict audit and user visual acceptance. M09 remains unstarted.
+M08 original implementation remains historical evidence. Its strict audit is FAIL;
+M08A is the only active closure remediation. M09 remains blocked and unstarted.
+
+## M08A Task Source Discovery Strict Closure
+- [x] Close F01 filesystem work bounds and structured warning evidence
+- [x] Close F02 custom update, persisted order, and equivalent-path removal
+- [x] Close F03 M08-owned, versioned, non-destructive `project_sources` reconciliation
+- [x] Close F04-F05 mounted stale list/mutation transitions and truthful UI evidence
+- [x] Close F06 direct SQLite, unreadable-source, limits, status, and containment evidence
+- [x] Close F07 immutable remediation log with individual test/equality evidence
+- [x] Close N01 archived-project boundary and N02 containment-aware custom status
+- [ ] Independent M08 strict re-audit
+- [ ] User visual acceptance of the remediated native Task Sources workspace
+
+M08A remains ACTIVE until every strict-audit major finding has direct production
+and evidence closure. M09 remains blocked and unstarted.
 
 ## M09 Task Intelligence Parser
 - [ ] headings/checklists/milestones/status tags/task IDs

@@ -3,9 +3,14 @@ use crate::projects::fetch_project;
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
+#[cfg(test)]
+use std::sync::{Mutex, OnceLock};
+
+pub const MAX_VISITED_ENTRIES: usize = 4096;
 
 pub const MAX_DISCOVERY_DEPTH: usize = 4;
 pub const MAX_CANDIDATE_FILES: usize = 512;
@@ -56,6 +61,12 @@ pub struct DiscoveredProjectSource {
     pub content_hash: Option<String>,
     pub depth: usize,
     pub warnings: Vec<String>,
+    #[serde(default)]
+    pub schema_version: u32,
+    #[serde(default)]
+    pub owner: String,
+    #[serde(default)]
+    pub source_order: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -66,6 +77,7 @@ pub struct CustomSourcePath {
     pub display_path: String,
     pub normalized_path: String,
     pub status: String,
+    pub order: i64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -75,39 +87,95 @@ pub struct CustomPathRequest {
     pub path: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomPathUpdateRequest {
+    pub project_id: String,
+    pub path_or_id: String,
+    pub path: Option<String>,
+    pub order: Option<i64>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct StoredCustomPath {
     id: String,
     display_path: String,
     normalized_path: String,
+    #[serde(default)]
+    order: i64,
+}
+
+struct DiscoveryBudget {
+    visited_entries: usize,
+    candidate_limit: bool,
+    work_limit: bool,
+    depth_limit: bool,
+    warnings: BTreeSet<String>,
+}
+
+impl DiscoveryBudget {
+    fn new() -> Self {
+        Self {
+            visited_entries: 0,
+            candidate_limit: false,
+            work_limit: false,
+            depth_limit: false,
+            warnings: BTreeSet::new(),
+        }
+    }
+
+    fn visit(&mut self) -> bool {
+        if self.visited_entries >= MAX_VISITED_ENTRIES {
+            self.work_limit = true;
+            self.warnings.insert(format!(
+                "visited-entry limit reached ({MAX_VISITED_ENTRIES})"
+            ));
+            return false;
+        }
+        self.visited_entries += 1;
+        true
+    }
+
+    fn candidate_available(&mut self, current: usize) -> bool {
+        if current >= MAX_CANDIDATE_FILES {
+            self.candidate_limit = true;
+            self.warnings
+                .insert(format!("candidate limit reached ({MAX_CANDIDATE_FILES})"));
+            return false;
+        }
+        true
+    }
+
+    fn depth_allowed(&mut self, depth: usize) -> bool {
+        if depth > MAX_DISCOVERY_DEPTH {
+            self.depth_limit = true;
+            self.warnings
+                .insert(format!("depth limit reached ({MAX_DISCOVERY_DEPTH})"));
+            return false;
+        }
+        true
+    }
 }
 
 pub fn discover(
     database: &DatabaseState,
     project_id: &str,
 ) -> Result<Vec<DiscoveredProjectSource>, String> {
-    let project = fetch_project(database, project_id)?;
+    let project = discovery_project(database, project_id)?;
     let root = physical_root(Path::new(&project.normalized_path))?;
     let custom = load_custom_paths(database, project_id)?;
     let now = crate::time::utc_timestamp();
     let mut candidates = Vec::new();
-    discover_standard(&root, project_id, &now, &mut candidates);
+    let mut budget = DiscoveryBudget::new();
+    discover_standard(&root, project_id, &now, &mut candidates, &mut budget);
     for path in &custom {
-        discover_custom(&root, path, project_id, &now, &mut candidates);
+        discover_custom(&root, path, project_id, &now, &mut candidates, &mut budget);
     }
-    candidates.sort_by(|a, b| {
-        (
-            a.priority,
-            a.relative_path.to_ascii_lowercase(),
-            a.origin.clone(),
-        )
-            .cmp(&(
-                b.priority,
-                b.relative_path.to_ascii_lowercase(),
-                b.origin.clone(),
-            ))
-    });
+    candidates.sort_by(|a, b| source_sort_key(a).cmp(&source_sort_key(b)));
+    if !budget.warnings.is_empty() {
+        candidates.push(discovery_warning(&root, project_id, &now, &budget.warnings));
+    }
     reconcile(database, project_id, &candidates)?;
     list(database, project_id)
 }
@@ -116,7 +184,7 @@ pub fn list(
     database: &DatabaseState,
     project_id: &str,
 ) -> Result<Vec<DiscoveredProjectSource>, String> {
-    let project = fetch_project(database, project_id)?;
+    let project = discovery_project(database, project_id)?;
     if !Path::new(&project.normalized_path).exists() {
         return Err("registered project root is unavailable".to_string());
     }
@@ -128,8 +196,9 @@ pub fn list(
     let mut result = Vec::new();
     while let Some(row) = rows.next().map_err(db_error)? {
         let metadata: String = row.get(6).map_err(db_error)?;
-        let mut source: DiscoveredProjectSource = serde_json::from_str(&metadata)
-            .map_err(|error| format!("decode task source metadata: {error}"))?;
+        let Ok(mut source) = serde_json::from_str::<DiscoveredProjectSource>(&metadata) else {
+            continue;
+        };
         source.id = row.get(0).map_err(db_error)?;
         source.project_id = row.get(1).map_err(db_error)?;
         source.relative_path = row.get(2).map_err(db_error)?;
@@ -138,10 +207,7 @@ pub fn list(
         source.discovered_at = row.get(5).map_err(db_error)?;
         result.push(source);
     }
-    result.sort_by(|a, b| {
-        (a.priority, a.relative_path.to_ascii_lowercase())
-            .cmp(&(b.priority, b.relative_path.to_ascii_lowercase()))
-    });
+    result.sort_by(|a, b| source_sort_key(a).cmp(&source_sort_key(b)));
     Ok(result)
 }
 
@@ -149,8 +215,9 @@ pub fn custom_paths_list(
     database: &DatabaseState,
     project_id: &str,
 ) -> Result<Vec<CustomSourcePath>, String> {
-    fetch_project(database, project_id)?;
-    let root = Path::new(&fetch_project(database, project_id)?.normalized_path).to_path_buf();
+    let root = physical_root(Path::new(
+        &discovery_project(database, project_id)?.normalized_path,
+    ))?;
     Ok(load_custom_paths(database, project_id)?
         .into_iter()
         .map(|path| CustomSourcePath {
@@ -159,6 +226,7 @@ pub fn custom_paths_list(
             status: path_status(&root, &path.normalized_path),
             display_path: path.display_path,
             normalized_path: path.normalized_path,
+            order: path.order,
         })
         .collect())
 }
@@ -167,7 +235,7 @@ pub fn custom_path_add(
     database: &DatabaseState,
     request: CustomPathRequest,
 ) -> Result<Vec<CustomSourcePath>, String> {
-    let project = fetch_project(database, &request.project_id)?;
+    let project = discovery_project(database, &request.project_id)?;
     let root = physical_root(Path::new(&project.normalized_path))?;
     let normalized = normalize_candidate(&root, &request.path)?;
     let mut paths = load_custom_paths(database, &request.project_id)?;
@@ -184,6 +252,7 @@ pub fn custom_path_add(
             id: stable_id(&format!("{}|CUSTOM|{}", request.project_id, normalized)),
             display_path: request.path.trim().to_string(),
             normalized_path: normalized,
+            order: paths.iter().map(|path| path.order).max().unwrap_or(-1) + 1,
         });
         save_custom_paths(database, &request.project_id, &paths)?;
     }
@@ -195,11 +264,12 @@ pub fn custom_path_remove(
     project_id: &str,
     path_or_id: &str,
 ) -> Result<Vec<CustomSourcePath>, String> {
-    fetch_project(database, project_id)?;
+    discovery_project(database, project_id)?;
     let mut paths = load_custom_paths(database, project_id)?;
     let before = paths.len();
+    let normalized_target = normalize_for_compare(path_or_id);
     paths.retain(|path| {
-        path.id != path_or_id && path.normalized_path != normalize_for_compare(path_or_id)
+        path.id != path_or_id && normalize_for_compare(&path.normalized_path) != normalized_target
     });
     if paths.len() == before {
         return Err("custom source path is not configured".to_string());
@@ -208,21 +278,69 @@ pub fn custom_path_remove(
     custom_paths_list(database, project_id)
 }
 
+pub fn custom_path_update(
+    database: &DatabaseState,
+    request: CustomPathUpdateRequest,
+) -> Result<Vec<CustomSourcePath>, String> {
+    let project = discovery_project(database, &request.project_id)?;
+    let root = physical_root(Path::new(&project.normalized_path))?;
+    let mut paths = load_custom_paths(database, &request.project_id)?;
+    let index = paths
+        .iter()
+        .position(|path| {
+            path.id == request.path_or_id
+                || normalize_for_compare(&path.normalized_path)
+                    == normalize_for_compare(&request.path_or_id)
+        })
+        .ok_or_else(|| "custom source path is not configured".to_string())?;
+    if let Some(new_path) = request.path.as_deref() {
+        let normalized = normalize_candidate(&root, new_path)?;
+        if paths.iter().enumerate().any(|(candidate, path)| {
+            candidate != index
+                && normalize_for_compare(&path.normalized_path)
+                    == normalize_for_compare(&normalized)
+        }) {
+            return Err("custom source path is already configured".into());
+        }
+        paths[index].display_path = new_path.trim().to_string();
+        paths[index].normalized_path = normalized;
+        paths[index].id = stable_id(&format!(
+            "{}|CUSTOM|{}",
+            request.project_id, paths[index].normalized_path
+        ));
+    }
+    if let Some(order) = request.order {
+        paths[index].order = order.max(0);
+    }
+    paths.sort_by_key(|path| (path.order, normalize_for_compare(&path.normalized_path)));
+    for (order, path) in paths.iter_mut().enumerate() {
+        path.order = order as i64;
+    }
+    save_custom_paths(database, &request.project_id, &paths)?;
+    custom_paths_list(database, &request.project_id)
+}
+
 fn discover_standard(
     root: &Path,
     project_id: &str,
     now: &str,
     output: &mut Vec<DiscoveredProjectSource>,
+    budget: &mut DiscoveryBudget,
 ) {
     if let Ok(entries) = fs::read_dir(root) {
         for entry in entries.flatten() {
+            if !budget.visit() {
+                break;
+            }
             let path = entry.path();
             if let Some(name) = path.file_name().and_then(|value| value.to_str()) {
                 let lower = name.to_ascii_lowercase();
                 if ROOT_NAMES.contains(&lower.as_str())
-                    || (lower.ends_with("handoff.md") && lower.len() > "handoff.md".len())
+                    || (lower.contains("handoff") && lower.ends_with(".md"))
                 {
-                    collect_file(root, &path, project_id, "STANDARD", now, output, 0, None);
+                    collect_file(
+                        root, &path, project_id, "STANDARD", now, output, 0, None, None, budget,
+                    );
                 }
             }
         }
@@ -230,7 +348,9 @@ fn discover_standard(
     for directory in ["tasks", "plans", "handoffs", ".hiveai"] {
         let path = root.join(directory);
         if path.is_dir() {
-            walk_bounded(root, &path, project_id, "STANDARD", now, output, 0, None);
+            walk_bounded(
+                root, &path, project_id, "STANDARD", now, output, 0, None, None, budget,
+            );
         }
     }
 }
@@ -241,6 +361,7 @@ fn discover_custom(
     project_id: &str,
     now: &str,
     output: &mut Vec<DiscoveredProjectSource>,
+    budget: &mut DiscoveryBudget,
 ) {
     let path = root.join(&custom.normalized_path);
     if path.exists() {
@@ -254,6 +375,8 @@ fn discover_custom(
                 output,
                 0,
                 Some(&custom.id),
+                Some(custom.order),
+                budget,
             );
         } else {
             collect_file(
@@ -265,6 +388,8 @@ fn discover_custom(
                 output,
                 path_depth(root, &path),
                 Some(&custom.id),
+                Some(custom.order),
+                budget,
             );
         }
     } else {
@@ -274,6 +399,7 @@ fn discover_custom(
             project_id,
             now,
             &custom.id,
+            custom.order,
         ));
     }
 }
@@ -287,15 +413,20 @@ fn walk_bounded(
     output: &mut Vec<DiscoveredProjectSource>,
     depth: usize,
     custom_id: Option<&str>,
+    source_order: Option<i64>,
+    budget: &mut DiscoveryBudget,
 ) {
-    if depth > MAX_DISCOVERY_DEPTH || output.len() >= MAX_CANDIDATE_FILES {
+    if !budget.depth_allowed(depth) || !budget.candidate_available(output.len()) {
         return;
     }
     let Ok(entries) = fs::read_dir(directory) else {
         return;
     };
     for entry in entries.flatten() {
-        if output.len() >= MAX_CANDIDATE_FILES {
+        if !budget.visit() {
+            break;
+        }
+        if !budget.candidate_available(output.len()) {
             break;
         }
         let path = entry.path();
@@ -314,6 +445,13 @@ fn walk_bounded(
             {
                 continue;
             }
+            if depth >= MAX_DISCOVERY_DEPTH {
+                budget.depth_limit = true;
+                budget
+                    .warnings
+                    .insert(format!("depth limit reached ({MAX_DISCOVERY_DEPTH})"));
+                continue;
+            }
             walk_bounded(
                 root,
                 &path,
@@ -323,6 +461,8 @@ fn walk_bounded(
                 output,
                 depth + 1,
                 custom_id,
+                source_order,
+                budget,
             );
         } else if path.is_file() && is_plausible_source(&path) {
             collect_file(
@@ -334,6 +474,8 @@ fn walk_bounded(
                 output,
                 path_depth(root, &path),
                 custom_id,
+                source_order,
+                budget,
             );
         }
     }
@@ -348,8 +490,18 @@ fn collect_file(
     output: &mut Vec<DiscoveredProjectSource>,
     _depth: usize,
     custom_id: Option<&str>,
+    source_order: Option<i64>,
+    budget: &mut DiscoveryBudget,
 ) {
-    if output.len() >= MAX_CANDIDATE_FILES || !is_plausible_source(path) {
+    let actual_depth = path_depth(root, path);
+    if actual_depth > MAX_DISCOVERY_DEPTH {
+        budget.depth_limit = true;
+        budget
+            .warnings
+            .insert(format!("depth limit reached ({MAX_DISCOVERY_DEPTH})"));
+        return;
+    }
+    if !budget.candidate_available(output.len()) || !is_plausible_source(path) {
         return;
     }
     let Ok(physical) = fs::canonicalize(path) else {
@@ -378,6 +530,7 @@ fn collect_file(
                 None,
                 None,
                 vec!["metadata unavailable".into()],
+                source_order,
             ));
             return;
         }
@@ -403,6 +556,7 @@ fn collect_file(
             vec![format!(
                 "source exceeds {MAX_SOURCE_BYTES} byte hash/read limit"
             )],
+            source_order,
         ));
         return;
     }
@@ -422,6 +576,7 @@ fn collect_file(
                 Some(size),
                 modified,
                 vec!["source could not be read".into()],
+                source_order,
             ));
             return;
         }
@@ -446,6 +601,7 @@ fn collect_file(
             Some(size),
             modified,
             Vec::new(),
+            source_order,
         )
         .with_hash(hash.expect("available source hash")),
     );
@@ -464,6 +620,7 @@ fn source_with_status(
     size: Option<u64>,
     modified: Option<String>,
     warnings: Vec<String>,
+    source_order: Option<i64>,
 ) -> DiscoveredProjectSource {
     DiscoveredProjectSource {
         id: stable_id(&format!(
@@ -487,6 +644,9 @@ fn source_with_status(
         content_hash: None,
         depth: relative.matches('/').count(),
         warnings,
+        schema_version: 1,
+        owner: "M08_TASK_SOURCE_DISCOVERY".into(),
+        source_order,
     }
 }
 
@@ -503,6 +663,7 @@ fn source_for_missing(
     project_id: &str,
     now: &str,
     custom_id: &str,
+    source_order: i64,
 ) -> DiscoveredProjectSource {
     source_with_status(
         root,
@@ -517,7 +678,59 @@ fn source_for_missing(
         None,
         None,
         vec!["configured custom path is missing".into()],
+        Some(source_order),
     )
+}
+
+fn discovery_warning(
+    root: &Path,
+    project_id: &str,
+    now: &str,
+    warnings: &BTreeSet<String>,
+) -> DiscoveredProjectSource {
+    source_with_status(
+        root,
+        project_id,
+        "[discovery-warning]",
+        "SYSTEM",
+        now,
+        "LIMIT_REACHED",
+        "DISCOVERY_WARNING".into(),
+        i64::MAX,
+        None,
+        None,
+        None,
+        warnings.iter().cloned().collect(),
+        None,
+    )
+}
+
+fn source_sort_key(
+    source: &DiscoveredProjectSource,
+) -> (u8, i64, i64, std::cmp::Reverse<String>, String) {
+    (
+        if source.origin == "CUSTOM" { 0 } else { 1 },
+        source.source_order.unwrap_or(i64::MAX),
+        source.priority,
+        std::cmp::Reverse(source.modified_at.clone().unwrap_or_default()),
+        source.relative_path.to_ascii_lowercase(),
+    )
+}
+
+fn discovery_project(
+    database: &DatabaseState,
+    project_id: &str,
+) -> Result<crate::projects::ProjectRecord, String> {
+    let project = fetch_project(database, project_id)?;
+    match project.status.as_str() {
+        "ACTIVE" => Ok(project),
+        "MISSING" => Err("registered project root is unavailable".into()),
+        "ARCHIVED" => Err("project is archived".into()),
+        _ => Err(format!(
+            "project status does not permit discovery: {}",
+            project.status
+        )),
+    }
 }
 
 fn classify(path: &Path) -> (String, i64) {
@@ -589,6 +802,18 @@ fn is_plausible_source(path: &Path) -> bool {
     )
 }
 fn bounded_hash(path: &Path) -> Result<String, String> {
+    #[cfg(test)]
+    if FAIL_UNREADABLE_PATH
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .unwrap()
+        .as_ref()
+        .is_some_and(|target| {
+            path.file_name().and_then(|name| name.to_str()) == Some(target.as_str())
+        })
+    {
+        return Err("test unreadable failpoint".into());
+    }
     let file = fs::File::open(path).map_err(|error| error.to_string())?;
     let mut bytes = Vec::new();
     file.take(MAX_SOURCE_BYTES + 1)
@@ -680,10 +905,18 @@ fn path_status(root: &Path, relative: &str) -> String {
     let path = root.join(relative.replace('/', &std::path::MAIN_SEPARATOR.to_string()));
     if !path.exists() {
         "MISSING".into()
-    } else if path.is_dir() || path.is_file() {
-        "CONFIGURED".into()
     } else {
-        "UNREADABLE".into()
+        match fs::canonicalize(&path) {
+            Ok(physical) if ensure_contained(root, &physical).is_ok() => {
+                if physical.is_dir() || physical.is_file() {
+                    "CONFIGURED".into()
+                } else {
+                    "UNREADABLE".into()
+                }
+            }
+            Ok(_) => "OUTSIDE_ROOT".into(),
+            Err(_) => "UNREADABLE".into(),
+        }
     }
 }
 fn stable_id(value: &str) -> String {
@@ -734,11 +967,32 @@ fn reconcile(
 ) -> Result<(), String> {
     let connection = database.open_connection()?;
     let tx = connection.unchecked_transaction().map_err(db_error)?;
-    tx.execute(
-        "DELETE FROM project_sources WHERE project_id = ?1",
-        [project_id],
-    )
-    .map_err(db_error)?;
+    let mut ids = Vec::new();
+    {
+        let mut statement = tx
+            .prepare("SELECT id, metadata_json FROM project_sources WHERE project_id = ?1")
+            .map_err(db_error)?;
+        let mut rows = statement.query([project_id]).map_err(db_error)?;
+        while let Some(row) = rows.next().map_err(db_error)? {
+            let id: String = row.get(0).map_err(db_error)?;
+            let metadata: String = row.get(1).map_err(db_error)?;
+            let value: serde_json::Value = serde_json::from_str(&metadata).unwrap_or_default();
+            let owned = value.get("owner").and_then(serde_json::Value::as_str)
+                == Some("M08_TASK_SOURCE_DISCOVERY");
+            let compatible = value.get("relativePath").is_some()
+                && matches!(
+                    value.get("origin").and_then(serde_json::Value::as_str),
+                    Some("STANDARD" | "CUSTOM" | "SYSTEM")
+                );
+            if owned || compatible {
+                ids.push(id);
+            }
+        }
+    }
+    for id in ids {
+        tx.execute("DELETE FROM project_sources WHERE id = ?1", [id])
+            .map_err(db_error)?;
+    }
     for source in sources {
         let metadata = serde_json::to_string(source)
             .map_err(|error| format!("encode task source metadata: {error}"))?;
@@ -751,9 +1005,12 @@ fn db_error(error: rusqlite::Error) -> String {
 }
 
 #[cfg(test)]
+static FAIL_UNREADABLE_PATH: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+
+#[cfg(test)]
 mod tests {
     use super::*;
-    use crate::projects::{register_project, RegisterProjectRequest};
+    use crate::projects::{archive_project, register_project, RegisterProjectRequest};
     use tempfile::tempdir;
 
     fn fixture() -> (tempfile::TempDir, tempfile::TempDir, DatabaseState, String) {
@@ -775,6 +1032,13 @@ mod tests {
             fs::create_dir_all(parent).unwrap();
         }
         fs::write(path, value).unwrap();
+    }
+
+    fn sql_count(db: &DatabaseState, sql: &str, id: &str) -> i64 {
+        db.open_connection()
+            .unwrap()
+            .query_row(sql, [id], |row| row.get(0))
+            .unwrap()
     }
 
     #[test]
@@ -1059,7 +1323,13 @@ mod tests {
         for index in 0..(MAX_CANDIDATE_FILES + 2) {
             write(&root.path().join(format!("tasks/{index}.md")), "x");
         }
-        assert!(discover(&db, &id).unwrap().len() <= MAX_CANDIDATE_FILES);
+        let rows = discover(&db, &id).unwrap();
+        assert!(rows.len() <= MAX_CANDIDATE_FILES + 1);
+        assert!(rows.iter().any(|row| row.source_kind == "DISCOVERY_WARNING"
+            && row
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("candidate limit"))));
     }
 
     #[test]
@@ -1090,5 +1360,183 @@ mod tests {
             }
             Err(error) => eprintln!("UNVERIFIED symlink/junction containment: {error}"),
         }
+    }
+
+    #[test]
+    fn depth_limit_warning_rejects_first_source_beyond_boundary() {
+        let (_db_dir, root, db, id) = fixture();
+        write(&root.path().join("tasks/a/b/c/d.md"), "allowed");
+        write(&root.path().join("tasks/a/b/c/d/e.md"), "rejected");
+        let rows = discover(&db, &id).unwrap();
+        assert!(rows.iter().any(|row| row.relative_path.ends_with("d.md")));
+        assert!(!rows.iter().any(|row| row.relative_path.ends_with("e.md")));
+        assert!(rows.iter().any(|row| row.source_kind == "DISCOVERY_WARNING"
+            && row
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("depth limit"))));
+    }
+
+    #[test]
+    fn visited_entry_limit_warning_is_structured() {
+        let (_db_dir, root, db, id) = fixture();
+        for index in 0..(MAX_VISITED_ENTRIES + 4) {
+            write(&root.path().join(format!("noise-{index}.txt")), "noise");
+        }
+        let rows = discover(&db, &id).unwrap();
+        assert!(rows.iter().any(|row| row.source_kind == "DISCOVERY_WARNING"
+            && row
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("visited-entry limit"))));
+    }
+
+    #[test]
+    fn project_sources_persist_owner_schema_hash_and_idempotent_identity() {
+        let (_db_dir, root, db, id) = fixture();
+        write(&root.path().join("TASKS.md"), "one");
+        let first = discover(&db, &id).unwrap();
+        let first_id = first
+            .iter()
+            .find(|row| row.source_kind == "TASKS")
+            .unwrap()
+            .id
+            .clone();
+        assert_eq!(sql_count(&db, "SELECT COUNT(*) FROM project_sources WHERE project_id = ?1 AND json_extract(metadata_json, '$.owner') = 'M08_TASK_SOURCE_DISCOVERY'", &id), 1);
+        discover(&db, &id).unwrap();
+        assert_eq!(sql_count(&db, "SELECT COUNT(*) FROM project_sources WHERE project_id = ?1 AND json_extract(metadata_json, '$.owner') = 'M08_TASK_SOURCE_DISCOVERY'", &id), 1);
+        let connection = db.open_connection().unwrap();
+        let (stored_id, owner, version, hash): (String, String, i64, String) = connection.query_row("SELECT id, json_extract(metadata_json, '$.owner'), json_extract(metadata_json, '$.schemaVersion'), content_hash FROM project_sources WHERE project_id = ?1 AND source_kind = 'TASKS'", [&id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))).unwrap();
+        assert_eq!(stored_id, first_id);
+        assert_eq!(owner, "M08_TASK_SOURCE_DISCOVERY");
+        assert_eq!(version, 1);
+        assert_eq!(hash.len(), 64);
+    }
+
+    #[test]
+    fn unrelated_legacy_project_source_survives_reconciliation() {
+        let (_db_dir, root, db, id) = fixture();
+        let connection = db.open_connection().unwrap();
+        connection.execute("INSERT INTO project_sources (id, project_id, source_path, source_kind, content_hash, discovered_at, metadata_json) VALUES ('legacy', ?1, 'legacy.txt', 'LEGACY', NULL, 'now', '{\"legacy\":true}')", [&id]).unwrap();
+        write(&root.path().join("TASKS.md"), "source");
+        discover(&db, &id).unwrap();
+        assert_eq!(
+            sql_count(
+                &db,
+                "SELECT COUNT(*) FROM project_sources WHERE id = 'legacy' AND project_id = ?1",
+                &id
+            ),
+            1
+        );
+    }
+
+    #[test]
+    fn custom_available_to_missing_reconciliation_is_persisted() {
+        let (_db_dir, root, db, id) = fixture();
+        write(&root.path().join("custom.md"), "custom");
+        custom_path_add(
+            &db,
+            CustomPathRequest {
+                project_id: id.clone(),
+                path: "custom.md".into(),
+            },
+        )
+        .unwrap();
+        let available = discover(&db, &id).unwrap();
+        assert!(available
+            .iter()
+            .any(|row| row.origin == "CUSTOM" && row.status == "AVAILABLE"));
+        fs::remove_file(root.path().join("custom.md")).unwrap();
+        let missing = discover(&db, &id).unwrap();
+        assert!(missing
+            .iter()
+            .any(|row| row.origin == "CUSTOM" && row.status == "MISSING"));
+    }
+
+    #[test]
+    fn unreadable_failpoint_preserves_other_valid_source() {
+        let (_db_dir, root, db, id) = fixture();
+        write(&root.path().join("tasks/__fail_unreadable__.md"), "bad");
+        write(&root.path().join("TASKS.md"), "good");
+        *FAIL_UNREADABLE_PATH
+            .get_or_init(|| Mutex::new(None))
+            .lock()
+            .unwrap() = Some("__fail_unreadable__.md".into());
+        let rows = discover(&db, &id).unwrap();
+        *FAIL_UNREADABLE_PATH
+            .get_or_init(|| Mutex::new(None))
+            .lock()
+            .unwrap() = None;
+        assert!(
+            rows.iter()
+                .any(|row| row.relative_path == "tasks/__fail_unreadable__.md"
+                    && row.status == "UNREADABLE"),
+            "{rows:#?}"
+        );
+        assert!(rows
+            .iter()
+            .any(|row| row.relative_path == "TASKS.md" && row.status == "AVAILABLE"));
+        assert_eq!(sql_count(&db, "SELECT COUNT(*) FROM project_sources WHERE project_id = ?1 AND source_path = 'TASKS.md'", &id), 1);
+    }
+
+    #[test]
+    fn custom_update_order_remove_equivalence_and_containment_are_safe() {
+        let (_db_dir, root, db, id) = fixture();
+        write(&root.path().join("a.md"), "a");
+        write(&root.path().join("b.md"), "b");
+        custom_path_add(
+            &db,
+            CustomPathRequest {
+                project_id: id.clone(),
+                path: "a.md".into(),
+            },
+        )
+        .unwrap();
+        custom_path_add(
+            &db,
+            CustomPathRequest {
+                project_id: id.clone(),
+                path: "b.md".into(),
+            },
+        )
+        .unwrap();
+        let updated = custom_path_update(
+            &db,
+            CustomPathUpdateRequest {
+                project_id: id.clone(),
+                path_or_id: "b.md".into(),
+                path: Some("a-renamed.md".into()),
+                order: Some(0),
+            },
+        )
+        .unwrap();
+        assert_eq!(updated[0].normalized_path, "a-renamed.md");
+        assert!(custom_path_update(
+            &db,
+            CustomPathUpdateRequest {
+                project_id: id.clone(),
+                path_or_id: "a-renamed.md".into(),
+                path: Some("../outside.md".into()),
+                order: None
+            }
+        )
+        .is_err());
+        assert!(custom_path_remove(&db, &id, "A-RENAMED.MD").is_ok());
+    }
+
+    #[test]
+    fn archived_project_rejects_all_discovery_mutations() {
+        let (_db_dir, _root, db, id) = fixture();
+        archive_project(&db, &id).unwrap();
+        assert!(discover(&db, &id).unwrap_err().contains("archived"));
+        assert!(custom_path_add(
+            &db,
+            CustomPathRequest {
+                project_id: id.clone(),
+                path: "x.md".into()
+            }
+        )
+        .unwrap_err()
+        .contains("archived"));
     }
 }

@@ -58,6 +58,7 @@ import {
   listCustomSourcePaths,
   listTaskSources,
   removeCustomSourcePath,
+  updateCustomSourcePath,
   type CustomSourcePath,
   type DiscoveredProjectSource,
 } from "./taskSources";
@@ -1338,6 +1339,7 @@ export function Tasks() {
   const [path, setPath] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const request = React.useRef(0);
+  const selectedProjectRef = React.useRef(selectedProjectId);
 
   const refresh = React.useCallback(async (projectId: string, discover = false) => {
     const requestId = ++request.current;
@@ -1364,6 +1366,8 @@ export function Tasks() {
   }, [desktop]);
 
   React.useEffect(() => {
+    selectedProjectRef.current = selectedProjectId;
+    request.current += 1;
     if (!selectedProjectId) {
       setSources([]);
       setCustomPaths([]);
@@ -1377,29 +1381,45 @@ export function Tasks() {
   const rescan = () => selectedProjectId && void refresh(selectedProjectId, true);
   const addPath = async () => {
     if (!desktop || !selectedProjectId || !path.trim()) return;
+    const projectId = selectedProjectId;
+    const mutationGeneration = request.current;
     setBusy(true);
     setError(null);
     try {
-      await addCustomSourcePath(selectedProjectId, path.trim());
+      await addCustomSourcePath(projectId, path.trim());
       setPath("");
-      await refresh(selectedProjectId);
+      if (selectedProjectRef.current === projectId && request.current === mutationGeneration) await refresh(projectId);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
+      if (selectedProjectRef.current === projectId && request.current === mutationGeneration) setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
       setBusy(false);
     }
   };
   const removePath = async (customPath: CustomSourcePath) => {
     if (!desktop || !selectedProjectId) return;
+    const projectId = selectedProjectId;
+    const mutationGeneration = request.current;
     setBusy(true);
     try {
-      await removeCustomSourcePath(selectedProjectId, customPath.id);
-      await refresh(selectedProjectId);
+      await removeCustomSourcePath(projectId, customPath.id);
+      if (selectedProjectRef.current === projectId && request.current === mutationGeneration) await refresh(projectId);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
+      if (selectedProjectRef.current === projectId && request.current === mutationGeneration) setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
       setBusy(false);
     }
+  };
+  const reorderPath = async (customPath: CustomSourcePath, order: number) => {
+    if (!desktop || !selectedProjectId) return;
+    const projectId = selectedProjectId;
+    const mutationGeneration = request.current;
+    setBusy(true);
+    try {
+      await updateCustomSourcePath({ projectId, pathOrId: customPath.id, order });
+      if (selectedProjectRef.current === projectId && request.current === mutationGeneration) await refresh(projectId);
+    } catch (caught) {
+      if (selectedProjectRef.current === projectId && request.current === mutationGeneration) setError(caught instanceof Error ? caught.message : String(caught));
+    } finally { setBusy(false); }
   };
 
   if (!selectedProjectId || !selected) {
@@ -1438,7 +1458,7 @@ export function Tasks() {
       <section className="panel custom-source-panel">
         <SectionHeader title="Custom source paths" detail="Stored in H!veAI settings" />
         <div className="custom-source-add"><input aria-label="Custom source path" value={path} onChange={(event) => setPath(event.target.value)} placeholder="Relative file or directory inside project root" disabled={!desktop || busy} /><button className="secondary-button" type="button" onClick={addPath} disabled={!desktop || busy || !path.trim()}><Plus size={14} /> Add path</button></div>
-        {customPaths.length ? <div className="custom-source-list">{customPaths.map((customPath) => <div key={customPath.id}><span>{customPath.displayPath}</span><small>{customPath.status}</small><button className="icon-button" type="button" aria-label={`Remove ${customPath.displayPath}`} onClick={() => void removePath(customPath)} disabled={busy}><X size={14} /></button></div>)}</div> : <p className="fixture-note">No custom source paths configured.</p>}
+        {customPaths.length ? <div className="custom-source-list">{customPaths.map((customPath) => <div key={customPath.id}><span>{customPath.displayPath}</span><small>{customPath.status} · {customPath.order}</small><button className="icon-button" type="button" aria-label={`Move ${customPath.displayPath} earlier`} onClick={() => void reorderPath(customPath, Math.max(0, customPath.order - 1))} disabled={busy || customPath.order === 0}><ChevronRight size={14} /></button><button className="icon-button" type="button" aria-label={`Remove ${customPath.displayPath}`} onClick={() => void removePath(customPath)} disabled={busy}><X size={14} /></button></div>)}</div> : <p className="fixture-note">No custom source paths configured.</p>}
       </section>
     </>
   );

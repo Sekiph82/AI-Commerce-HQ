@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export type SourceStatus = "AVAILABLE" | "MISSING" | "TOO_LARGE" | "UNREADABLE";
+export type SourceStatus = "AVAILABLE" | "MISSING" | "TOO_LARGE" | "UNREADABLE" | "LIMIT_REACHED" | "OUTSIDE_ROOT";
 
 export type DiscoveredProjectSource = {
   id: string;
@@ -8,7 +8,7 @@ export type DiscoveredProjectSource = {
   relativePath: string;
   absolutePath: string;
   sourceKind: string;
-  origin: "STANDARD" | "CUSTOM";
+  origin: "STANDARD" | "CUSTOM" | "SYSTEM";
   status: SourceStatus;
   authorityClass: string;
   priority: number;
@@ -18,6 +18,9 @@ export type DiscoveredProjectSource = {
   contentHash: string | null;
   depth: number;
   warnings: string[];
+  schemaVersion: number;
+  owner: string;
+  sourceOrder: number | null;
 };
 
 export type CustomSourcePath = {
@@ -26,6 +29,7 @@ export type CustomSourcePath = {
   displayPath: string;
   normalizedPath: string;
   status: string;
+  order: number;
 };
 
 export const listTaskSources = (projectId: string) =>
@@ -47,3 +51,6 @@ export const removeCustomSourcePath = (projectId: string, pathOrId: string) =>
     projectId,
     pathOrId,
   });
+
+export const updateCustomSourcePath = (request: { projectId: string; pathOrId: string; path?: string; order?: number }) =>
+  invoke<CustomSourcePath[]>("hiveai_task_source_custom_path_update", { request });
