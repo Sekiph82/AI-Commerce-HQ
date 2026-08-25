@@ -35,8 +35,11 @@ Package numbering such as `M08.01`, `M08.02`, etc. is used for traceability and 
 - M09 original implementation: historical strict-audit FAIL.
 - M09A remediation: historical strict re-audit FAIL after two residual findings remained.
 - M09B/M09C/M09D remediation and audit history are preserved; M09D final strict audit = PASS.
-- Strict completed roadmap progress is 10/20 = 50%.
-- M10+ remain blocked/unstarted.
-- Active pre-M10 hotfix: X01 repeated visible Git child-process console windows and X02 muted startup-video audio. Manual native acceptance and independent hotfix audit remain pending.
+- Pre-M10 Native UX Hotfix X01/X02: PASS/CLOSED after independent source audit plus user native acceptance.
+- X01 terminal/console popup suppression: accepted fixed after approximately 45 minutes of native runtime with no unwanted terminal windows.
+- X02 startup intro audio/replay behavior: accepted fixed; audio works and the intro does not replay during same-process route navigation.
+- Strict completed roadmap progress remains 10/20 = 50% because the pre-M10 hotfix is not a numbered milestone.
+- M10 Workflow State Machine: READY / UNSTARTED.
+- M11/M12 remain planned behind M10; Project Dashboard manifest ingestion is reserved for their runtime implementation.
 
 For exact live status, acceptance state, and every completed/planned package from M00 through M20, use `TASKS.md` as the canonical source of truth.
