@@ -175,8 +175,21 @@ M08A is the only active closure remediation. M09 remains blocked and unstarted.
 - [ ] Independent M08 strict re-audit
 - [ ] User visual acceptance of the remediated native Task Sources workspace
 
-M08A remains ACTIVE until every strict-audit major finding has direct production
-and evidence closure. M09 remains blocked and unstarted.
+M08A strict re-audit is FAIL historically. M08B is the only active remediation.
+M09 remains blocked and unstarted.
+
+## M08B Task Source Discovery Final Strict Closure
+- [x] Fix true positional custom reorder semantics
+- [x] Narrow safe pre-version M08 inventory adoption
+- [x] Add direct persisted hash, deletion, legacy-preservation, and ordering SQL evidence
+- [x] Add mounted custom add-refresh and multi-item reorder-visible-order evidence
+- [x] Run focused/full regression and production no-bundle publication
+- [x] Create the immutable M08B closure log
+- [ ] Independent strict re-audit
+- [ ] User visual acceptance of the remediated native Task Sources workspace
+
+M08B is ACTIVE. Original M08 and M08A strict audits remain FAIL historical gates;
+M09 remains BLOCKED/UNSTARTED.
 
 ## M09 Task Intelligence Parser
 - [ ] headings/checklists/milestones/status tags/task IDs

@@ -63,13 +63,21 @@ describe("M08 Task Sources live workspace", () => {
   });
 
   it("custom_add_command_uses_native_boundary", async () => {
+    let added = false;
+    invoke.mockImplementation((command: string, args?: { projectId?: string }) => {
+      if (command === "hiveai_projects_list") return Promise.resolve(records);
+      if (command === "hiveai_task_sources_list") return Promise.resolve([source(args?.projectId ?? "project-a")]);
+      if (command === "hiveai_task_source_custom_paths_list") return Promise.resolve(added ? [{ id: "evidence", projectId: "project-a", displayPath: "evidence.md", normalizedPath: "evidence.md", status: "CONFIGURED", order: 0 }] : []);
+      if (command === "hiveai_task_source_custom_path_add") { added = true; return Promise.resolve([]); }
+      return Promise.resolve([]);
+    });
     renderTasks();
     await screen.findByText("TASKS.md");
     const input = screen.getByRole("textbox", { name: "Custom source path" });
     fireEvent.change(input, { target: { value: "evidence.md" } });
     fireEvent.click(screen.getByRole("button", { name: /Add path/i }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("hiveai_task_source_custom_path_add", { request: { projectId: "project-a", path: "evidence.md" } }));
-    expect(screen.queryByText("No task source files discovered")).not.toBeInTheDocument();
+    expect(await screen.findByText("evidence.md")).toBeInTheDocument();
   });
 
   it("empty_response_renders_truthful_empty_ui", async () => {
@@ -124,6 +132,9 @@ describe("M08 Task Sources live workspace", () => {
     await screen.findByText("TASKS.md");
     expect(screen.getByText("TASKS")).toBeInTheDocument();
     expect(screen.getByText("STANDARD")).toBeInTheDocument();
+    expect(screen.getByText("TASKS · 10")).toBeInTheDocument();
+    expect(screen.getByText(/8\/25\/2026/)).toBeInTheDocument();
+    expect(screen.getByText("AVAILABLE")).toBeInTheDocument();
   });
 
   it("renders_selected_project_identity_from_registry", async () => {
@@ -223,11 +234,15 @@ describe("M08 Task Sources live workspace", () => {
   });
 
   it("custom_update_reorder_executes_and_refreshes_visible_inventory", async () => {
-    const custom = { id: "custom-b", projectId: "project-a", displayPath: "custom.md", normalizedPath: "custom.md", status: "CONFIGURED", order: 1 };
-    invoke.mockImplementation((command: string) => command === "hiveai_projects_list" ? Promise.resolve(records) : command === "hiveai_task_sources_list" ? Promise.resolve([source("project-a")]) : command === "hiveai_task_source_custom_paths_list" ? Promise.resolve([custom]) : Promise.resolve([]));
+    let reordered = false;
+    const custom = (id: string, displayPath: string, order: number) => ({ id, projectId: "project-a", displayPath, normalizedPath: displayPath, status: "CONFIGURED", order });
+    invoke.mockImplementation((command: string) => command === "hiveai_projects_list" ? Promise.resolve(records) : command === "hiveai_task_sources_list" ? Promise.resolve([source("project-a")]) : command === "hiveai_task_source_custom_paths_list" ? Promise.resolve(reordered ? [custom("custom-b", "B.md", 0), custom("custom-a", "A.md", 1)] : [custom("custom-a", "A.md", 0), custom("custom-b", "B.md", 1)]) : command === "hiveai_task_source_custom_path_update" ? (reordered = true, Promise.resolve([])) : Promise.resolve([]));
     renderTasks();
-    await screen.findByRole("button", { name: "Move custom.md earlier" });
-    fireEvent.click(screen.getByRole("button", { name: "Move custom.md earlier" }));
+    await screen.findByRole("button", { name: "Move B.md earlier" });
+    fireEvent.click(screen.getByRole("button", { name: "Move B.md earlier" }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("hiveai_task_source_custom_path_update", { request: { projectId: "project-a", pathOrId: "custom-b", order: 0 } }));
+    const b = await screen.findByText("B.md");
+    const a = screen.getByText("A.md");
+    expect(Boolean(b.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
 });

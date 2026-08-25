@@ -293,6 +293,7 @@ pub fn custom_path_update(
                     == normalize_for_compare(&request.path_or_id)
         })
         .ok_or_else(|| "custom source path is not configured".to_string())?;
+    let original_order = paths[index].order;
     if let Some(new_path) = request.path.as_deref() {
         let normalized = normalize_candidate(&root, new_path)?;
         if paths.iter().enumerate().any(|(candidate, path)| {
@@ -309,10 +310,10 @@ pub fn custom_path_update(
             request.project_id, paths[index].normalized_path
         ));
     }
-    if let Some(order) = request.order {
-        paths[index].order = order.max(0);
-    }
-    paths.sort_by_key(|path| (path.order, normalize_for_compare(&path.normalized_path)));
+    let item = paths.remove(index);
+    let requested_order = request.order.unwrap_or(original_order).max(0) as usize;
+    let target = requested_order.min(paths.len());
+    paths.insert(target, item);
     for (order, path) in paths.iter_mut().enumerate() {
         path.order = order as i64;
     }
@@ -970,20 +971,19 @@ fn reconcile(
     let mut ids = Vec::new();
     {
         let mut statement = tx
-            .prepare("SELECT id, metadata_json FROM project_sources WHERE project_id = ?1")
+            .prepare(
+                "SELECT id, source_path, metadata_json FROM project_sources WHERE project_id = ?1",
+            )
             .map_err(db_error)?;
         let mut rows = statement.query([project_id]).map_err(db_error)?;
         while let Some(row) = rows.next().map_err(db_error)? {
             let id: String = row.get(0).map_err(db_error)?;
-            let metadata: String = row.get(1).map_err(db_error)?;
+            let source_path: String = row.get(1).map_err(db_error)?;
+            let metadata: String = row.get(2).map_err(db_error)?;
             let value: serde_json::Value = serde_json::from_str(&metadata).unwrap_or_default();
             let owned = value.get("owner").and_then(serde_json::Value::as_str)
                 == Some("M08_TASK_SOURCE_DISCOVERY");
-            let compatible = value.get("relativePath").is_some()
-                && matches!(
-                    value.get("origin").and_then(serde_json::Value::as_str),
-                    Some("STANDARD" | "CUSTOM" | "SYSTEM")
-                );
+            let compatible = legacy_m08_shape(project_id, &id, &source_path, &value);
             if owned || compatible {
                 ids.push(id);
             }
@@ -999,6 +999,68 @@ fn reconcile(
         tx.execute("INSERT INTO project_sources (id, project_id, source_path, source_kind, content_hash, discovered_at, metadata_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)", params![source.id, project_id, source.relative_path, source.source_kind, source.content_hash, source.discovered_at, metadata]).map_err(db_error)?;
     }
     tx.commit().map_err(db_error)
+}
+
+fn legacy_m08_shape(
+    project_id: &str,
+    row_id: &str,
+    source_path: &str,
+    value: &serde_json::Value,
+) -> bool {
+    if value.get("owner").is_some() || value.get("schemaVersion").is_some() {
+        return false;
+    }
+    let Some(metadata_project) = value.get("projectId").and_then(serde_json::Value::as_str) else {
+        return false;
+    };
+    let Some(relative) = value
+        .get("relativePath")
+        .and_then(serde_json::Value::as_str)
+    else {
+        return false;
+    };
+    let Some(origin) = value.get("origin").and_then(serde_json::Value::as_str) else {
+        return false;
+    };
+    if metadata_project != project_id
+        || normalize_for_compare(relative) != normalize_for_compare(source_path)
+        || !matches!(origin, "STANDARD" | "CUSTOM" | "SYSTEM")
+        || row_id
+            != stable_id(&format!(
+                "{project_id}|{origin}|{}",
+                normalize_for_compare(relative)
+            ))
+    {
+        return false;
+    }
+    value
+        .get("sourceKind")
+        .and_then(serde_json::Value::as_str)
+        .is_some()
+        && value
+            .get("status")
+            .and_then(serde_json::Value::as_str)
+            .is_some()
+        && value
+            .get("authorityClass")
+            .and_then(serde_json::Value::as_str)
+            .is_some()
+        && value
+            .get("priority")
+            .and_then(serde_json::Value::as_i64)
+            .is_some()
+        && value
+            .get("warnings")
+            .and_then(serde_json::Value::as_array)
+            .is_some_and(|warnings| warnings.iter().all(serde_json::Value::is_string))
+        && value
+            .get("depth")
+            .and_then(serde_json::Value::as_u64)
+            .is_some()
+        && value
+            .get("absolutePath")
+            .and_then(serde_json::Value::as_str)
+            .is_some()
 }
 fn db_error(error: rusqlite::Error) -> String {
     format!("task source database error: {error}")
@@ -1414,6 +1476,150 @@ mod tests {
     }
 
     #[test]
+    fn persisted_content_hash_changes_without_changing_m08_identity() {
+        let (_db_dir, root, db, id) = fixture();
+        write(&root.path().join("TASKS.md"), "first");
+        discover(&db, &id).unwrap();
+        let connection = db.open_connection().unwrap();
+        let first: (String, String) = connection
+            .query_row("SELECT id, content_hash FROM project_sources WHERE project_id = ?1 AND source_path = 'TASKS.md'", [&id], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap();
+        drop(connection);
+        write(&root.path().join("TASKS.md"), "second");
+        discover(&db, &id).unwrap();
+        let connection = db.open_connection().unwrap();
+        let second: (String, String) = connection
+            .query_row("SELECT id, content_hash FROM project_sources WHERE project_id = ?1 AND source_path = 'TASKS.md'", [&id], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap();
+        assert_eq!(first.0, second.0);
+        assert_ne!(first.1, second.1);
+    }
+
+    #[test]
+    fn deleted_standard_row_is_removed_while_legacy_row_is_unchanged() {
+        let (_db_dir, root, db, id) = fixture();
+        write(&root.path().join("TASKS.md"), "source");
+        discover(&db, &id).unwrap();
+        let connection = db.open_connection().unwrap();
+        connection.execute("INSERT INTO project_sources (id, project_id, source_path, source_kind, content_hash, discovered_at, metadata_json) VALUES ('legacy-delete-test', ?1, 'legacy.md', 'LEGACY', 'legacy-hash', 'legacy-time', '{\"unrelated\":\"preserve\"}')", [&id]).unwrap();
+        drop(connection);
+        fs::remove_file(root.path().join("TASKS.md")).unwrap();
+        discover(&db, &id).unwrap();
+        let connection = db.open_connection().unwrap();
+        let owned: i64 = connection.query_row("SELECT COUNT(*) FROM project_sources WHERE project_id = ?1 AND source_path = 'TASKS.md'", [&id], |row| row.get(0)).unwrap();
+        let legacy: (String, String) = connection.query_row("SELECT content_hash, metadata_json FROM project_sources WHERE id = 'legacy-delete-test'", [], |row| Ok((row.get(0)?, row.get(1)?))).unwrap();
+        assert_eq!(owned, 0);
+        assert_eq!(
+            legacy,
+            ("legacy-hash".into(), "{\"unrelated\":\"preserve\"}".into())
+        );
+    }
+
+    #[test]
+    fn preversion_shape_requires_deterministic_identity_and_rich_fields() {
+        let (_db_dir, root, db, id) = fixture();
+        let legacy_id = stable_id(&format!("{id}|STANDARD|tasks.md"));
+        let metadata = serde_json::json!({
+            "id": legacy_id,
+            "projectId": id,
+            "relativePath": "TASKS.md",
+            "absolutePath": root.path().join("TASKS.md").to_string_lossy(),
+            "sourceKind": "TASKS",
+            "origin": "STANDARD",
+            "status": "AVAILABLE",
+            "authorityClass": "TASKS",
+            "priority": 10,
+            "sizeBytes": 4,
+            "modifiedAt": null,
+            "discoveredAt": "old",
+            "contentHash": "old",
+            "depth": 0,
+            "warnings": []
+        });
+        let connection = db.open_connection().unwrap();
+        connection.execute("INSERT INTO project_sources (id, project_id, source_path, source_kind, content_hash, discovered_at, metadata_json) VALUES (?1, ?2, 'TASKS.md', 'TASKS', 'old', 'old', ?3)", params![legacy_id, id, metadata.to_string()]).unwrap();
+        connection.execute("INSERT INTO project_sources (id, project_id, source_path, source_kind, content_hash, discovered_at, metadata_json) VALUES ('deceptive', ?1, 'fake.md', 'LEGACY', 'keep', 'keep', '{\"relativePath\":\"fake.md\",\"origin\":\"STANDARD\"}')", [&id]).unwrap();
+        connection.execute("INSERT INTO project_sources (id, project_id, source_path, source_kind, content_hash, discovered_at, metadata_json) VALUES ('rich-foreign', ?1, 'rich.md', 'FOREIGN', 'keep', 'keep', '{\"owner\":\"OTHER\",\"relativePath\":\"rich.md\",\"origin\":\"STANDARD\",\"sourceKind\":\"TASKS\",\"status\":\"AVAILABLE\",\"authorityClass\":\"TASKS\",\"priority\":10,\"warnings\":[],\"depth\":0,\"absolutePath\":\"x\"}')", [&id]).unwrap();
+        drop(connection);
+        write(&root.path().join("TASKS.md"), "new");
+        discover(&db, &id).unwrap();
+        assert_eq!(
+            sql_count(
+                &db,
+                "SELECT COUNT(*) FROM project_sources WHERE id = ?1",
+                &legacy_id
+            ),
+            1
+        );
+        assert_eq!(
+            sql_count(
+                &db,
+                "SELECT COUNT(*) FROM project_sources WHERE id = 'deceptive' AND project_id = ?1",
+                &id
+            ),
+            1
+        );
+        assert_eq!(sql_count(&db, "SELECT COUNT(*) FROM project_sources WHERE id = 'rich-foreign' AND project_id = ?1", &id), 1);
+    }
+
+    #[test]
+    fn custom_sources_order_before_standard_authority_order_in_persisted_inventory() {
+        let (_db_dir, root, db, id) = fixture();
+        for (path, value) in [
+            ("custom-a.md", "a"),
+            ("custom-b.md", "b"),
+            ("TASKS.md", "tasks"),
+            ("PLANS.md", "plans"),
+            ("ROADMAP.md", "roadmap"),
+        ] {
+            write(&root.path().join(path), value);
+        }
+        custom_path_add(
+            &db,
+            CustomPathRequest {
+                project_id: id.clone(),
+                path: "custom-a.md".into(),
+            },
+        )
+        .unwrap();
+        custom_path_add(
+            &db,
+            CustomPathRequest {
+                project_id: id.clone(),
+                path: "custom-b.md".into(),
+            },
+        )
+        .unwrap();
+        custom_path_update(
+            &db,
+            CustomPathUpdateRequest {
+                project_id: id.clone(),
+                path_or_id: "custom-b.md".into(),
+                path: None,
+                order: Some(0),
+            },
+        )
+        .unwrap();
+        let rows = discover(&db, &id)
+            .unwrap()
+            .into_iter()
+            .filter(|row| row.status != "LIMIT_REACHED")
+            .collect::<Vec<_>>();
+        assert_eq!(
+            rows.iter()
+                .map(|row| row.relative_path.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "custom-b.md",
+                "custom-a.md",
+                "TASKS.md",
+                "PLANS.md",
+                "ROADMAP.md"
+            ]
+        );
+    }
+
+    #[test]
     fn unrelated_legacy_project_source_survives_reconciliation() {
         let (_db_dir, root, db, id) = fixture();
         let connection = db.open_connection().unwrap();
@@ -1484,6 +1690,7 @@ mod tests {
         let (_db_dir, root, db, id) = fixture();
         write(&root.path().join("a.md"), "a");
         write(&root.path().join("b.md"), "b");
+        write(&root.path().join("c.md"), "c");
         custom_path_add(
             &db,
             CustomPathRequest {
@@ -1500,28 +1707,77 @@ mod tests {
             },
         )
         .unwrap();
+        custom_path_add(
+            &db,
+            CustomPathRequest {
+                project_id: id.clone(),
+                path: "c.md".into(),
+            },
+        )
+        .unwrap();
+        let ordered = |db: &DatabaseState| {
+            custom_paths_list(db, &id)
+                .unwrap()
+                .into_iter()
+                .map(|path| path.normalized_path)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ordered(&db), vec!["a.md", "b.md", "c.md"]);
         let updated = custom_path_update(
             &db,
             CustomPathUpdateRequest {
                 project_id: id.clone(),
-                path_or_id: "b.md".into(),
-                path: Some("a-renamed.md".into()),
+                path_or_id: "c.md".into(),
+                path: None,
                 order: Some(0),
             },
         )
         .unwrap();
-        assert_eq!(updated[0].normalized_path, "a-renamed.md");
+        assert_eq!(updated[0].normalized_path, "c.md");
+        assert_eq!(ordered(&db), vec!["c.md", "a.md", "b.md"]);
+        custom_path_update(
+            &db,
+            CustomPathUpdateRequest {
+                project_id: id.clone(),
+                path_or_id: "c.md".into(),
+                path: None,
+                order: Some(2),
+            },
+        )
+        .unwrap();
+        assert_eq!(ordered(&db), vec!["a.md", "b.md", "c.md"]);
+        custom_path_update(
+            &db,
+            CustomPathUpdateRequest {
+                project_id: id.clone(),
+                path_or_id: "b.md".into(),
+                path: Some("b-renamed.md".into()),
+                order: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(ordered(&db), vec!["a.md", "b-renamed.md", "c.md"]);
         assert!(custom_path_update(
             &db,
             CustomPathUpdateRequest {
                 project_id: id.clone(),
-                path_or_id: "a-renamed.md".into(),
+                path_or_id: "b-renamed.md".into(),
                 path: Some("../outside.md".into()),
                 order: None
             }
         )
         .is_err());
-        assert!(custom_path_remove(&db, &id, "A-RENAMED.MD").is_ok());
+        assert!(custom_path_update(
+            &db,
+            CustomPathUpdateRequest {
+                project_id: id.clone(),
+                path_or_id: "b-renamed.md".into(),
+                path: Some("A.MD".into()),
+                order: None,
+            }
+        )
+        .is_err());
+        assert!(custom_path_remove(&db, &id, "B-RENAMED.MD").is_ok());
     }
 
     #[test]
