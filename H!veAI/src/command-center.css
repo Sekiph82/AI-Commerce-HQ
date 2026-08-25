@@ -32,3 +32,5 @@ html,body,#root{height:100%;min-height:0}
 .surface-placeholder strong{color:var(--text);font-size:.84rem}
 .shortcut-empty,.rail-empty{color:var(--text-muted);font-size:.65rem;padding:8px 10px}
 @media(max-width:760px){.sidebar{flex-basis:244px}.global-footer{display:none}}
+/* Keep Command Center surfaces readable while allowing the global hive layer through. */
+.main-command .panel,.main-command .right-panel,.main-command .current-task,.main-command .workflow-mini{background:rgba(15,23,42,.74);backdrop-filter:blur(10px) saturate(130%);-webkit-backdrop-filter:blur(10px) saturate(130%);border-color:rgba(96,165,250,.24);box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 8px 24px rgba(2,8,23,.2)}

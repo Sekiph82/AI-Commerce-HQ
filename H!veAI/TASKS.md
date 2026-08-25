@@ -193,14 +193,37 @@ M08 remains blocked and unstarted.
 - [x] Preserve the approximately 220 px sidebar and approved Command Center layout
 - [x] Record M07.07B bookkeeping corrections prospectively in a new immutable log
 - [x] Run automated regression gates and republish the stable no-bundle QA build
-- [ ] Independent M07.07C strict audit
-- [ ] User enlarged-logo visual acceptance
+- [x] Independent M07.07C strict audit
+- [x] User enlarged-logo visual acceptance
 - [x] User real in-app restart acceptance (already PASS; no restart-path changes)
 
 Native Settings restart manual gate = PASS, documented in
-`docs/H!veAI/audits/M07.07B_NATIVE_RESTART_MANUAL_ACCEPTANCE.md`. M07.07C remains
-ACTIVE until independently audited. The remaining human gate is enlarged-logo
-visual acceptance only. Do not mark M07 PASS. M08 remains blocked and unstarted.
+`docs/H!veAI/audits/M07.07B_NATIVE_RESTART_MANUAL_ACCEPTANCE.md`. M07.07C strict
+audit = PASS, with visual acceptance documented in
+`docs/H!veAI/audits/M07.07C_SIDEBAR_LOGO_MANUAL_ACCEPTANCE.md`.
+
+## Current M07 closure truth
+
+M07 strict audit and M07.07C audit are PASS. M07 is PASS/CLOSED. The real native
+restart acceptance and enlarged-sidebar-logo visual acceptance are complete and
+documented by their audits. Historical remediation notes above remain audit
+history; they do not reopen M07.
+
+## M08.00 App presentation bootstrap
+- [x] Copy and verify the canonical global hive background asset
+- [x] Copy and verify the canonical native opening video asset
+- [x] Mount the native startup intro over an immediately mounted App
+- [x] Keep intro play-once behavior scoped to the native lifecycle
+- [x] Adapt restrained neon liquid glass styling to shared buttons, panels, and real tables
+- [x] Preserve M07 Command Center geometry and behavior
+- [x] Run focused and full frontend/native/publisher gates
+- [x] Publish the validated no-bundle desktop QA build
+- [ ] Independent M08.00 audit
+- [ ] User visual and lifecycle acceptance
+
+M08.00 presentation + neon-glass bootstrap is implemented and published, pending
+independent audit and user visual/lifecycle acceptance. M08 Task Source Discovery
+is not implemented by this pass and remains unstarted.
 
 ## M08 Task Source Discovery
 - [ ] discover TASKS/tasks/PLANS/PROGRESS/ROADMAP/CLAUDE/AGENTS/handoffs

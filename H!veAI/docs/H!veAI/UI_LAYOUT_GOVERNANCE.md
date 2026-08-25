@@ -264,3 +264,35 @@ Before claiming visual PASS:
 M11/M12 will add richer Global Command Center and Project Cockpit functionality, but they must preserve this single-viewport composition, live-project identity contract, selection behavior, project-rail name-only density rule, and canonical layout unless the user explicitly changes them.
 
 Future milestones may replace task/workflow placeholders with real data. They must not regress project identity back to fixtures or turn the dashboard back into a long vertically stacked page.
+
+## M08.00 Presentation Bootstrap
+
+The global application background source is:
+
+`C:\Users\sekip\Desktop\AI-Commerce-HQ files\H!veAI\scene 3 starting point.png`
+
+The repository asset is `src/assets/hiveai-app-background.png`. Use one fixed
+full-application background layer across every route with preserved aspect ratio,
+no tiling, and a dark navy/black readability overlay. The background remains
+subordinate to operational content and must not alter the approved viewport,
+sidebar, topbar, project rail, footer, or Command Center geometry.
+
+The canonical native opening video source is:
+
+`C:\Users\sekip\Desktop\AI-Commerce-HQ files\H!veAI\videos and gifs\opening video.mp4`
+
+The repository asset is `src/assets/opening-video.mp4`. It plays only in the
+native in-window startup overlay, once per native application lifecycle. Native
+restart creates a new lifecycle and may play it again; SPA navigation, project
+selection, route changes, minimize/restore, and ordinary in-app actions must not
+replay it. The React app mounts immediately and `hiveai_frontend_ready` remains
+independent of video completion. Media errors and a bounded failsafe must remove
+the overlay rather than trap the user.
+
+M08.00 uses a restrained adaptation of the FMCG ERP NEON LIQUID GLASS DESIGN
+SYSTEM: dark translucent navy surfaces, bounded blur/saturation, thin
+cyan/blue borders, restrained violet glow, readable text, and obvious focus
+states. Existing primary/secondary buttons and real table surfaces may receive
+controlled glass/glow treatment. Do not apply a competing theme, continuous
+glow animation, gaming-HUD styling, heavy nested blur, or opacity that harms
+readability or single-viewport geometry.
