@@ -22,7 +22,8 @@ Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition
 - M09 original strict audit = historical FAIL.
 - M09A strict re-audit = historical FAIL after closing the original seven findings but exposing two residual production defects.
 - M09B strict re-audit = historical FAIL due residual R02C/E01C/E03C/E05 findings.
-- M09C final bounded-identity micro-fix implementation/log/publication evidence is present; independent M09C re-audit remains pending.
+- M09C independent strict re-audit = CONDITIONAL, with 0 BLOCKER / 0 MAJOR / 1 MINOR evidence item (E01C retry-containment proof).
+- M09D is an evidence-only retry-containment closure; implementation/test evidence is complete and independent M09D audit remains pending.
 - M09 is ACTIVE / NOT CLOSED.
 - M10+ remain BLOCKED/UNSTARTED until M09 closes.
 - Strict completed milestone count remains **9 / 20 = 45%**.
@@ -678,7 +679,9 @@ M08 PASS/CLOSED.
 - [x] M09B bounded explicit ID, milestone/headings, evidence heading path, locator text, handoff values and other source-derived persisted scalars.
 - [x] M09B deduplicated repeated equivalent truncation warnings.
 - [x] M09C fixes residual R02C bounded working-identity defect.
-- [ ] Independent M09C re-audit acceptance of final bounded identity.
+- [x] M09C independent strict re-audit recorded as CONDITIONAL with one bounded E01C evidence item.
+- [x] M09D strengthens retry-containment evidence with a canonicalizable outside-root fixture and exact containment-message assertion.
+- [ ] Independent M09D audit acceptance and final M09 closure.
 
 ### M09.10 - Adapter boundary
 - [x] Generic adapter safe fallback.
@@ -738,7 +741,8 @@ M08 PASS/CLOSED.
 - [x] M09B path-collision regression test implemented.
 - [x] M09B oversized heading/handoff/explicit-ID/determinism tests implemented.
 - [x] M09B strengthened retry containment/handoff exact order/stale-source evidence implemented.
-- [x] M09C direct fixed identity key, task-ID stability, retry containment, and stale dependency/settings tests implemented.
+- [x] M09C direct fixed identity key, task-ID stability, and stale dependency/settings tests implemented.
+- [x] M09D direct retry-containment test uses a real canonicalizable outside-root file and exact warning-message assertion.
 
 ### M09.16 - M09 original strict audit history
 - [x] Original M09 implementation completed by builder.
@@ -773,17 +777,19 @@ M08 PASS/CLOSED.
 - [x] Replace raw duplicate-ordinal working keys with fixed-size digest keys.
 - [x] Stream task-ID identity hashing without giant formatted identity strings.
 - [x] Add direct R02C fixed-key/stability/determinism tests.
-- [x] Directly exercise refreshed retry containment rejection.
+- [x] Add retry-containment evidence test; direct containment proof remained conditional in the M09C audit.
 - [x] Complete stale-source/settings/dependency SQL evidence.
 - [x] Run full regression, security, publisher, and final remote equality gates.
-- [ ] Independent strict M09C re-audit.
+- [x] Independent strict M09C re-audit completed as CONDITIONAL with 0 BLOCKER / 0 MAJOR / 1 MINOR.
 
-### M09.20 - M09 regression/publication closure
-- [x] Focused Rust parser tests green per current M09C builder evidence.
-- [x] Full Rust/frontend/typecheck/build/security gates green per current M09C builder evidence.
-- [x] Publisher failure harness green per current M09C builder evidence.
-- [ ] Independently verify final M09C branch/source truth.
-- [ ] Independently verify final M09C publication/equality evidence.
+### M09.20 - M09D retry-containment evidence closure
+- [x] M09C production identity and publication evidence remain accepted; E01C direct retry evidence was the sole residual item.
+- [x] M09D evidence-only retry-containment implementation/test work completed.
+- [x] M09D focused/full regression and governed publication gates completed.
+- [ ] Independently verify final M09D branch/source truth.
+- [ ] Independently verify final M09D publication/equality evidence.
+
+### M09.21 - M09 final regression/publication closure
 - [ ] Final M09 audit verdict.
 - [ ] Mark M09 PASS/CLOSED only if no BLOCKER/MAJOR remains.
 - [ ] Unlock M10 only after independent closure.
@@ -1469,7 +1475,7 @@ M20 PLANNED/BLOCKED until M19 and final hardening gates.
 # Milestone policy
 
 - M00-M08 are PASS/CLOSED.
-- M09 remains active until independent M09C re-audit/final closure.
+- M09 remains active until independent M09D audit/final closure.
 - M10 remains blocked until M09 and the queued pre-M10 native UX hotfix are closed.
 - M11-M20 remain planned and must not be treated as implemented because their roadmap entries are detailed.
 - Each future milestone should be executed as one bounded milestone unless an actual independent audit requires a remediation prompt.

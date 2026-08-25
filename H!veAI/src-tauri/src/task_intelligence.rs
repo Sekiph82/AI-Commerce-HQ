@@ -21,6 +21,8 @@ const SCHEMA_VERSION: u32 = 1;
 static RETRY_FAILPOINT: OnceLock<Mutex<Option<PathBuf>>> = OnceLock::new();
 #[cfg(test)]
 static RETRY_RELATIVE_PATH_FAILPOINT: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+#[cfg(test)]
+static RETRY_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -1360,6 +1362,10 @@ mod tests {
     }
     #[test]
     fn p01_second_change_after_refresh_is_skipped_after_exactly_one_retry() {
+        let _retry_test_guard = RETRY_TEST_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap();
         let (_db_dir, dir, db, id) = fixture("- [ ] old\n");
         let target = dir.path().join("TASKS.md");
         let source = task_sources::discover(&db, &id)
@@ -1378,8 +1384,16 @@ mod tests {
     }
     #[test]
     fn p01_retry_rechecks_physical_containment() {
+        let _retry_test_guard = RETRY_TEST_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap();
         let (_db_dir, dir, db, id) = fixture("- [ ] safe\n");
         let target = dir.path().join("TASKS.md");
+        let project_name = dir.path().file_name().unwrap().to_string_lossy();
+        let outside_name = format!(".m09d-outside-{project_name}.md");
+        let outside_path = dir.path().parent().unwrap().join(&outside_name);
+        fs::write(&outside_path, "- [ ] outside\n").unwrap();
         let source = task_sources::discover(&db, &id)
             .unwrap()
             .into_iter()
@@ -1389,12 +1403,14 @@ mod tests {
         *RETRY_RELATIVE_PATH_FAILPOINT
             .get_or_init(|| Mutex::new(None))
             .lock()
-            .unwrap() = Some("../outside.md".into());
+            .unwrap() = Some(format!("../{outside_name}"));
+        let result = read_authoritative_source(&db, &id, &source);
+        fs::remove_file(&outside_path).unwrap();
+        let warning = result.unwrap_err();
+        assert_eq!(warning.code, "SOURCE_READ_FAILED");
         assert_eq!(
-            read_authoritative_source(&db, &id, &source)
-                .unwrap_err()
-                .code,
-            "SOURCE_READ_FAILED"
+            warning.message,
+            "refreshed source is outside registered root"
         );
     }
     #[test]
