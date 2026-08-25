@@ -68,10 +68,10 @@ Canonical asset hashes: opening video `A438404A19CE53C45D1385BA1F1009E9AEA110C73
 
 ## COMMITS / REMOTE
 
-implementation commit: pending.
-log commit: pending.
-final remote HEAD: pending.
-local/origin equality: pending.
+implementation commit: `df74aff0ba04e8035baa308863bc1d9489d853b8` (`Implement pre-M10 native UX hotfix`).
+log commit: SELF / verified after final push in this session.
+final remote HEAD: SELF / verified after final push in this session.
+local/origin equality: `HEAD == origin/H!veAI`; verified after final push in this session.
 
 ## PRE-PUSH SELF-AUDIT
 
