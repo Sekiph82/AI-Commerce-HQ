@@ -52,6 +52,15 @@ import { getGitSnapshot } from "./gitEngine";
 import type { GitSnapshot } from "./gitEngine";
 import type { Project } from "./types";
 import { useProjectRegistry } from "./registryContext";
+import {
+  addCustomSourcePath,
+  discoverTaskSources,
+  listCustomSourcePaths,
+  listTaskSources,
+  removeCustomSourcePath,
+  type CustomSourcePath,
+  type DiscoveredProjectSource,
+} from "./taskSources";
 
 function Placeholder({
   title,
@@ -1319,11 +1328,119 @@ export function ActivityPage() {
   );
 }
 export function Tasks() {
+  const desktop = isTauriDesktop();
+  const { records, projects, selectedProjectId } = useProjectRegistry();
+  const selected = projects.find((project) => project.id === selectedProjectId) ?? null;
+  const [sources, setSources] = React.useState<DiscoveredProjectSource[]>([]);
+  const [customPaths, setCustomPaths] = React.useState<CustomSourcePath[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [path, setPath] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const request = React.useRef(0);
+
+  const refresh = React.useCallback(async (projectId: string, discover = false) => {
+    const requestId = ++request.current;
+    setLoading(true);
+    setError(null);
+    try {
+      const nextSources = desktop
+        ? await (discover ? discoverTaskSources(projectId) : listTaskSources(projectId))
+        : [];
+      const nextCustom = desktop ? await listCustomSourcePaths(projectId) : [];
+      if (requestId === request.current) {
+        setSources(nextSources);
+        setCustomPaths(nextCustom);
+      }
+    } catch (caught) {
+      if (requestId === request.current) {
+        setSources([]);
+        setCustomPaths([]);
+        setError(caught instanceof Error ? caught.message : String(caught));
+      }
+    } finally {
+      if (requestId === request.current) setLoading(false);
+    }
+  }, [desktop]);
+
+  React.useEffect(() => {
+    if (!selectedProjectId) {
+      setSources([]);
+      setCustomPaths([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    void refresh(selectedProjectId);
+  }, [refresh, selectedProjectId]);
+
+  const rescan = () => selectedProjectId && void refresh(selectedProjectId, true);
+  const addPath = async () => {
+    if (!desktop || !selectedProjectId || !path.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await addCustomSourcePath(selectedProjectId, path.trim());
+      setPath("");
+      await refresh(selectedProjectId);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const removePath = async (customPath: CustomSourcePath) => {
+    if (!desktop || !selectedProjectId) return;
+    setBusy(true);
+    try {
+      await removeCustomSourcePath(selectedProjectId, customPath.id);
+      await refresh(selectedProjectId);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!selectedProjectId || !selected) {
+    return <Placeholder title="Task Sources" description="Select a registered project to inspect bounded task-source evidence." />;
+  }
+  const available = sources.filter((source) => source.status === "AVAILABLE").length;
+  const warnings = sources.filter((source) => source.status !== "AVAILABLE").length;
   return (
-    <Placeholder
-      title="Tasks"
-      description="A normalized task workspace for future project sources."
-    />
+    <>
+      <PageHeader title="Task Sources" description={`Bounded source inventory for ${selected.name}.`} />
+      {!desktop ? <div className="fixture-note">Browser preview uses no filesystem discovery. Open the native H!veAI build for live sources.</div> : null}
+      {error ? <div className="safe-notice" role="alert">{error}</div> : null}
+      <section className="panel task-sources-workspace">
+        <div className="task-sources-toolbar">
+          <div>
+            <span className="eyebrow">Selected project</span>
+            <h2>{selected.name}</h2>
+            <p>{records.find((record) => record.id === selectedProjectId)?.originalPath ?? selected.description}</p>
+          </div>
+          <button className="primary-button" type="button" onClick={rescan} disabled={!desktop || loading}>
+            <RefreshCw size={14} className={loading ? "spin" : undefined} /> Rescan sources
+          </button>
+        </div>
+        <div className="task-source-summary" aria-label="Task source summary">
+          <span><b>{available}</b> available</span>
+          <span><b>{warnings}</b> warnings</span>
+          <span><b>{customPaths.length}</b> custom paths</span>
+        </div>
+        {loading ? <LoadingState /> : error ? <ErrorState detail="Task source inventory is unavailable for this project." /> : sources.length === 0 ? <EmptyState title="No task source files discovered" detail="Rescan the registered project to inspect bounded task and planning evidence." /> : (
+          <div className="task-sources-table" role="table" aria-label="Discovered task sources">
+            <div className="task-source-row task-source-head" role="row"><span>Path</span><span>Kind</span><span>Origin</span><span>Authority</span><span>Modified</span><span>Status</span></div>
+            {sources.map((source) => <div className="task-source-row" role="row" key={source.id}><span title={source.absolutePath}>{source.relativePath}</span><span>{source.sourceKind}</span><span>{source.origin}</span><span>{source.authorityClass} · {source.priority}</span><span>{source.modifiedAt ? new Date(source.modifiedAt).toLocaleString() : "Unknown"}</span><span className={`source-status source-status-${source.status.toLowerCase()}`}>{source.status}</span></div>)}
+          </div>
+        )}
+      </section>
+      <section className="panel custom-source-panel">
+        <SectionHeader title="Custom source paths" detail="Stored in H!veAI settings" />
+        <div className="custom-source-add"><input aria-label="Custom source path" value={path} onChange={(event) => setPath(event.target.value)} placeholder="Relative file or directory inside project root" disabled={!desktop || busy} /><button className="secondary-button" type="button" onClick={addPath} disabled={!desktop || busy || !path.trim()}><Plus size={14} /> Add path</button></div>
+        {customPaths.length ? <div className="custom-source-list">{customPaths.map((customPath) => <div key={customPath.id}><span>{customPath.displayPath}</span><small>{customPath.status}</small><button className="icon-button" type="button" aria-label={`Remove ${customPath.displayPath}`} onClick={() => void removePath(customPath)} disabled={busy}><X size={14} /></button></div>)}</div> : <p className="fixture-note">No custom source paths configured.</p>}
+      </section>
+    </>
   );
 }
 export function Agents() {

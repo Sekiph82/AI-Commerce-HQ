@@ -15,6 +15,7 @@
     "allow-database-status",
     "allow-project-registry",
     "allow-git-engine-read",
-    "allow-filesystem-watcher"
+    "allow-filesystem-watcher",
+    "allow-task-source-discovery"
   ]
 }

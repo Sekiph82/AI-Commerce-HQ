@@ -316,3 +316,13 @@ claim in a process may play once, a second claim in that process skips, and a
 new native process may claim again. Browser previews do not invoke the native
 claim. SPA navigation, project selection, route changes, minimize/restore, and
 media failure must not replay or trap the application.
+
+## M08 Task Sources workspace
+
+The existing `/tasks` route is the Task Sources workspace until M09. It shows
+only bounded source inventory evidence for the selected live Registry project:
+relative path, source kind, standard/custom origin, authority/priority,
+filesystem freshness evidence, bounded status, and custom-path controls. It
+must not display parsed task counts, progress, workflow state, owner,
+completion, or next-best-task claims. The table may scroll internally while
+the approved Command Center single-viewport composition remains unchanged.

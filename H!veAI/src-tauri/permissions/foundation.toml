@@ -44,3 +44,8 @@ commands.allow = ["hiveai_git_snapshot", "hiveai_git_diff", "hiveai_git_mutation
 identifier = "allow-filesystem-watcher"
 description = "Allows the main window to inspect and explicitly refresh registered-project watcher state."
 commands.allow = ["hiveai_watcher_status", "hiveai_watcher_project_status", "hiveai_watcher_refresh_set", "hiveai_watcher_rescan"]
+
+[[permission]]
+identifier = "allow-task-source-discovery"
+description = "Allows the main window to discover bounded task-source metadata for registered projects."
+commands.allow = ["hiveai_task_sources_discover", "hiveai_task_sources_list", "hiveai_task_source_custom_paths_list", "hiveai_task_source_custom_path_add", "hiveai_task_source_custom_path_remove"]

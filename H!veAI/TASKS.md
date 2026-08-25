@@ -218,29 +218,34 @@ history; they do not reopen M07.
 - [x] Preserve M07 Command Center geometry and behavior
 - [x] Run focused and full frontend/native/publisher gates
 - [x] Publish the validated no-bundle desktop QA build
-- [ ] Independent M08.00 audit
-- [ ] User visual and lifecycle acceptance
+- [x] Independent M08.00 audit
+- [x] User visual and lifecycle acceptance
 
-M08.00 presentation + neon-glass bootstrap is implemented and published, pending
-independent audit and user visual/lifecycle acceptance. M08 Task Source Discovery
-is not implemented by this pass and remains unstarted.
+M08.00 presentation + neon-glass bootstrap is PASS/CLOSED with independent audit
+and user visual/lifecycle acceptance.
 
 ## M08.00B Background alignment and native intro remediation
 - [x] Move the canonical background to the post-sidebar main workspace
 - [x] Add a fixed fullscreen startup overlay with contained video and no normal-flow overflow
 - [x] Add a native process-scoped startup claim command and narrow ACL permission
 - [x] Add focused frontend and Rust evidence for claim, failure, lifecycle, and layout behavior
-- [ ] Independent M08.00B strict audit
-- [ ] User manual acceptance of the refreshed native build
+- [x] Independent M08.00B strict audit
+- [x] User manual acceptance of the refreshed native build
 
-M08.00B is implemented and published pending independent audit and user manual
-acceptance. M08 Task Source Discovery remains blocked and unimplemented.
+M08.00B is PASS/CLOSED with independent audit and user manual acceptance.
 
 ## M08 Task Source Discovery
-- [ ] discover TASKS/tasks/PLANS/PROGRESS/ROADMAP/CLAUDE/AGENTS/handoffs
-- [ ] custom paths
-- [ ] priority/authority/freshness
-- [ ] source UI
+- [x] discover bounded standard source families and approved directories
+- [x] project-scoped custom paths with physical containment
+- [x] priority/authority/freshness/hash metadata and bounded limits
+- [x] transactional project_sources inventory reconciliation
+- [x] native discovery IPC, narrow ACL, and live Task Sources workspace
+- [x] focused source-discovery and frontend evidence
+- [ ] independent M08 strict audit
+- [ ] user visual acceptance of the native Task Sources workspace
+
+M08 Task Source Discovery implementation is complete and published pending
+independent strict audit and user visual acceptance. M09 remains unstarted.
 
 ## M09 Task Intelligence Parser
 - [ ] headings/checklists/milestones/status tags/task IDs

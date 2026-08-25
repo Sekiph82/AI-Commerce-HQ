@@ -28,6 +28,7 @@ tauri-plugin-notification = "2.3.3"
 uuid = { version = "1", features = ["v4"] }
 notify = "8.2"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+sha2 = "0.10"
 
 [dev-dependencies]
 tempfile = "3"

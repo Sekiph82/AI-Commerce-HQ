@@ -47,6 +47,13 @@ agent_sessions, agent_events, agent_tool_calls, permission_requests,
 audits, audit_findings, test_runs, alerts, decisions, github_sync_state,
 settings, migrations.
 
+M08 Task Source Discovery is the bounded pre-parser boundary: it resolves only
+registered project roots, discovers standard and explicitly configured custom
+source documents, records physical-path/hash/status metadata in
+`project_sources`, and exposes no source bodies or parsed task entities. It
+does not write `tasks`, `task_sources`, project files, `.hiveai` configuration,
+or start background discovery workers.
+
 ## Project Registry
 Stores project identity, local path, git remote, GitHub owner/repo, default
 branch, priority, preferred builder/auditor and task-source policy.

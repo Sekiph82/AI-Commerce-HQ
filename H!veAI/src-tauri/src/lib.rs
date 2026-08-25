@@ -7,6 +7,7 @@ mod db;
 mod git_engine;
 mod projects;
 mod runtime;
+mod task_sources;
 mod time;
 mod watcher;
 use db::{DatabaseState, DatabaseStatus};
@@ -15,6 +16,7 @@ use projects::{
     UpdateProjectSettingsRequest,
 };
 use runtime::{RuntimeStatus, RuntimeSupervisor};
+use task_sources::{CustomPathRequest, CustomSourcePath, DiscoveredProjectSource};
 use watcher::{ProjectWatcherStatus, WatcherManager, WatcherStatusSummary};
 
 use git_engine::{GitDiff, GitDiffRequest, GitSnapshot, GitSnapshotRequest, MutationStatus};
@@ -209,6 +211,47 @@ fn hiveai_watcher_rescan(
     watcher.rescan_project(&project_id)
 }
 
+#[tauri::command]
+fn hiveai_task_sources_discover(
+    database: tauri::State<'_, DatabaseState>,
+    project_id: String,
+) -> Result<Vec<DiscoveredProjectSource>, String> {
+    task_sources::discover(&database, &project_id)
+}
+
+#[tauri::command]
+fn hiveai_task_sources_list(
+    database: tauri::State<'_, DatabaseState>,
+    project_id: String,
+) -> Result<Vec<DiscoveredProjectSource>, String> {
+    task_sources::list(&database, &project_id)
+}
+
+#[tauri::command]
+fn hiveai_task_source_custom_paths_list(
+    database: tauri::State<'_, DatabaseState>,
+    project_id: String,
+) -> Result<Vec<CustomSourcePath>, String> {
+    task_sources::custom_paths_list(&database, &project_id)
+}
+
+#[tauri::command]
+fn hiveai_task_source_custom_path_add(
+    database: tauri::State<'_, DatabaseState>,
+    request: CustomPathRequest,
+) -> Result<Vec<CustomSourcePath>, String> {
+    task_sources::custom_path_add(&database, request)
+}
+
+#[tauri::command]
+fn hiveai_task_source_custom_path_remove(
+    database: tauri::State<'_, DatabaseState>,
+    project_id: String,
+    path_or_id: String,
+) -> Result<Vec<CustomSourcePath>, String> {
+    task_sources::custom_path_remove(&database, &project_id, &path_or_id)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -240,7 +283,12 @@ pub fn run() {
             hiveai_watcher_status,
             hiveai_watcher_project_status,
             hiveai_watcher_refresh_set,
-            hiveai_watcher_rescan
+            hiveai_watcher_rescan,
+            hiveai_task_sources_discover,
+            hiveai_task_sources_list,
+            hiveai_task_source_custom_paths_list,
+            hiveai_task_source_custom_path_add,
+            hiveai_task_source_custom_path_remove
         ])
         .setup(|app| {
             app.manage(StartupIntroState::default());
