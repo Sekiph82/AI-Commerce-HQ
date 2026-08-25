@@ -7,7 +7,7 @@ Legend: [x] validated complete, [~] active, [ ] planned/not started, [!] blocked
 - M00 through M07 are PASS/CLOSED.
 - M01 real native Settings restart is PASS and user-accepted.
 - M08.00/M08.00B presentation bootstrap is PASS/CLOSED, including opening video, post-sidebar hive background alignment, and restrained glass/glow styling.
-- M08 Task Source Discovery is the only active milestone.
+- M08C custom-order backward-compatibility micro-fix is the only active work.
 - M09 and later milestones are blocked until M08 implementation, independent strict audit, and any required manual acceptance are complete.
 - Strict completed milestone count: 8 / 20.
 
@@ -188,8 +188,20 @@ M09 remains blocked and unstarted.
 - [ ] Independent strict re-audit
 - [ ] User visual acceptance of the remediated native Task Sources workspace
 
-M08B is ACTIVE. Original M08 and M08A strict audits remain FAIL historical gates;
-M09 remains BLOCKED/UNSTARTED.
+M08B remains historical evidence. Original M08, M08A, and M08B strict audits remain
+historical gates; M09 remains BLOCKED/UNSTARTED.
+
+## M08C Custom Order Backward-Compatibility Micro Fix
+- [x] Normalize legacy custom settings without valid explicit order by persisted vector position
+- [x] Preserve normalized position during path-only rename and persist contiguous order on mutation
+- [x] Extend combined custom/standard ordering evidence to three CUSTOM sources
+- [x] Run focused/full frontend, Rust, publisher and no-bundle publication gates
+- [x] Create the immutable M08C micro-fix log
+- [ ] Independent strict re-audit
+- [ ] User visual acceptance of the remediated native Task Sources workspace
+
+M08C implementation and automated evidence are complete. Independent strict re-audit
+and user visual acceptance remain open; do not mark M08 PASS. M09 remains BLOCKED/UNSTARTED.
 
 ## M09 Task Intelligence Parser
 - [ ] headings/checklists/milestones/status tags/task IDs

@@ -102,8 +102,16 @@ struct StoredCustomPath {
     id: String,
     display_path: String,
     normalized_path: String,
-    #[serde(default)]
     order: i64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawStoredCustomPath {
+    id: String,
+    display_path: String,
+    normalized_path: String,
+    order: Option<i64>,
 }
 
 struct DiscoveryBudget {
@@ -943,9 +951,41 @@ fn load_custom_paths(
         )
         .optional()
         .map_err(db_error)?;
-    Ok(value
-        .and_then(|json| serde_json::from_str(&json).ok())
-        .unwrap_or_default())
+    Ok(normalize_custom_paths(
+        value
+            .and_then(|json| serde_json::from_str::<Vec<RawStoredCustomPath>>(&json).ok())
+            .unwrap_or_default(),
+    ))
+}
+fn normalize_custom_paths(paths: Vec<RawStoredCustomPath>) -> Vec<StoredCustomPath> {
+    let explicit_order_is_valid = paths
+        .iter()
+        .all(|path| path.order.is_some_and(|order| order >= 0))
+        && {
+            let mut orders = paths
+                .iter()
+                .filter_map(|path| path.order)
+                .collect::<Vec<_>>();
+            orders.sort_unstable();
+            orders
+                .iter()
+                .enumerate()
+                .all(|(index, order)| *order == index as i64)
+        };
+    let mut paths = paths;
+    if explicit_order_is_valid {
+        paths.sort_by_key(|path| path.order.unwrap_or_default());
+    }
+    paths
+        .into_iter()
+        .enumerate()
+        .map(|(order, path)| StoredCustomPath {
+            id: path.id,
+            display_path: path.display_path,
+            normalized_path: path.normalized_path,
+            order: order as i64,
+        })
+        .collect()
 }
 fn save_custom_paths(
     database: &DatabaseState,
@@ -1568,6 +1608,7 @@ mod tests {
         for (path, value) in [
             ("custom-a.md", "a"),
             ("custom-b.md", "b"),
+            ("custom-c.md", "c"),
             ("TASKS.md", "tasks"),
             ("PLANS.md", "plans"),
             ("ROADMAP.md", "roadmap"),
@@ -1590,11 +1631,19 @@ mod tests {
             },
         )
         .unwrap();
+        custom_path_add(
+            &db,
+            CustomPathRequest {
+                project_id: id.clone(),
+                path: "custom-c.md".into(),
+            },
+        )
+        .unwrap();
         custom_path_update(
             &db,
             CustomPathUpdateRequest {
                 project_id: id.clone(),
-                path_or_id: "custom-b.md".into(),
+                path_or_id: "custom-c.md".into(),
                 path: None,
                 order: Some(0),
             },
@@ -1610,12 +1659,88 @@ mod tests {
                 .map(|row| row.relative_path.as_str())
                 .collect::<Vec<_>>(),
             vec![
-                "custom-b.md",
+                "custom-c.md",
                 "custom-a.md",
+                "custom-b.md",
                 "TASKS.md",
                 "PLANS.md",
                 "ROADMAP.md"
             ]
+        );
+    }
+
+    #[test]
+    fn legacy_custom_settings_without_order_normalize_and_preserve_position() {
+        let (_db_dir, root, db, id) = fixture();
+        for path in ["z.md", "A.md", "m.md", "TASKS.md"] {
+            write(&root.path().join(path), path);
+        }
+        let legacy_json = serde_json::json!([
+            { "id": "z", "displayPath": "z.md", "normalizedPath": "z.md" },
+            { "id": "a", "displayPath": "A.md", "normalizedPath": "A.md" },
+            { "id": "m", "displayPath": "m.md", "normalizedPath": "m.md" }
+        ])
+        .to_string();
+        let connection = db.open_connection().unwrap();
+        connection
+            .execute(
+                "INSERT INTO settings (key, value_json, scope, created_at, updated_at) VALUES (?1, ?2, 'PROJECT', ?3, ?3)",
+                params![settings_key(&id), legacy_json, crate::time::utc_timestamp()],
+            )
+            .unwrap();
+
+        let listed = custom_paths_list(&db, &id).unwrap();
+        assert_eq!(
+            listed
+                .iter()
+                .map(|path| (path.normalized_path.as_str(), path.order))
+                .collect::<Vec<_>>(),
+            vec![("z.md", 0), ("A.md", 1), ("m.md", 2)]
+        );
+        assert_eq!(
+            discover(&db, &id)
+                .unwrap()
+                .into_iter()
+                .filter(|source| source.status != "LIMIT_REACHED")
+                .map(|source| source.relative_path)
+                .collect::<Vec<_>>(),
+            vec!["z.md", "A.md", "m.md", "TASKS.md"]
+        );
+
+        let renamed = custom_path_update(
+            &db,
+            CustomPathUpdateRequest {
+                project_id: id.clone(),
+                path_or_id: "A.md".into(),
+                path: Some("renamed.md".into()),
+                order: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            renamed
+                .iter()
+                .map(|path| (path.normalized_path.as_str(), path.order))
+                .collect::<Vec<_>>(),
+            vec![("z.md", 0), ("renamed.md", 1), ("m.md", 2)]
+        );
+
+        let persisted: serde_json::Value = connection
+            .query_row(
+                "SELECT value_json FROM settings WHERE key = ?1 AND scope = 'PROJECT'",
+                [settings_key(&id)],
+                |row| row.get::<_, String>(0),
+            )
+            .map(|json| serde_json::from_str(&json).unwrap())
+            .unwrap();
+        assert_eq!(
+            persisted
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|path| path.get("order").and_then(serde_json::Value::as_i64))
+                .collect::<Vec<_>>(),
+            vec![Some(0), Some(1), Some(2)]
         );
     }
 
