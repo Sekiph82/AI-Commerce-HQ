@@ -300,5 +300,7 @@ Canonical repository asset hashes unchanged:
 M09 implementation complete, PENDING INDEPENDENT STRICT AUDIT. M10 remains
 BLOCKED/UNSTARTED. Historical M00-M08 logs remain separate and unchanged.
 
-Final implementation/publication commit and local/origin equality are recorded
-after the push sequence below.
+Implementation/publication commit: `cdac3774a403a04ae94db707483a8dfad27efa52`.
+It was pushed to `origin/H!veAI`, and local/origin equality was verified. This
+immediate documentation-only follow-up records the final publication evidence;
+its final commit is the branch HEAD.
