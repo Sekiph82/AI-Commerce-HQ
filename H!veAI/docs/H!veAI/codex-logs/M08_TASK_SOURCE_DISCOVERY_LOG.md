@@ -97,7 +97,7 @@ Historical M08.00/M08.00B logs and audits were not modified.
 
 ## Focused evidence
 
-Rust production discovery tests: 17/17 PASS, including root and
+Rust production discovery tests: 22/22 PASS, including root and
 case-insensitive source handling, bounded task/plans/handoff directories,
 ignored trees, outside and traversal rejection, safe custom and missing paths,
 Windows-normalized dedupe, idempotency, hash change, standard/custom
@@ -105,7 +105,7 @@ reconciliation, oversized sources, deterministic ordering, missing roots,
 non-Git projects, project-tree immutability, no task-row writes, and the
 symlink limitation record.
 
-Frontend Task Sources tests: 7/7 PASS. They cover live Registry project ID,
+Frontend Task Sources tests: 13/13 PASS. They cover live Registry project ID,
 loading, real metadata rows, rescan IPC and refresh, custom add/remove
 boundary, truthful empty/browser behavior, and project selection refresh.
 

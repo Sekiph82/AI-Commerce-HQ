@@ -1011,6 +1011,67 @@ mod tests {
     }
 
     #[test]
+    fn metadata_contains_authority_priority_depth_and_hash() {
+        let (_db_dir, root, db, id) = fixture();
+        write(&root.path().join("TASKS.md"), "metadata");
+        let row = discover(&db, &id).unwrap().remove(0);
+        assert_eq!(row.authority_class, "TASKS");
+        assert_eq!(row.priority, 10);
+        assert_eq!(row.depth, 0);
+        assert!(row
+            .content_hash
+            .as_ref()
+            .is_some_and(|hash| hash.len() == 64));
+    }
+
+    #[test]
+    fn nested_source_depth_is_bounded() {
+        let (_db_dir, root, db, id) = fixture();
+        write(&root.path().join("tasks/a/b/c/d.md"), "bounded");
+        let rows = discover(&db, &id).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].depth <= MAX_DISCOVERY_DEPTH);
+    }
+
+    #[test]
+    fn custom_path_listing_reports_available_and_missing() {
+        let (_db_dir, root, db, id) = fixture();
+        write(&root.path().join("evidence.md"), "evidence");
+        for path in ["evidence.md", "future.md"] {
+            custom_path_add(
+                &db,
+                CustomPathRequest {
+                    project_id: id.clone(),
+                    path: path.into(),
+                },
+            )
+            .unwrap();
+        }
+        let paths = custom_paths_list(&db, &id).unwrap();
+        assert_eq!(paths.len(), 2);
+        assert!(paths.iter().any(|path| path.status == "CONFIGURED"));
+        assert!(paths.iter().any(|path| path.status == "MISSING"));
+    }
+
+    #[test]
+    fn candidate_file_limit_is_enforced() {
+        let (_db_dir, root, db, id) = fixture();
+        for index in 0..(MAX_CANDIDATE_FILES + 2) {
+            write(&root.path().join(format!("tasks/{index}.md")), "x");
+        }
+        assert!(discover(&db, &id).unwrap().len() <= MAX_CANDIDATE_FILES);
+    }
+
+    #[test]
+    fn root_handoff_variant_is_classified_as_handoff() {
+        let (_db_dir, root, db, id) = fixture();
+        write(&root.path().join("SESSION_HANDOFF.md"), "handoff");
+        let row = discover(&db, &id).unwrap().remove(0);
+        assert_eq!(row.source_kind, "HANDOFF");
+        assert_eq!(row.authority_class, "HANDOFF");
+    }
+
+    #[test]
     fn symlink_escape_is_rejected_or_records_environment_limit() {
         let (_db_dir, root, db, id) = fixture();
         let outside = tempdir().unwrap();

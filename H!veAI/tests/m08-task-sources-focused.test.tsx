@@ -41,8 +41,8 @@ beforeEach(() => {
 describe("M08 Task Sources live workspace", () => {
   it("native_tasks_uses_selected_live_registry_project", async () => {
     renderTasks();
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Project A" })).toBeInTheDocument());
-    expect(invoke).toHaveBeenCalledWith("hiveai_task_sources_list", { projectId: "project-a" });
+    await screen.findByText("TASKS.md");
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("hiveai_task_sources_list", { projectId: "project-a" }));
   });
 
   it("shows_loading_before_source_response", async () => {
@@ -92,5 +92,43 @@ describe("M08 Task Sources live workspace", () => {
     render(<RegistryProvider><MemoryRouter initialEntries={["/tasks"]}><Tasks /></MemoryRouter></RegistryProvider>);
     expect(await screen.findByText(/Browser preview uses no filesystem discovery/)).toBeInTheDocument();
     expect(invoke.mock.calls.some(([command]) => String(command).startsWith("hiveai_task_source"))).toBe(false);
+  });
+
+  it("shows_custom_path_status", async () => {
+    invoke.mockImplementation((command: string) => command === "hiveai_projects_list" ? Promise.resolve(records) : command === "hiveai_task_sources_list" ? Promise.resolve([]) : command === "hiveai_task_source_custom_paths_list" ? Promise.resolve([{ id: "custom", displayPath: "evidence.md", normalizedPath: "evidence.md", status: "MISSING" }]) : Promise.resolve([]));
+    renderTasks();
+    expect(await screen.findByText("MISSING")).toBeInTheDocument();
+  });
+
+  it("does_not_render_task_workflow_columns", async () => {
+    renderTasks();
+    await screen.findByText("TASKS.md");
+    expect(screen.queryByText(/progress|workflow|owner/i)).not.toBeInTheDocument();
+  });
+
+  it("rescan_refreshes_inventory_for_selected_project", async () => {
+    renderTasks();
+    await screen.findByText("TASKS.md");
+    fireEvent.click(screen.getByRole("button", { name: /Rescan sources/i }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("hiveai_task_sources_discover", { projectId: "project-a" }));
+  });
+
+  it("keeps_custom_path_input_scoped_to_workspace", async () => {
+    renderTasks();
+    expect(await screen.findByRole("textbox", { name: "Custom source path" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: /task title/i })).not.toBeInTheDocument();
+  });
+
+  it("renders_source_kind_and_origin_columns", async () => {
+    renderTasks();
+    await screen.findByText("TASKS.md");
+    expect(screen.getByText("TASKS")).toBeInTheDocument();
+    expect(screen.getByText("STANDARD")).toBeInTheDocument();
+  });
+
+  it("renders_selected_project_identity_from_registry", async () => {
+    renderTasks();
+    expect(await screen.findByRole("heading", { name: "Project A" })).toBeInTheDocument();
+    expect(screen.getByText("Selected project")).toBeInTheDocument();
   });
 });
