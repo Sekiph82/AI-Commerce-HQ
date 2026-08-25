@@ -64,10 +64,18 @@ Reads branch, HEAD, staged/unstaged/untracked files, ahead/behind, commits,
 diff, conflicts and worktrees. Writes pass through Permission Engine.
 
 ## Task Intelligence
-Discover and parse TASKS.md/tasks.md/PLANS.md/PROGRESS.md/ROADMAP.md,
-handoffs and GitHub tasks. Emit normalized tasks with evidence, confidence,
-required actor, blockers, dependencies, milestone and acceptance criteria.
-Support repo-specific adapters for FormuLab, Scrubbots and FMCG ERP.
+M08-owned, versioned, AVAILABLE source inventory is the sole parse boundary.
+M09 reconstructs and physically validates each source path under the Registry
+root, checks the bounded UTF-8 body hash, and emits structured warnings rather
+than reading arbitrary repository files. The deterministic parser persists
+M09-owned `m09src:`/`m09task:` rows, `SOURCE_EXPLICIT` dependency edges, and a
+project snapshot in existing SQLite tables without writing task events or
+managed project files. `list` reads the persisted snapshot only. Generic,
+FormuLab, ScrubBots, and FMCG ERP adapters are selected by exact Registry
+identity and only add evidenced structural conventions; generic is the safe
+fallback. M09 storage maps DONE to TASK_COMPLETE, BLOCKED to BLOCKED, and all
+other parsed statuses to BACKLOG while retaining richer parser truth in
+metadata for the future M10 workflow state machine.
 
 ## Workflow
 Happy path:

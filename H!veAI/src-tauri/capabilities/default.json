@@ -16,6 +16,7 @@
     "allow-project-registry",
     "allow-git-engine-read",
     "allow-filesystem-watcher",
-    "allow-task-source-discovery"
+    "allow-task-source-discovery",
+    "allow-task-intelligence"
   ]
 }

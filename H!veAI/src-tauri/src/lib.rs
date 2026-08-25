@@ -7,6 +7,7 @@ mod db;
 mod git_engine;
 mod projects;
 mod runtime;
+mod task_intelligence;
 mod task_sources;
 mod time;
 mod watcher;
@@ -16,6 +17,7 @@ use projects::{
     UpdateProjectSettingsRequest,
 };
 use runtime::{RuntimeStatus, RuntimeSupervisor};
+use task_intelligence::TaskIntelligenceSnapshot;
 use task_sources::{
     CustomPathRequest, CustomPathUpdateRequest, CustomSourcePath, DiscoveredProjectSource,
 };
@@ -262,6 +264,22 @@ fn hiveai_task_source_custom_path_update(
     task_sources::custom_path_update(&database, request)
 }
 
+#[tauri::command]
+fn hiveai_task_intelligence_parse(
+    database: tauri::State<'_, DatabaseState>,
+    project_id: String,
+) -> Result<TaskIntelligenceSnapshot, String> {
+    task_intelligence::parse(&database, &project_id)
+}
+
+#[tauri::command]
+fn hiveai_task_intelligence_list(
+    database: tauri::State<'_, DatabaseState>,
+    project_id: String,
+) -> Result<TaskIntelligenceSnapshot, String> {
+    task_intelligence::list(&database, &project_id)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -299,7 +317,9 @@ pub fn run() {
             hiveai_task_source_custom_paths_list,
             hiveai_task_source_custom_path_add,
             hiveai_task_source_custom_path_remove,
-            hiveai_task_source_custom_path_update
+            hiveai_task_source_custom_path_update,
+            hiveai_task_intelligence_parse,
+            hiveai_task_intelligence_list
         ])
         .setup(|app| {
             app.manage(StartupIntroState::default());

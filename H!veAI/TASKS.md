@@ -8,7 +8,7 @@ Legend: [x] validated complete, [~] active, [ ] planned/not started, [!] blocked
 - M01 real native Settings restart is PASS and user-accepted.
 - M08.00/M08.00B presentation bootstrap is PASS/CLOSED, including opening video, post-sidebar hive background alignment, and restrained glass/glow styling.
 - M08 Task Source Discovery final closure is PASS, including the M08A/M08B/M08C remediation chain and native `/tasks` user acceptance.
-- M09 Task Intelligence Parser is READY/UNSTARTED and is the next authorized milestone.
+- M09 Task Intelligence Parser is ACTIVE; M10+ remain BLOCKED/UNSTARTED.
 - Strict completed milestone count: 9 / 20 = 45%.
 
 Historical M07 and M08 remediation details remain preserved in `docs/H!veAI/audits/`, `docs/H!veAI/prompts/`, and `docs/H!veAI/codex-logs/`. They are audit history only and are not active work.
@@ -192,15 +192,21 @@ M08B strict re-audit remained historical FAIL because one backward-compatibility
 M08C final source-level closure and manual acceptance are complete. Historical earlier FAIL audits remain immutable evidence only and do not reopen M08.
 
 ## M09 Task Intelligence Parser
-- [ ] headings/checklists/milestones/status tags/task IDs
-- [ ] blockers/next-step/owner-gate/external-wait parsing
-- [ ] handoff current/next session parsing
-- [ ] confidence/evidence locator
-- [ ] generic adapter
-- [ ] FormuLab/Scrubbots/FMCG adapters
-- [ ] regression fixtures
+- [x] headings/checklists/milestones/status tags/task IDs
+- [x] blockers/next-step/owner-gate/external-wait parsing
+- [x] handoff current/next session parsing
+- [x] confidence/evidence locator
+- [x] generic adapter
+- [x] FormuLab/Scrubbots/FMCG adapters
+- [x] regression fixtures
+- [x] M08-owned source boundary and explicit on-demand IPC
+- [x] M09-owned SQLite reconciliation and preservation evidence
+- [ ] Independent strict audit
 
-M09 READY/UNSTARTED. It is the next authorized milestone; begin only from its dedicated implementation prompt.
+M09 implementation complete, PENDING INDEPENDENT STRICT AUDIT. M10 remains
+BLOCKED/UNSTARTED.
+
+M09 implementation is complete pending independent strict audit; do not start M10.
 
 ## M10 Workflow State Machine
 - [ ] canonical task/actor states
@@ -307,7 +313,7 @@ M09 READY/UNSTARTED. It is the next authorized milestone; begin only from its de
 ## Milestone policy
 
 - M00 through M08 are PASS/CLOSED.
-- M09 Task Intelligence Parser is READY/UNSTARTED and is the next authorized milestone.
-- Start M09 only from its dedicated implementation prompt.
+- M09 Task Intelligence Parser implementation is complete pending independent strict audit.
+- M10 remains blocked/unstarted until M09 is independently audited.
 - Builder logs are claims, not acceptance evidence.
 - Historical audits/logs/prompts are immutable evidence and remain the authoritative record for failed/superseded remediation stages.

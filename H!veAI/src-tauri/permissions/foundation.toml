@@ -49,3 +49,8 @@ commands.allow = ["hiveai_watcher_status", "hiveai_watcher_project_status", "hiv
 identifier = "allow-task-source-discovery"
 description = "Allows the main window to discover bounded task-source metadata for registered projects."
 commands.allow = ["hiveai_task_sources_discover", "hiveai_task_sources_list", "hiveai_task_source_custom_paths_list", "hiveai_task_source_custom_path_add", "hiveai_task_source_custom_path_remove", "hiveai_task_source_custom_path_update"]
+
+[[permission]]
+identifier = "allow-task-intelligence"
+description = "Allows the main window to explicitly parse and list bounded M09 task intelligence for registered projects."
+commands.allow = ["hiveai_task_intelligence_parse", "hiveai_task_intelligence_list"]
