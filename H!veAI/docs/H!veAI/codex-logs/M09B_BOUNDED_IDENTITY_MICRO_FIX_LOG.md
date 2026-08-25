@@ -81,7 +81,7 @@ The complete prior M09A focused set also remained green: all `p01` through `p10`
 - `cargo test --manifest-path H!veAI/src-tauri/Cargo.toml`: PASS, 187 tests passed, 0 failed.
 - `cargo build --manifest-path H!veAI/src-tauri/Cargo.toml`: PASS.
 - Existing publisher failure harness: PASS, all governed failure/rollback assertions.
-- Governed production publisher: pending final publication after this log commit.
+- Governed production publisher: PASS, Tauri production `--no-bundle`, candidate/stable smoke, frontend-ready marker, no forbidden dev ports, and no visible console host.
 
 ## Scope and publication
 
@@ -89,13 +89,14 @@ The complete prior M09A focused set also remained green: all `p01` through `p10`
 - No visible H!veAI UI source changed.
 - Stable `H!veAI.exe` remains the direct target of `Desktop\H!veAI.lnk`; no installer was created.
 - Terminal-popup and startup-audio defects remain intentionally unchanged and separately deferred.
+- Stable executable SHA-256: `91E5E511AEEA718CCED7C70A6C0B30B1A45B56DA7D6679C37DB7C761D275E314`; size: `17733120` bytes.
+- Shortcut target: `H!veAI/dev-bin/H!veAI.exe`; icon: `H!veAI/dev-bin/H!veAI.ico,0`.
 
 ## Commit/equality evidence
 
-- Implementation commit: recorded after commit.
-- Final local HEAD: recorded after final log/publication commit.
-- Final `origin/H!veAI` HEAD: recorded after final push.
-- Local/origin equality: must be verified after every final commit.
+- Implementation commit: `f919fb664c8b0f74c9a7c626e80e0db59d34fad3`.
+- Final local/origin equality was verified at `f919fb664c8b0f74c9a7c626e80e0db59d34fad3` before this final log-record commit.
+- Final log-record commit is pushed after that equality verification.
 - Historical M09 and M09A logs remain unchanged.
 
 M09B implementation is complete, PENDING INDEPENDENT STRICT RE-AUDIT. M09 remains open; M10 remains BLOCKED/UNSTARTED.
