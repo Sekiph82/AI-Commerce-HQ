@@ -12,6 +12,15 @@ Branch: H!veAI
 - Pre-existing untracked user files `start-demo.bat` and `task.md` were preserved.
 - No UI, canonical asset, installer, M10, X01, or X02 changes were made.
 
+## Final verification refresh
+
+- Current session mandatory `git fetch origin H!veAI`: PASS.
+- Current session branch/HEAD at start of verification refresh: `H!veAI` / `452d79d41b9d6a8ed874dc30b0273690aa79faaa`.
+- Current session `git rev-list --left-right --count HEAD...origin/H!veAI`: `0 0`.
+- Current session worktree: `C:/Users/sekip/Desktop/AI-Commerce-HQ files/AI-Commerce-HQ 452d79d [H!veAI]`.
+- Current session starting status preserved user-owned untracked files: `start-demo.bat`, `task.md`.
+- TASKS truth was prospectively corrected to record M09B strict re-audit as historical FAIL and M09C implementation/log/publication evidence as present with independent M09C re-audit pending. M09 remains ACTIVE / NOT CLOSED and M10 remains BLOCKED/UNSTARTED.
+
 R02C
 Production symbol(s): `duplicate_identity_key`, `identity_digest_bytes`, `update_normalized_text`, `task_id`, and the fixed-size `HashMap<[u8; 32], usize>` in `parse_document`.
 Exact test(s): `r02c_duplicate_identity_key_is_fixed_size_for_oversized_heading`, `r02c_task_ids_remain_stable_after_identity_streaming_refactor`, `r02c_large_heading_many_tasks_remains_deterministic`.
@@ -47,15 +56,17 @@ Status: PASS
 - `cargo build --manifest-path H!veAI/src-tauri/Cargo.toml`: PASS.
 - Publisher failure harness: PASS, all 9 governed failure/rollback assertions.
 - Governed production publisher: PASS, production `--no-bundle`, candidate/stable smoke, frontend-ready marker, no forbidden dev ports, and no visible console host.
-- Stable executable: `H!veAI/dev-bin/H!veAI.exe`, SHA-256 `3DE0029C908876CEEB377ABC9FC7F2EB335EF57B50FB432C9E3AB05E3929C430`, size `17715200` bytes.
+- Stable executable after current verification refresh: `H!veAI/dev-bin/H!veAI.exe`, SHA-256 `A26F14F69E37F26438F74A5EE9AC6BCF955F7B440D688AA4CB835F060803F623`, size `17715200` bytes.
+- Stable icon after current verification refresh: `H!veAI/dev-bin/H!veAI.ico`, SHA-256 `D83ED52300040617D1DA2502E35DC25FEC66AF030CDF444DD52B491716B0940E`, size `143206` bytes.
 - Shortcut target: `H!veAI/dev-bin/H!veAI.exe`; icon: `H!veAI/dev-bin/H!veAI.ico,0`.
 
 ## Truth and scope
 
-- Canonical asset hashes remain unchanged: background `7997ADD4EE7417B5818C1E2B7789B4C20D7B5F7EEC3215B9C0A136A5B9791C23`; opening video `A438404A19CE53C45D1385BA1F1009E9AEA110C7361C42B278844EBCF76C6686`; H!veAI logo `C773839E949222ED787972964AB3EEF27DF0F7D885AF78E7A0E6E340EF6E726C`.
+- Canonical asset hashes remain unchanged: background `7997ADD4EE7417B5818C1E2B7789B4C20D7B5F7EEC3215B9C0A136A5B9791C23`; opening video `A438404A19CE53C45D1385BA1F1009E9AEA110C7361C42B278844EBCF76C6686`; H!veAI logo `C773839E949222ED787972964AB3EEF27DF0F7D885AF78E7A0E6E340EF6E726C`; H!veAI small logo `603869D103E86281988DE87F7E40F18DB1FFB78828525CC66D443A9727C7BAF0`.
 - No installer was created.
 - X01 terminal-popup and X02 startup-audio remain intentionally deferred.
 - M09 remains open pending independent M09C re-audit; M10 remains BLOCKED/UNSTARTED.
+- Current session installer scan found no `.msi`, `.msix`, `.appx`, `.appxbundle`, `.msixbundle`, or `.wixpdb` files under `H!veAI`.
 
 ## Commit/publication evidence
 

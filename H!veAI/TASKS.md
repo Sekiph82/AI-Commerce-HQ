@@ -21,7 +21,8 @@ Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition
 - M08 presentation bootstrap, Task Source Discovery, remediation chain, and native `/tasks` manual acceptance are PASS/CLOSED.
 - M09 original strict audit = historical FAIL.
 - M09A strict re-audit = historical FAIL after closing the original seven findings but exposing two residual production defects.
-- M09B bounded-identity micro-fix implementation is present; independent strict re-audit and final closure remain pending.
+- M09B strict re-audit = historical FAIL due residual R02C/E01C/E03C/E05 findings.
+- M09C final bounded-identity micro-fix implementation/log/publication evidence is present; independent M09C re-audit remains pending.
 - M09 is ACTIVE / NOT CLOSED.
 - M10+ remain BLOCKED/UNSTARTED until M09 closes.
 - Strict completed milestone count remains **9 / 20 = 45%**.
@@ -659,14 +660,14 @@ M08 PASS/CLOSED.
 - [x] Identical sibling tasks remain distinct/repeatable.
 - [x] Same text across different projects never collides.
 - [x] Normalize heading case/whitespace for semantic identity.
-- [~] M09B path-specific identity collision fix implemented; independent audit pending.
+- [x] M09B path-specific identity collision fix implemented; independent M09B re-audit accepted R01 while M09B remained historical FAIL.
 
 ### M09.08 - Source/path identity correctness
-- [~] Preserve meaningful filesystem whitespace in path identity.
-- [~] Normalize separators/path syntax without prose whitespace collapse.
-- [~] Apply platform-equivalent case policy safely.
-- [~] Prove `plans/a b.md` and `plans/a  b.md` produce distinct task IDs and both survive SQLite persistence.
-- [ ] Independent M09B audit acceptance of R01.
+- [x] Preserve meaningful filesystem whitespace in path identity.
+- [x] Normalize separators/path syntax without prose whitespace collapse.
+- [x] Apply platform-equivalent case policy safely.
+- [x] Prove `plans/a b.md` and `plans/a  b.md` produce distinct task IDs and both survive SQLite persistence.
+- [x] Independent M09B re-audit accepted R01 while M09B remained historical FAIL.
 
 ### M09.09 - Parser bounds and warning model
 - [x] Project-wide max task budget = 4096.
@@ -674,9 +675,10 @@ M08 PASS/CLOSED.
 - [x] UTF-8-safe 4096-byte field bounds for task-body fields.
 - [x] Metadata entry bound = 128 with specific warning.
 - [x] Project warning cap = 512.
-- [~] M09B bounds explicit ID, milestone/headings, evidence heading path, locator text, handoff values and other source-derived persisted scalars.
-- [~] Deduplicate repeated equivalent truncation warnings.
-- [ ] Independent M09B audit acceptance of R02.
+- [x] M09B bounded explicit ID, milestone/headings, evidence heading path, locator text, handoff values and other source-derived persisted scalars.
+- [x] M09B deduplicated repeated equivalent truncation warnings.
+- [x] M09C fixes residual R02C bounded working-identity defect.
+- [ ] Independent M09C re-audit acceptance of final bounded identity.
 
 ### M09.10 - Adapter boundary
 - [x] Generic adapter safe fallback.
@@ -694,7 +696,7 @@ M08 PASS/CLOSED.
 - [x] Explicit ID/context/metadata reasons.
 - [x] Adapter bonus only for evidenced per-task match.
 - [x] Source path/content hash/start/end lines/heading path locator.
-- [~] M09B bounds all source-derived evidence scalars; independent audit pending.
+- [x] M09B bounds all source-derived evidence scalars; M09C leaves persisted evidence bounds unchanged.
 
 ### M09.12 - SQLite persistence
 - [x] Persist M09-owned `m09src:` task sources.
@@ -733,9 +735,10 @@ M08 PASS/CLOSED.
 - [x] Stable UPSERT/event-history preservation.
 - [x] Stale task/source reconciliation.
 - [x] Dependency idempotency.
-- [~] M09B path-collision regression test implemented.
-- [~] M09B oversized heading/handoff/explicit-ID/determinism tests implemented.
-- [~] M09B strengthened retry containment/handoff exact order/stale-source evidence implemented.
+- [x] M09B path-collision regression test implemented.
+- [x] M09B oversized heading/handoff/explicit-ID/determinism tests implemented.
+- [x] M09B strengthened retry containment/handoff exact order/stale-source evidence implemented.
+- [x] M09C direct fixed identity key, task-ID stability, retry containment, and stale dependency/settings tests implemented.
 
 ### M09.16 - M09 original strict audit history
 - [x] Original M09 implementation completed by builder.
@@ -775,10 +778,10 @@ M08 PASS/CLOSED.
 - [x] Run full regression, security, publisher, and final remote equality gates.
 - [ ] Independent strict M09C re-audit.
 
-### M09.19 - M09 regression/publication closure
-- [~] Focused Rust parser tests green per current M09B builder evidence.
-- [~] Full Rust/frontend/typecheck/build/security gates green per builder evidence.
-- [~] Publisher failure harness green per builder evidence.
+### M09.20 - M09 regression/publication closure
+- [x] Focused Rust parser tests green per current M09C builder evidence.
+- [x] Full Rust/frontend/typecheck/build/security gates green per current M09C builder evidence.
+- [x] Publisher failure harness green per current M09C builder evidence.
 - [ ] Independently verify final M09C branch/source truth.
 - [ ] Independently verify final M09C publication/equality evidence.
 - [ ] Final M09 audit verdict.
