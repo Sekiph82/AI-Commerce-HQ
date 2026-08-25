@@ -184,5 +184,5 @@ M08B automated closure is
 Native `/tasks` status remains `PENDING USER VISUAL ACCEPTANCE`.
 No installer was created. No M09 work was started.
 
-Final local and `origin/H!veAI` equality will be recorded after the publication
-commit and push.
+Publication commit equality verified after push: local HEAD and
+`origin/H!veAI` were both `8d8327e4a210d896fccc809270b836b04305cf6d`.
