@@ -57,7 +57,7 @@ Status: PASS
 
 ## Commit and publication evidence
 
-- Implementation/test commit: pending.
+- Implementation/test/tracker commit: `0e4e7f1f46e01be8b21bd3c9b39fa5340ed840a4` (`Close M09D retry containment evidence`).
 - M09D log commit: pending.
 - Final remote branch HEAD: pending.
 - Final local/origin equality after the pushed log commit: pending.
