@@ -23,28 +23,105 @@ Canonical development branch:
 Canonical local repository root:
 `C:\Users\sekip\Desktop\AI-Commerce-HQ files\AI-Commerce-HQ`
 
-The child folder:
+Application child root:
 `C:\Users\sekip\Desktop\AI-Commerce-HQ files\AI-Commerce-HQ\H!veAI`
 
-is NOT the Git repository root. It may contain reference/foundation files only.
+The child root is **not** the Git repository root and must never contain its own `.git` repository.
 
-## Directory structure
+## Canonical tracking files
 
-- `docs/H!veAI/prompts/` — authoritative prompts authored by ChatGPT for Codex/Claude.
-- `docs/H!veAI/audits/` — independent ChatGPT audits.
-- `docs/H!veAI/codex-logs/` — Codex chronological milestone logs.
+### `H!veAI/TASKS.md`
+
+The canonical detailed task/progress ledger.
+
+It contains:
+- current milestone truth;
+- M00-M20 milestone packages such as `M08.01`, `M08.02`, etc.;
+- completed/current/planned state;
+- remediation history summaries;
+- manual acceptance requirements;
+- cross-milestone defect queues;
+- milestone closure/unlock state.
+
+Subpackage numbering exists for traceability and audit coverage. It does **not** mean each package is a separate builder prompt.
+
+### `H!veAI/CODEX_ROADMAP.md`
+
+The canonical detailed roadmap/dependency view.
+
+It mirrors the milestone package structure at roadmap level and defines:
+- purpose;
+- major work packages;
+- exit condition;
+- dependency order;
+- builder execution/exit rules.
+
+### `H!veAI/README.md`
+
+The project entry-point status summary. It must point to the canonical task ledger/roadmap and must not contain a stale historical “next milestone” statement.
+
+### `docs/H!veAI/prompts/`
+
+Authoritative prompts authored for Codex/Claude. Prompts are immutable historical evidence once used; remediation uses a new prompt file rather than rewriting the old used prompt.
+
+### `docs/H!veAI/audits/`
+
+Independent ChatGPT audits. Historical FAIL/CONDITIONAL/PASS records are immutable evidence.
+
+### `docs/H!veAI/codex-logs/`
+
+Chronological builder logs. Builder logs are claims/evidence records, not independent acceptance.
+
+## Current roadmap truth
+
+- M00-M08: PASS/CLOSED.
+- M09 Task Intelligence Parser: ACTIVE / NOT CLOSED.
+- Original M09 strict audit: historical FAIL.
+- M09A strict re-audit: historical FAIL after residual R01/R02 findings.
+- M09B bounded-identity micro-fix implementation: present, independent strict re-audit/final closure pending.
+- Strict completed milestone count: 9/20 = 45% until M09 closes.
+- M10+ remain blocked/unstarted.
+- Before M10, the separate native UX queue must close the Git child-process console-window defect and muted startup-intro audio defect.
+
+For exact current status, always defer to `H!veAI/TASKS.md`.
 
 ## Mandatory workflow
 
-1. ChatGPT audits the current milestone/state.
-2. ChatGPT writes the next authoritative prompt under `docs/H!veAI/prompts/`.
-3. Codex reads that prompt from the `H!veAI` branch before working.
-4. Codex creates or continues the matching file under `docs/H!veAI/codex-logs/` before making milestone changes.
-5. Codex records commands, decisions, failures, fixes, tests, commits, and push status chronologically.
-6. Codex never erases prior failures after fixing them.
-7. Codex marks a milestone complete only after acceptance criteria are verified.
-8. ChatGPT independently audits the result and saves that audit under `docs/H!veAI/audits/`.
-9. Only after audit approval is the next milestone prompt activated.
+1. ChatGPT inspects/audits the current milestone/state.
+2. `TASKS.md` and `CODEX_ROADMAP.md` define current scope/status; detailed subpackages are traceability units, not mandatory prompt splits.
+3. ChatGPT writes the next authoritative whole-milestone or bounded remediation prompt under `docs/H!veAI/prompts/`.
+4. Codex reads that prompt from the `H!veAI` branch before working.
+5. Codex creates the matching immutable log under `docs/H!veAI/codex-logs/`.
+6. Codex records starting branch/HEAD/status, commands, decisions, failures, fixes, direct tests, full regression, publication evidence, commits, pushes, and final equality truthfully.
+7. Codex never erases or rewrites prior failures after fixing them.
+8. Builder completion may update prospective tracking state to “implementation complete / pending independent audit” but may not declare final PASS/CLOSED.
+9. ChatGPT independently audits production source, tests, configuration, diff, security, docs/tracker truth, and final branch state.
+10. ChatGPT saves the audit under `docs/H!veAI/audits/`.
+11. Only an accepted independent audit, plus any required manual/native acceptance, may mark a milestone PASS/CLOSED and unlock the next milestone.
+
+## Prompt design rule
+
+Default to one prompt for one milestone.
+
+Detailed task packages in `TASKS.md` should make the prompt easier to audit, not fragment execution into many tiny prompts. A future prompt should usually group all milestone packages into one bounded implementation contract. If an independent audit finds defects, create one bounded remediation prompt for the open findings only.
+
+Builder-facing prompts should prioritize:
+- exact current defect/required behavior;
+- exact production boundary;
+- exact direct test/state transition;
+- PASS only if the test would fail on the pre-fix implementation;
+- a short pre-push self-audit.
+
+Avoid drowning implementation instructions in repeated governance prose.
+
+## Tracking update rule
+
+When milestone scope/state changes:
+- update `TASKS.md` first as the canonical detailed ledger;
+- keep `CODEX_ROADMAP.md` consistent at roadmap/status level;
+- keep `H!veAI/README.md` current at high-level status;
+- do not rewrite historical prompts/logs/audits to make old failures disappear;
+- architecture/governance files should change only when architecture/governance itself changes, not merely because a task checkbox changed.
 
 ## Safety
 
@@ -53,3 +130,4 @@ is NOT the Git repository root. It may contain reference/foundation files only.
 - Never rewrite history silently.
 - Never treat the child `H!veAI` folder as the repository root.
 - Never proceed if `git rev-parse --show-toplevel` is not exactly the canonical local root above.
+- Never mark future detailed roadmap entries as implemented merely because they are documented.
