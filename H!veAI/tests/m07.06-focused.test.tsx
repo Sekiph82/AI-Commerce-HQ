@@ -534,4 +534,62 @@ describe("M07.07 live-Registry / route-race boundary", () => {
     expect(screen.queryByRole("heading", { name: "AI-Commerce-HQ" })).not.toBeInTheDocument();
     expect(screen.queryByText("Resolving registered project identity")).not.toBeInTheDocument();
   });
+
+  it("settings_renders_native_restart_action_in_tauri", async () => {
+    renderLive("/settings");
+    expect(await screen.findByRole("heading", { name: "Application" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Restart H!veAI" })).toBeInTheDocument();
+  });
+
+  it("settings_cancelled_restart_does_not_invoke_native_command", async () => {
+    vi.stubGlobal("confirm", () => false);
+    renderLive("/settings");
+    fireEvent.click(await screen.findByRole("button", { name: "Restart H!veAI" }));
+    expect(invoke).not.toHaveBeenCalledWith("hiveai_request_restart");
+  });
+
+  it("settings_confirmed_restart_invokes_native_command_once", async () => {
+    vi.stubGlobal("confirm", () => true);
+    renderLive("/settings");
+    fireEvent.click(await screen.findByRole("button", { name: "Restart H!veAI" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("hiveai_request_restart"));
+    expect(invoke.mock.calls.filter(([command]) => command === "hiveai_request_restart")).toHaveLength(1);
+  });
+
+  it("settings_browser_preview_does_not_invoke_native_restart", async () => {
+    delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+    window.history.pushState({}, "", "/settings");
+    render(<App />);
+    const button = await screen.findByRole("button", { name: "Restart H!veAI" });
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+    expect(invoke).not.toHaveBeenCalledWith("hiveai_request_restart");
+  });
+
+  it("settings_navigation_reaches_restart_surface", async () => {
+    renderLive("/");
+    fireEvent.click(screen.getByRole("link", { name: "Settings" }));
+    expect(await screen.findByRole("button", { name: "Restart H!veAI" })).toBeInTheDocument();
+  });
+
+  it("sidebar_uses_one_combined_brand_asset_without_legacy_copy", async () => {
+    renderLive("/");
+    const brands = await screen.findAllByRole("img", { name: "H!veAI" });
+    expect(brands).toHaveLength(1);
+    expect(brands[0]).toHaveAttribute("src", expect.stringContaining("hiveai-logo"));
+    expect(screen.queryByRole("img", { name: "H!veAI emblem" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Development command center")).not.toBeInTheDocument();
+  });
+
+  it("product_chrome_omits_milestone_suffix", async () => {
+    renderLive("/");
+    expect(await screen.findByText("H!veAI 0.1.0")).toBeInTheDocument();
+    expect(screen.queryByText(/M07\.06/)).not.toBeInTheDocument();
+  });
+
+  it("projects_uses_live_git_metadata_copy", async () => {
+    renderLive("/projects");
+    expect(await screen.findByText("Live Git metadata and status available")).toBeInTheDocument();
+    expect(screen.queryByText("Live Git engine arrives in M06")).not.toBeInTheDocument();
+  });
 });

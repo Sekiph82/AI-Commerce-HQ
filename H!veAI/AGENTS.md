@@ -45,11 +45,14 @@ Preserve these UI rules across future milestones unless the user explicitly chan
 ### UI Layout Governance
 
 Before changing the H!veAI UI, read `docs/H!veAI/UI_LAYOUT_GOVERNANCE.md`. The
-dashboard is governed as a single desktop viewport: keep the canonical small
-logo and text logo, compact infrastructure/status details, dense panel
-composition, and internal panel scrolling. Do not add long explanatory UI
-copy, global zoom/transform workarounds, or browser-hosted application-shell
-launches.
+dashboard is governed as a single desktop viewport: use exactly one visible
+combined sidebar brand image from `H!veAI logo.png`, keep compact
+infrastructure/status details, dense panel composition, and internal panel
+scrolling. Do not visibly compose the small logo and text logo separately, add
+the `Development command center` subtitle, add long explanatory UI copy,
+global zoom/transform workarounds, or browser-hosted application-shell
+launches. The separate `H!veAI small logo.png` remains reserved for the
+Desktop shortcut icon source.
 
 ## Development Manual QA Launcher
 

@@ -17,8 +17,7 @@ import {
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import type React from "react";
-import hiveaiSmallLogo from "../assets/hiveai-small-logo.png";
-import hiveaiTextLogo from "../assets/hiveai-text-logo.png";
+import hiveaiLogo from "../assets/hiveai-logo.png";
 import akiltaWordmark from "../assets/akilta-wordmark.svg";
 import { useProjectRegistry } from "../registryContext";
 
@@ -80,14 +79,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="brand">
           <img
             className="brand-logo"
-            src={hiveaiSmallLogo}
-            alt="H!veAI emblem"
+            src={hiveaiLogo}
+            alt="H!veAI"
           />
-          <div className="brand-wordmark">
-            <img src={hiveaiTextLogo} alt="H!veAI" />
-            <span>Development command center</span>
-            <span className="sr-only">H!veAI</span>
-          </div>
           <button
             className="icon-button sidebar-close"
             type="button"
@@ -150,7 +144,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="status-pulse" />
             Local foundation online
           </div>
-          <span className="version">H!veAI 0.1.0 · M07.06</span>
+          <span className="version">H!veAI 0.1.0</span>
         </div>
       </aside>
       <main

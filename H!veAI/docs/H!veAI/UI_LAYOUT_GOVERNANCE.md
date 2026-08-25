@@ -14,24 +14,22 @@ The user has explicitly required that the primary overview fit in one desktop vi
 
 ## Canonical branding assets
 
-Sidebar brand icon source:
+Sidebar visible brand source:
 
-`C:\Users\sekip\Desktop\AI-Commerce-HQ files\H!veAI\H!veAI small logo.png`
-
-Sidebar wordmark source:
-
-`C:\Users\sekip\Desktop\AI-Commerce-HQ files\H!veAI\H!veAI text logo.png`
+`C:\Users\sekip\Desktop\AI-Commerce-HQ files\H!veAI\H!veAI logo.png`
 
 Rules:
 
-- Use `H!veAI small logo.png` only for the small square/emblem position at the top-left of the sidebar.
-- Use `H!veAI text logo.png` immediately beside the small logo for the H!veAI wordmark.
-- Do not use the large combined logo image in the sidebar header.
-- Do not reproduce the H!veAI wordmark as ordinary CSS/text beside the image when the canonical text-logo asset is available.
-- Do not crop, stretch, recolor, redraw, or distort either image.
-- Render both with preserved aspect ratio and `object-fit: contain` or equivalent.
-- The small logo must remain completely visible inside its box with breathing room. No part of the emblem may be clipped.
-- The text logo must fit naturally beside it without overflowing the sidebar.
+- Visible sidebar branding is exactly one combined PNG image from `H!veAI logo.png`.
+- Do not show a separate emblem, separate text logo, or `Development command center` subtitle.
+- Preserve the combined image aspect ratio with `object-fit: contain` or equivalent. Do not crop, stretch, recolor, redraw, or distort it.
+
+Desktop shortcut icon source (unchanged):
+
+`C:\Users\sekip\Desktop\AI-Commerce-HQ files\H!veAI\H!veAI small logo.png`
+
+Use the small logo only for the ICO/Windows shortcut icon. Do not use the
+combined sidebar source for the shortcut icon.
 
 ## Single-viewport Command Center contract
 
@@ -243,8 +241,8 @@ Before claiming visual PASS:
 4. At `1536x1024`, confirm the complete primary overview is visible without outer vertical/horizontal scrolling.
 5. At the user's maximized desktop size (`2048x1280` evidence), confirm the complete primary overview is visible without outer vertical/horizontal scrolling.
 6. Confirm Current Task, Workflow Status, Recent Activity, Project Metrics, and System Status have no visible internal scrollbars at the canonical sizes.
-7. Confirm the sidebar small logo is not clipped.
-8. Confirm the sidebar wordmark uses `H!veAI text logo.png`.
+7. Confirm the single combined sidebar logo is not clipped.
+8. Confirm the Desktop shortcut icon remains derived from `H!veAI small logo.png`.
 9. Confirm the sidebar is slightly narrower while remaining usable.
 10. Confirm `Global Overview` is visible without a visible `WORKSPACE OVERVIEW` eyebrow.
 11. Confirm the central current-project header is compact and project identity is live Registry data.

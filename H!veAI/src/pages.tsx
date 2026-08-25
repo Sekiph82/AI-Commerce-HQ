@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import React from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { activity, attention, projects, queue } from "./fixtures";
 import {
@@ -713,7 +714,7 @@ export function Projects() {
             </div>
             <div className="registry-rule">
               <GitBranch size={14} />
-              <span>Live Git engine arrives in M06</span>
+              <span>Live Git metadata and status available</span>
             </div>
           </section>
           <section className="registry-side-panel registry-side-accent">
@@ -1342,10 +1343,35 @@ export function Audits() {
   );
 }
 export function Settings() {
+  const desktop = isTauriDesktop();
+  const [error, setError] = React.useState<string | null>(null);
+  const [restarting, setRestarting] = React.useState(false);
+
+  const restart = async () => {
+    if (!desktop || !window.confirm("Restart H!veAI now?")) return;
+    setRestarting(true);
+    setError(null);
+    try {
+      await invoke("hiveai_request_restart");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+      setRestarting(false);
+    }
+  };
+
   return (
-    <Placeholder
-      title="Settings"
-      description="Workspace preferences and local-first policy controls."
-    />
+    <>
+      <PageHeader title="Settings" description="Workspace preferences and local-first policy controls." />
+      <section className="panel settings-panel">
+        <SectionHeader title="Application" detail="Native desktop lifecycle" />
+        <p>Restart relaunches the native H!veAI desktop application.</p>
+        {error ? <div className="safe-notice" role="alert">{error}</div> : null}
+        <button className="primary-button" type="button" onClick={restart} disabled={!desktop || restarting}>
+          {restarting ? "Restarting..." : "Restart H!veAI"}
+          <RefreshCw size={15} />
+        </button>
+        {!desktop ? <span className="settings-hint">Desktop app only</span> : null}
+      </section>
+    </>
   );
 }

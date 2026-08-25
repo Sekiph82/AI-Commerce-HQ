@@ -172,6 +172,20 @@ case is UNVERIFIED because link creation was denied by the environment with OS e
 1314. Do not claim human-only pending status before independent audit. M08 remains
 unstarted and blocked.
 
+## M07.07B Final visual and restart closure
+- [x] Replace visible sidebar branding with one-piece canonical H!veAI logo PNG
+- [x] Expose native Settings -> Restart H!veAI action
+- [x] Correct Projects Git metadata copy and remove milestone suffix from product chrome
+- [x] Update durable sidebar branding governance while preserving shortcut small-logo rule
+- [x] Run focused/full regression and production no-bundle publication
+- [ ] User final M07 visual acceptance
+- [ ] User real in-app restart acceptance
+
+M07.07A independent audit = CONDITIONAL / automated closure accepted. Command Center
+selection visual behavior was user-approved from real Desktop H!veAI.lnk screenshots.
+M07.07B is the final visual/restart closure patch. Status: PENDING USER FINAL M07
+ACCEPTANCE. M08 remains blocked and unstarted.
+
 ## M08 Task Source Discovery
 - [ ] discover TASKS/tasks/PLANS/PROGRESS/ROADMAP/CLAUDE/AGENTS/handoffs
 - [ ] custom paths
