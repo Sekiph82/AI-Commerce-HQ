@@ -225,6 +225,17 @@ M08.00 presentation + neon-glass bootstrap is implemented and published, pending
 independent audit and user visual/lifecycle acceptance. M08 Task Source Discovery
 is not implemented by this pass and remains unstarted.
 
+## M08.00B Background alignment and native intro remediation
+- [x] Move the canonical background to the post-sidebar main workspace
+- [x] Add a fixed fullscreen startup overlay with contained video and no normal-flow overflow
+- [x] Add a native process-scoped startup claim command and narrow ACL permission
+- [x] Add focused frontend and Rust evidence for claim, failure, lifecycle, and layout behavior
+- [ ] Independent M08.00B strict audit
+- [ ] User manual acceptance of the refreshed native build
+
+M08.00B is implemented and published pending independent audit and user manual
+acceptance. M08 Task Source Discovery remains blocked and unimplemented.
+
 ## M08 Task Source Discovery
 - [ ] discover TASKS/tasks/PLANS/PROGRESS/ROADMAP/CLAUDE/AGENTS/handoffs
 - [ ] custom paths

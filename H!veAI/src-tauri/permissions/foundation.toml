@@ -11,6 +11,11 @@ description = "Allows the mounted H!veAI frontend to emit its bounded readiness 
 commands.allow = ["hiveai_frontend_ready"]
 
 [[permission]]
+identifier = "allow-startup-intro-claim"
+description = "Allows the native frontend to claim the one startup intro for this process lifecycle."
+commands.allow = ["hiveai_startup_intro_claim"]
+
+[[permission]]
 identifier = "allow-request-restart"
 description = "Allows the main window to request an application restart through Tauri."
 commands.allow = ["hiveai_request_restart"]

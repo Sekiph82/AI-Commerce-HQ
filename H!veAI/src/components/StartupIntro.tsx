@@ -1,36 +1,39 @@
 import { useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import openingVideo from "../assets/opening-video.mp4";
 import { isTauriDesktop } from "../projectRegistry";
 
-const INTRO_SESSION_KEY = "hiveai.startup-intro.played";
 const INTRO_FAILSAFE_MS = 15_000;
 const INTRO_FADE_MS = 280;
 
-function hasPlayedInThisWindow() {
-  try {
-    return window.sessionStorage.getItem(INTRO_SESSION_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function markPlayedInThisWindow() {
-  try {
-    window.sessionStorage.setItem(INTRO_SESSION_KEY, "1");
-  } catch {
-    // A memory-backed session still guarantees route-stable play-once behavior.
-  }
-}
-
 export function StartupIntro() {
-  const [visible, setVisible] = useState(() => {
-    if (!isTauriDesktop() || hasPlayedInThisWindow()) return false;
-    markPlayedInThisWindow();
-    return true;
-  });
+  const native = isTauriDesktop();
+  const [claim, setClaim] = useState<"pending" | "play" | "skip">(
+    native ? "pending" : "skip",
+  );
+  const [visible, setVisible] = useState(native);
   const [closing, setClosing] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const closeTimer = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (!native) return undefined;
+    let active = true;
+    void invoke<boolean>("hiveai_startup_intro_claim")
+      .then((claimed) => {
+        if (!active) return;
+        setClaim(claimed ? "play" : "skip");
+        if (!claimed) setVisible(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setClaim("skip");
+        setVisible(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [native]);
 
   const dismiss = () => {
     setClosing(true);
@@ -40,7 +43,7 @@ export function StartupIntro() {
   };
 
   useEffect(() => {
-    if (!visible) return undefined;
+    if (!visible || claim !== "play") return undefined;
     const failsafe = window.setTimeout(dismiss, INTRO_FAILSAFE_MS);
     const video = videoRef.current;
     if (video) {
@@ -54,7 +57,7 @@ export function StartupIntro() {
         closeTimer.current = undefined;
       }
     };
-  }, [visible]);
+  }, [claim, visible]);
 
   if (!visible) return null;
 
@@ -65,17 +68,20 @@ export function StartupIntro() {
       aria-label="H!veAI startup"
       aria-live="polite"
     >
-      <video
-        ref={videoRef}
-        src={openingVideo}
-        autoPlay
-        muted
-        playsInline
-        preload="auto"
-        controls={false}
-        onEnded={dismiss}
-        onError={dismiss}
-      />
+      {claim === "play" ? (
+        <video
+          ref={videoRef}
+          aria-label="H!veAI opening video"
+          src={openingVideo}
+          autoPlay
+          muted
+          playsInline
+          preload="auto"
+          controls={false}
+          onEnded={dismiss}
+          onError={dismiss}
+        />
+      ) : null}
     </div>
   );
 }

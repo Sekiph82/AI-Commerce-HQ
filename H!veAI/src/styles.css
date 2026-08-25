@@ -11,8 +11,9 @@ html,body,#root{height:100%;min-height:0}.app-shell{height:100vh;min-height:0;ov
 :root{--glass-bg:rgba(15,23,42,.58);--glass-bg-strong:rgba(15,23,42,.78);--glass-border:rgba(96,165,250,.28);--glass-border-strong:rgba(139,92,246,.48);--glow-cyan:34,211,238;--glow-blue:59,130,246;--glow-indigo:99,102,241;--glow-purple:139,92,246;--glow-pink:217,70,239}
 body{background:#050914}
 .app-shell{isolation:isolate;position:relative;background:transparent}
-.app-shell::before{background:linear-gradient(rgba(2,8,23,.66),rgba(2,8,23,.78)),url("./assets/hiveai-app-background.png") center center/cover no-repeat;content:"";inset:0;position:fixed;z-index:-2}
-.app-shell::after{background:rgba(2,8,23,.16);content:"";inset:0;pointer-events:none;position:fixed;z-index:-1}
+.main-area{isolation:isolate;position:relative;background:transparent}
+.main-area::before{background:linear-gradient(rgba(2,8,23,.66),rgba(2,8,23,.78)),url("./assets/hiveai-app-background.png") center center/cover no-repeat;content:"";inset:0;position:absolute;z-index:-2}
+.main-area::after{background:rgba(2,8,23,.16);content:"";inset:0;pointer-events:none;position:absolute;z-index:-1}
 .sidebar{background:rgba(7,12,24,.84);backdrop-filter:blur(12px) saturate(135%);-webkit-backdrop-filter:blur(12px) saturate(135%)}
 .topbar{background:rgba(5,10,21,.72);backdrop-filter:blur(14px) saturate(140%);-webkit-backdrop-filter:blur(14px) saturate(140%)}
 .panel,.operation-card,.attention-card,.brief,.placeholder-notes{background:var(--glass-bg-strong);backdrop-filter:blur(10px) saturate(130%);-webkit-backdrop-filter:blur(10px) saturate(130%);border-color:var(--glass-border);box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 10px 30px rgba(2,8,23,.24)}
@@ -27,3 +28,6 @@ table thead,.queue-table [role="row"]:first-child{background:rgba(8,20,50,.68);b
 table th,.queue-table [role="columnheader"]{color:rgba(125,211,252,.9)}
 table tbody tr:hover,.queue-table [role="row"]:hover{background:rgba(59,130,246,.08)}
 @media(prefers-reduced-motion:reduce){.primary-button,.secondary-button{transition:none}.primary-button:hover{transform:none}}
+.startup-intro{align-items:center;background:#050914;display:flex;height:100vh;inset:0;justify-content:center;opacity:1;overflow:hidden;pointer-events:auto;position:fixed;width:100vw;z-index:10000}
+.startup-intro video{background:#050914;display:block;height:100%;max-height:100%;max-width:100%;object-fit:contain;width:100%}
+.startup-intro-closing{opacity:0;pointer-events:none;transition:opacity 280ms ease}

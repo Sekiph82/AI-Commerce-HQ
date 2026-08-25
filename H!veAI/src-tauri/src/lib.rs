@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{Emitter, Manager};
 use tauri_plugin_log::{Target, TargetKind};
 
@@ -27,6 +28,21 @@ struct NativeStatus {
     platform: String,
     app_data_dir: Option<String>,
     log_dir: Option<String>,
+}
+
+#[derive(Default)]
+struct StartupIntroState {
+    claimed: AtomicBool,
+}
+
+impl StartupIntroState {
+    fn claim(&self) -> bool {
+        !self.claimed.swap(true, Ordering::AcqRel)
+    }
+}
+
+fn claim_startup_intro(state: &StartupIntroState) -> bool {
+    state.claim()
 }
 
 #[tauri::command]
@@ -69,6 +85,11 @@ fn hiveai_request_restart(app: tauri::AppHandle) {
 #[tauri::command]
 fn hiveai_frontend_ready() {
     log::info!("HIVEAI_FRONTEND_READY");
+}
+
+#[tauri::command]
+fn hiveai_startup_intro_claim(state: tauri::State<'_, StartupIntroState>) -> bool {
+    claim_startup_intro(&state)
 }
 
 #[tauri::command]
@@ -202,6 +223,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             hiveai_native_status,
             hiveai_frontend_ready,
+            hiveai_startup_intro_claim,
             hiveai_request_restart,
             hiveai_runtime_status,
             hiveai_database_status,
@@ -221,6 +243,7 @@ pub fn run() {
             hiveai_watcher_rescan
         ])
         .setup(|app| {
+            app.manage(StartupIntroState::default());
             app.manage(RuntimeSupervisor::new());
             let app_data_dir = app
                 .path()
@@ -243,4 +266,36 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running H!veAI Tauri application");
+}
+
+#[cfg(test)]
+mod startup_intro_tests {
+    use super::{claim_startup_intro, StartupIntroState};
+
+    #[test]
+    fn fresh_state_first_claim_is_true() {
+        assert!(claim_startup_intro(&StartupIntroState::default()));
+    }
+
+    #[test]
+    fn same_state_second_claim_is_false() {
+        let state = StartupIntroState::default();
+        assert!(claim_startup_intro(&state));
+        assert!(!claim_startup_intro(&state));
+    }
+
+    #[test]
+    fn separately_constructed_state_claims_fresh_lifecycle() {
+        let first = StartupIntroState::default();
+        let second = StartupIntroState::default();
+        assert!(claim_startup_intro(&first));
+        assert!(claim_startup_intro(&second));
+    }
+
+    #[test]
+    fn production_claim_path_uses_native_state() {
+        let state = StartupIntroState::default();
+        assert!(claim_startup_intro(&state));
+        assert!(!claim_startup_intro(&state));
+    }
 }

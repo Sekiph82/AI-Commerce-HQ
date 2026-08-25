@@ -296,3 +296,23 @@ states. Existing primary/secondary buttons and real table surfaces may receive
 controlled glass/glow treatment. Do not apply a competing theme, continuous
 glow animation, gaming-HUD styling, heavy nested blur, or opacity that harms
 readability or single-viewport geometry.
+
+## M08.00B Background and startup overlay corrections
+
+The canonical application background belongs to the post-sidebar workspace. It
+is rendered by `.main-area` and must never sit behind or visually occupy the
+sidebar. The background remains centered within the available workspace and
+must preserve the approved dashboard geometry on route changes and viewport
+resizes.
+
+The native startup video is a true fixed client-viewport overlay outside normal
+document flow. It must cover the client viewport, contain the video without
+cropping, suppress controls, and never create document overflow or scrollbars.
+The React application remains mounted beneath it and frontend readiness is
+independent of video completion.
+
+Startup playback authority is native and process-scoped: the first native
+claim in a process may play once, a second claim in that process skips, and a
+new native process may claim again. Browser previews do not invoke the native
+claim. SPA navigation, project selection, route changes, minimize/restore, and
+media failure must not replay or trap the application.
