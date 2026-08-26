@@ -2,13 +2,15 @@
 
 ## Mission
 
-Perform one **bounded M11 remediation run** against the independent audit:
+Perform one bounded M11 remediation run against the independent audit:
 
 `H!veAI/docs/H!veAI/audits/M11_GLOBAL_COMMAND_CENTER_PROJECT_DASHBOARD_STRICT_AUDIT.md`
 
-Fix exactly the open M11 production/evidence findings R01-R08 and E01-E03. Do not redesign M11, do not start M12, and do not pull later agent/prompt/audit/GitHub/AI features forward.
+Fix all open M11 production/evidence findings R01-R08 and E01-E03, plus the user-observed UI/UX acceptance defects UX01-UX04 documented below.
 
-M11 remains FAIL / NOT CLOSED until an independent re-audit and required user visual/native acceptance close it.
+This remains one M11 remediation run. Do not split it into separate milestone prompts. Do not start M12 and do not pull later agent, prompt, audit, GitHub, or AI features forward.
+
+M11 remains FAIL / NOT CLOSED until independent re-audit and required user visual/native acceptance close it.
 
 Current strict completed roadmap count remains **11 / 20 = 55%**.
 
@@ -25,6 +27,7 @@ Before code changes, read:
 - `H!veAI/docs/H!veAI/prompts/M11_GLOBAL_COMMAND_CENTER_PROJECT_DASHBOARD_PROMPT.md`
 - `H!veAI/docs/H!veAI/codex-logs/M11_GLOBAL_COMMAND_CENTER_PROJECT_DASHBOARD_LOG.md`
 - `H!veAI/docs/H!veAI/audits/M11_GLOBAL_COMMAND_CENTER_PROJECT_DASHBOARD_STRICT_AUDIT.md`
+- this revised M11A prompt in full
 
 Prospectively update live tracker/status documents so they say:
 
@@ -34,11 +37,12 @@ Prospectively update live tracker/status documents so they say:
 - M11A = ACTIVE during this remediation;
 - M11 remains NOT CLOSED;
 - M12 remains BLOCKED;
-- user visual/native acceptance remains pending until after source-level closure.
+- user visual/native acceptance remains pending until after source-level closure;
+- the user has reported Command Center layout regressions and Task Sources information-overload that are part of M11A acceptance scope.
 
-Reopen or mark active the M11 package checkboxes contradicted by the audit. In particular do not leave workflow-backed portfolio truth, waiting/blocked queue, mixed-source activity, resolver/direct-test closure, or no-double-count evidence marked validated while their findings are open.
+Reopen or mark active the M11 package checkboxes contradicted by the audit or the user screenshots. Do not leave workflow-backed portfolio truth, waiting/blocked queue, mixed-source activity, resolver/direct-test closure, no-double-count evidence, no-outer-scroll layout, or user visual acceptance marked validated while their findings are open.
 
-Do not rewrite the historical M11 prompt/log/audit.
+Do not rewrite historical M11 prompt/log/audit files.
 
 ---
 
@@ -65,11 +69,13 @@ Never reset, rebase, force-push, overwrite user work, or create `H!veAI\.git`.
 
 Preserve user-owned parent-root untracked `start-demo.bat` and `task.md` if present.
 
+Do not modify tracked files in any registered project repository outside `AI-Commerce-HQ/H!veAI` during M11A. In particular do not touch Bulk Edit while its Etsy process is pending.
+
 ---
 
 # Canonical UI Assets
 
-This is a closure/remediation run. Do not redesign the visual system.
+This is a closure/remediation run. Preserve the accepted H!veAI visual identity while correcting the broken Command Center composition.
 
 Canonical user-owned asset root:
 
@@ -82,7 +88,6 @@ Preserve:
 - startup intro video lifecycle and audible playback;
 - accepted topbar/sidebar/navigation geometry;
 - dark/glass Command Center visual language;
-- accepted no-outer-scroll desktop behavior;
 - stable EXE, shortcut and icon;
 - exact footer sentence `Built with ♥ for maximum productivity by Akilta`;
 - accepted Akilta Chrome link behavior;
@@ -94,7 +99,163 @@ Required unchanged canonical hashes:
 - background SHA-256: `7997ADD4EE7417B5818C1E2B7789B4C20D7B5F7EEC3215B9C0A136A5B9791C23`
 - opening video SHA-256: `A438404A19CE53C45D1385BA1F1009E9AEA110C7361C42B278844EBCF76C6686`
 
-Only make UI changes necessary to correct truthfulness, warning/error presentation, preview placeholders, and factual provenance.
+The user screenshots are explicit acceptance evidence that the current M11 layout is not acceptable. M11A may change Command Center sizing/composition and Task Sources presentation as required below. Do not perform an unrelated visual redesign.
+
+---
+
+# UX01 - Restore one-screen Command Center composition
+
+## User-observed defect
+
+At normal desktop size the new M11 Command Center no longer behaves like a clean one-screen command center:
+
+- the Projects rail has its own vertical scrollbar;
+- the right rail is vertically overpacked;
+- Active Work Queue is pushed/clipped beneath Needs Your Attention/System Status and is not properly visible;
+- nested scrollbars make the page look broken;
+- the footer/content relationship is cramped;
+- the central current-task area has too much dead/empty geometry when data is unavailable.
+
+## Required production behavior
+
+At accepted desktop viewport sizes the Command Center must fit as a deliberate one-screen dashboard above the footer without page-level vertical scrolling and without nested vertical scrollbars in the project rail or right rail.
+
+Use responsive CSS/grid sizing, not hard-coded pixel hacks tied to one screenshot.
+
+Required desktop behavior:
+
+- no `body`/main-page vertical scrollbar for the Command Center at normal supported desktop viewport sizes;
+- no vertical scrollbar inside Projects rail;
+- no vertical scrollbar inside Needs Your Attention;
+- no vertical scrollbar inside Active Work Queue;
+- no right-rail card may overlap or hide another card;
+- Active Work Queue must always be visibly reachable without scrolling the whole Command Center;
+- System Status must be compact and must not consume the space needed by operational panels;
+- Current Project/Current Task area should use available space efficiently and must not display fake `0 / 0` when task truth is unavailable;
+- footer remains visible and does not cover dashboard content.
+
+For the project rail, show a bounded names-only set that fits. Prefer a maximum visible count with an honest `+N more`/`View all projects` affordance rather than an inner scrollbar. Clicking a visible project still selects it in place. `View all projects` remains the route for the full list.
+
+For right-rail panels, use compact rows and bounded visible counts. If more items exist, show a truthful count plus `View all`/route affordance rather than a nested scrollbar.
+
+## Required visual/layout tests
+
+Add browser/component evidence for at least two representative desktop viewport sizes and prove:
+
+- Command Center root does not create outer vertical overflow;
+- project rail does not use vertical scrolling;
+- right rail has no overlapping cards;
+- Active Work Queue heading/content is visible;
+- footer is not overlapped;
+- selected-project interaction remains intact.
+
+User native visual acceptance remains required after publication.
+
+---
+
+# UX02 - Remove the giant full-width Recent Activity block from the home dashboard
+
+## Decision
+
+The full-width Recent Activity section at the bottom of Command Center is not necessary on the home dashboard. H!veAI already has a dedicated `Activity` route.
+
+## Required production behavior
+
+- Remove the large full-width `Recent Activity` panel from the Command Center home page.
+- Keep only a compact selected-project recent-activity summary inside the Current Project area, maximum 3 to 5 rows.
+- Add a small explicit `View activity` navigation affordance if useful.
+- Search/filter for the complete activity history belongs on the dedicated Activity page, not the Command Center home.
+- Do not delete the underlying bounded M11 activity aggregation. R06 still requires real activity data because Activity and M12 can consume it.
+
+This change should recover substantial vertical space and restore the Command Center's one-screen purpose.
+
+---
+
+# UX03 - Simplify Task Sources presentation without weakening M08/M09
+
+## User-observed defect
+
+The Task Sources page can show 15+ files for one project, including `TASKS.md`, `AGENTS.md`, `.hiveai/audits/*`, `.hiveai/codex-runs/*`, prompts, decisions, handoffs and `PROJECT_DASHBOARD.md`.
+
+Those files are valid internal evidence/source candidates, but presenting all of them as the primary project-tracking surface makes it look as if H!veAI needs 15 task files to understand one project.
+
+That is not the intended mental model.
+
+## Required architecture decision
+
+Preserve M08 source discovery and M09 parsing under the hood. Do not delete source discovery and do not stop collecting bounded evidence.
+
+However, make **one file the user-facing H!veAI entry contract for every project**:
+
+`.hiveai/PROJECT_DASHBOARD.md`
+
+This file already exists in the rollout and remains the single Project Dashboard authority/manifest entrypoint. Do not create a second competing project-status file.
+
+Important: the dashboard file is an index/authority contract, not a duplicate mega-ledger. It can point to the canonical task ledger, handoff, roadmap, history, architecture, decisions, instructions, security and build/test evidence. H!veAI may combine those pointers with Registry/M09/M10/SQLite runtime truth. The user should not need to manage or understand the complete source inventory for ordinary project tracking.
+
+Do not auto-rewrite `.hiveai/PROJECT_DASHBOARD.md` on every watcher event in M11A. That would dirty project repositories and create commit noise. H!veAI reads it as the stable entry contract while dynamic operational state remains in accepted SQLite/M09/M10 truth.
+
+## Task Sources UI behavior
+
+Change the Tasks/Task Sources default presentation so the primary surface shows a compact **Project Intelligence / Dashboard Contract** summary for the selected project:
+
+- `.hiveai/PROJECT_DASHBOARD.md` status;
+- manifest status;
+- task authority state;
+- canonical task source, if any;
+- current M09 refresh status/time;
+- number of discovered internal evidence sources;
+- warnings/degraded state;
+- a clear `Advanced source inventory` disclosure/action.
+
+The raw 15+ source table becomes an **advanced diagnostics inventory**, collapsed/hidden by default or placed behind an explicit advanced action. It must not dominate the normal Tasks page.
+
+When advanced inventory is opened, keep existing M08 truth, kinds, authority classes, modified time, and status. Long inventories may use a deliberately bounded table viewport because the user explicitly opened diagnostics. The normal page itself should not require an outer page scrollbar merely to understand project status.
+
+Do not falsely relabel all M08 candidates as task authorities. Clearly distinguish:
+
+- Project Dashboard entry contract;
+- canonical task authority;
+- context/provenance evidence;
+- instruction/config files;
+- advanced discovered sources.
+
+## Required tests
+
+- selected project with 15 discovered sources still shows one Project Dashboard entry contract as the primary normal surface;
+- advanced source count says 15 without rendering the entire inventory by default;
+- canonical task authority is separately identified;
+- expanding/opening Advanced source inventory reveals the real M08 rows without data loss;
+- no duplicate task metrics are created from context sources.
+
+---
+
+# UX04 - Single-entry Project Dashboard contract for current and future projects
+
+This is the long-term rule M11A must preserve for M12 and future projects:
+
+```text
+<project root>/.hiveai/PROJECT_DASHBOARD.md
+                  |
+                  +-- canonical task source
+                  +-- handoff/context
+                  +-- roadmap/plan
+                  +-- history/audits/logs
+                  +-- architecture/decisions
+                  +-- instructions/security/build metadata
+
+H!veAI runtime
+  Registry + M08 + M09 + M10 + SQLite
+                  |
+                  v
+       truthful Project Dashboard snapshot
+```
+
+From the user's perspective there is one H!veAI project contract file per repository. Internally H!veAI may use many evidence files, but they remain implementation detail unless the user opens Advanced diagnostics.
+
+Do not introduce `.hiveai/PROJECT_STATUS.md`, `.hiveai/HIVEAI.md`, another JSON manifest, or any other competing entry file in M11A.
+
+Do not rewrite external repositories in this run. Existing rollout manifests remain compatible.
 
 ---
 
@@ -291,7 +452,7 @@ Include bounded real items for:
 
 Actor/provider must come only from real workflow/session evidence.
 
-### Recent Activity
+### Recent Activity data contract
 
 Build one deterministic bounded merged timeline from real timestamped rows already available now, where applicable:
 
@@ -301,6 +462,8 @@ Build one deterministic bounded merged timeline from real timestamped rows alrea
 - test runs;
 - Git snapshots;
 - project/watcher snapshots.
+
+The home Command Center does not render the giant full-width history panel after UX02. The aggregation remains available for the compact selected-project summary and dedicated Activity route/future consumers.
 
 Requirements:
 
@@ -361,7 +524,8 @@ Replace helper-only proofs with real production-path tests covering:
 - attention/queue/mixed activity;
 - watcher actual task-source change -> M09 parse -> M11 snapshot updated;
 - root `.hiveai/PROJECT_DASHBOARD.md` classification;
-- warning bound overflow.
+- warning bound overflow;
+- UX03 primary Dashboard Contract presentation with advanced source inventory hidden by default.
 
 For the watcher chain, test the production helper/path rather than merely `category_hint()`.
 
@@ -435,7 +599,7 @@ Update TypeScript contract and focused rendering tests if provenance becomes vis
 
 # E03 - Final repository equality evidence
 
-The M11A log must contain the **concrete final post-log-commit** proof, not a placeholder.
+The M11A log must contain the concrete final post-log-commit proof, not a placeholder.
 
 After the final evidence/log commit is pushed:
 
@@ -469,11 +633,12 @@ If refresh-health state needs persistence, use bounded existing SQLite structure
 
 ---
 
-# M09 / M10 ownership protection
+# M08 / M09 / M10 / M11 ownership protection
 
 Do not regress accepted ownership boundaries:
 
-- M08 discovers source candidates;
+- `.hiveai/PROJECT_DASHBOARD.md` is the single user-facing project entry contract;
+- M08 discovers bounded source/evidence candidates behind that contract;
 - M09 parses/persists source task intelligence;
 - M10 owns operational state and task events;
 - M11 aggregates/resolves/read-displays truth.
@@ -481,6 +646,8 @@ Do not regress accepted ownership boundaries:
 M11 must not rewrite task state, fabricate M10 events, or parse project task bodies itself.
 
 Watcher-driven refresh must call the existing M09 production path.
+
+Do not confuse `source inventory` with `task authority` in either code or UI.
 
 ---
 
@@ -494,7 +661,9 @@ Preserve and directly test:
 - missing selected project deterministically falls back to a real registered project;
 - rail click does not navigate;
 - `Open cockpit` remains explicit navigation;
-- no stale project data appears after rapid project switching/refresh.
+- no stale project data appears after rapid project switching/refresh;
+- no Command Center nested vertical scrollbars at accepted desktop sizes;
+- compact activity summary remains project-scoped.
 
 ---
 
@@ -531,8 +700,14 @@ Do not self-accept UI/native behavior.
 
 After successful M11A implementation/publication, leave these pending for the user:
 
-- Command Center layout/visual acceptance at normal desktop size;
-- live project/task/authority metrics look truthful;
+- Command Center fits as a clean one-screen desktop dashboard with no outer vertical scroll;
+- no nested scrollbars in Projects, Needs Your Attention, or Active Work Queue;
+- Active Work Queue is clearly visible and not hidden beneath System Status;
+- giant full-width Recent Activity block is gone from home;
+- compact selected-project Recent Activity is useful and does not dominate layout;
+- live project/task/authority metrics look truthful and unknown values do not appear as false zero;
+- Task Sources normal view presents one `.hiveai/PROJECT_DASHBOARD.md` Project Dashboard contract as the primary project intelligence surface;
+- 15+ discovered files are available only through explicit Advanced source inventory rather than dominating normal project tracking;
 - FormuLab/no-authority state appears correctly if registered and available;
 - project rail selection updates in place;
 - Open cockpit navigates explicitly;
@@ -546,7 +721,7 @@ Independent source audit occurs before final M11 closure. User acceptance must r
 
 # Tracker state at builder exit
 
-Only after R01-R08/E01-E03 implementation, actual native test execution, full gates and publication succeed:
+Only after UX01-UX04, R01-R08, E01-E03 implementation, actual native test execution, full gates and publication succeed:
 
 - M00-M10 remain PASS/CLOSED;
 - M11A = IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT + USER VISUAL/NATIVE ACCEPTANCE;
@@ -568,16 +743,17 @@ Record:
 
 - starting branch/local/remote SHA/divergence;
 - Task 0 tracker changes;
-- R01-R08 and E01-E03 changes by file/symbol;
+- UX01-UX04, R01-R08 and E01-E03 changes by file/symbol;
 - pre-fix failing test evidence for each production defect where practical;
 - exact native test-launch diagnosis and resolution;
 - actual executed Rust test counts/results;
 - frontend test counts/results;
+- viewport/layout evidence for Command Center and simplified Task Sources normal view;
 - full gate outputs;
 - publisher first/failed attempts and final success truthfully;
 - canonical asset hashes;
 - security/IPC review;
-- no external tracked project repository changes;
+- explicit proof that no external tracked project repository was changed;
 - implementation/evidence commit SHAs;
 - concrete final local/origin SHA/divergence proof;
 - user acceptance still pending;
@@ -591,12 +767,12 @@ Historical M11 log remains immutable.
 
 STOP after:
 
-1. bounded M11A remediation;
-2. actual native direct tests + frontend tests;
+1. bounded M11A remediation including UX01-UX04;
+2. actual native direct tests + frontend/layout tests;
 3. full regression/security/build gates;
 4. governed no-bundle QA publication;
 5. pushed immutable M11A log;
 6. concrete final repository equality proof;
 7. tracker state remains pending independent re-audit/user acceptance.
 
-Do **not** start M12.
+Do not start M12.
