@@ -442,7 +442,7 @@ function LegacyCommandCenter() {
               aria-label={
                 isTauriDesktop()
                   ? "Show projects needing attention"
-                  : "Open Scrubbots placeholder"
+                  : "Show projects needing attention"
               }
               type="button"
               onClick={() => setNotice("Available in a later milestone.")}
@@ -506,7 +506,7 @@ function AttentionCard({
         type="button"
         className="icon-button"
         onClick={onAction}
-        aria-label={`Open ${item.project} placeholder`}
+        aria-label={`Open ${item.project}`}
       >
         <ChevronRight size={17} />
       </button>

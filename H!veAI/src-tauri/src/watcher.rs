@@ -4,7 +4,7 @@ use crate::projects::{fetch_project, list_projects, ProjectListQuery, ProjectRec
 use notify::event::{CreateKind, ModifyKind, RemoveKind, RenameMode};
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use rusqlite::OptionalExtension;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TryRecvError, TrySendError};
@@ -24,6 +24,8 @@ thread_local! {
 const CHANNEL_CAPACITY: usize = 512;
 const DEBOUNCE_WINDOW: Duration = Duration::from_millis(250);
 const REFRESH_WINDOW: Duration = Duration::from_millis(750);
+const MAX_REFRESH_ERROR_BYTES: usize = 512;
+const TASK_REFRESH_HEALTH_KEY: &str = "m11.task-refresh-health";
 const EXCLUDED_DIRS: &[&str] = &[
     ".git/objects",
     ".git/logs",
@@ -59,6 +61,14 @@ pub struct ProjectWatcherStatus {
     pub evidence_generated_at: Option<String>,
     pub changed_path_count: u64,
     pub rescan_required: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskRefreshHealth {
+    pub status: String,
+    pub refreshed_at: String,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -228,7 +238,8 @@ impl WatcherManager {
         let project = fetch_project(&self.database, project_id)?;
         self.configure_project(project)?;
         refresh_project_snapshot(&self.database, &self.inner, project_id, Vec::new(), true)?;
-        refresh_task_intelligence(&self.database, project_id, true, self.app_handle.as_ref());
+        let _ =
+            refresh_task_intelligence(&self.database, project_id, true, self.app_handle.as_ref());
         self.project_status(project_id)
     }
 
@@ -422,12 +433,17 @@ fn worker_loop(
                         refresh_project_snapshot(&database, &inner, &project_id, events, false)
                             .is_ok();
                     if refreshed && relevant {
-                        refresh_task_intelligence(
+                        let _ = refresh_task_intelligence(
                             &database,
                             &project_id,
                             false,
                             app_handle.as_ref(),
                         );
+                    } else if relevant && !refreshed {
+                        let error = "WATCHER_REFRESH_FAILED: filesystem snapshot refresh failed";
+                        let _ =
+                            persist_task_refresh_health(&database, &project_id, Err(error.into()));
+                        emit_task_refresh_event(app_handle.as_ref(), &project_id, false, false);
                     }
                 }
             }
@@ -739,17 +755,88 @@ fn refresh_task_intelligence(
     project_id: &str,
     explicit: bool,
     app_handle: Option<&AppHandle>,
-) {
+) -> Result<(), String> {
     let result = crate::task_intelligence::parse(database, project_id);
+    let health_result = result
+        .as_ref()
+        .map(|_| ())
+        .map_err(|error| error.to_string());
+    persist_task_refresh_health(database, project_id, health_result)?;
+    emit_task_refresh_event(app_handle, project_id, explicit, result.is_ok());
+    result.map(|_| ())
+}
+
+fn emit_task_refresh_event(
+    app_handle: Option<&AppHandle>,
+    project_id: &str,
+    explicit: bool,
+    success: bool,
+) {
     if let Some(app) = app_handle {
         let event = IntelligenceRefreshEvent {
             project_id: project_id.to_string(),
             category: if explicit { "RESCAN" } else { "TASK_DASHBOARD" }.to_string(),
             generated_at: timestamp(),
-            success: result.is_ok(),
+            success,
         };
         let _ = app.emit("hiveai-command-center-refresh", event);
     }
+}
+
+fn refresh_health_key(project_id: &str) -> String {
+    format!("{TASK_REFRESH_HEALTH_KEY}:{project_id}")
+}
+
+fn persist_task_refresh_health(
+    database: &DatabaseState,
+    project_id: &str,
+    result: Result<(), String>,
+) -> Result<(), String> {
+    let refreshed_at = timestamp();
+    let error = result.err().map(|mut value| {
+        while value.len() > MAX_REFRESH_ERROR_BYTES {
+            value.pop();
+        }
+        value
+    });
+    let health = TaskRefreshHealth {
+        status: if error.is_some() {
+            "DEGRADED"
+        } else {
+            "SUCCESS"
+        }
+        .into(),
+        refreshed_at,
+        error,
+    };
+    let json = serde_json::to_string(&health).map_err(|error| error.to_string())?;
+    database
+        .open_connection()?
+        .execute(
+            "INSERT INTO settings (key, value_json, scope, created_at, updated_at) VALUES (?1, ?2, 'PROJECT', ?3, ?3) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at",
+            rusqlite::params![refresh_health_key(project_id), json, health.refreshed_at],
+        )
+        .map_err(|error| format!("persist task refresh health: {error}"))?;
+    Ok(())
+}
+
+pub fn read_task_refresh_health(
+    database: &DatabaseState,
+    project_id: &str,
+) -> Result<Option<TaskRefreshHealth>, String> {
+    let json: Option<String> = database
+        .open_connection()?
+        .query_row(
+            "SELECT value_json FROM settings WHERE key=?1 AND scope='PROJECT'",
+            [refresh_health_key(project_id)],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| format!("read task refresh health: {error}"))?;
+    json.map(|value| {
+        serde_json::from_str(&value).map_err(|error| format!("read task refresh health: {error}"))
+    })
+    .transpose()
 }
 fn merge_kind(current: &NormalizedEventKind, next: &NormalizedEventKind) -> NormalizedEventKind {
     match (current, next) {
@@ -884,6 +971,108 @@ mod tests {
             )
             .unwrap();
         assert_eq!(newest, 0);
+    }
+
+    #[test]
+    fn m11a_r05_real_watcher_m09_m11_refresh_preserves_last_good_snapshot() {
+        let database_dir = tempdir().unwrap();
+        let project_dir = tempdir().unwrap();
+        fs::write(
+            project_dir.path().join("TASKS.md"),
+            "# Work\n- [ ] first task\n",
+        )
+        .unwrap();
+        fs::create_dir_all(project_dir.path().join(".hiveai")).unwrap();
+        fs::write(
+            project_dir.path().join(".hiveai/PROJECT_DASHBOARD.md"),
+            "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\n## Source authorities\nCanonical task source: `TASKS.md`\n",
+        )
+        .unwrap();
+        let database = DatabaseState::initialize(database_dir.path().to_path_buf()).unwrap();
+        let project = crate::projects::register_project(
+            &database,
+            crate::projects::RegisterProjectRequest {
+                path: project_dir.path().to_string_lossy().into_owned(),
+                name: Some("M11A watcher chain".into()),
+            },
+        )
+        .unwrap();
+        let state = inner();
+
+        refresh_project_snapshot(&database, &state, &project.id, Vec::new(), true).unwrap();
+        refresh_task_intelligence(&database, &project.id, true, None).unwrap();
+        let good = crate::task_intelligence::list(&database, &project.id).unwrap();
+        assert_eq!(good.tasks.len(), 1);
+        assert_eq!(
+            read_task_refresh_health(&database, &project.id)
+                .unwrap()
+                .unwrap()
+                .status,
+            "SUCCESS"
+        );
+        let initial = crate::command_center::snapshot(&database).unwrap();
+        assert_eq!(initial.projects[0].total_tasks, Some(1));
+
+        database
+            .open_connection()
+            .unwrap()
+            .execute(
+                "UPDATE projects SET status='MISSING' WHERE id=?1",
+                [&project.id],
+            )
+            .unwrap();
+        assert!(refresh_task_intelligence(&database, &project.id, false, None).is_err());
+        let preserved = crate::task_intelligence::list(&database, &project.id).unwrap();
+        assert_eq!(preserved.tasks.len(), 1);
+        let degraded = read_task_refresh_health(&database, &project.id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(degraded.status, "DEGRADED");
+        assert!(degraded.error.is_some());
+
+        database
+            .open_connection()
+            .unwrap()
+            .execute(
+                "UPDATE projects SET status='ACTIVE' WHERE id=?1",
+                [&project.id],
+            )
+            .unwrap();
+        fs::write(
+            project_dir.path().join("TASKS.md"),
+            "# Work\n- [ ] refreshed task\n",
+        )
+        .unwrap();
+        let event = NormalizedEvent {
+            event_id: Uuid::new_v4().to_string(),
+            project_id: project.id.clone(),
+            kind: NormalizedEventKind::Modify,
+            relative_path: "TASKS.md".into(),
+            old_relative_path: None,
+            timestamp: timestamp(),
+            source: "WATCHER_TEST".into(),
+            category_hint: EventCategory::TaskCandidate,
+        };
+        refresh_project_snapshot(&database, &state, &project.id, vec![event], false).unwrap();
+        refresh_task_intelligence(&database, &project.id, false, None).unwrap();
+        let refreshed = crate::task_intelligence::list(&database, &project.id).unwrap();
+        assert_eq!(refreshed.tasks[0].title, "refreshed task");
+        assert_eq!(
+            read_task_refresh_health(&database, &project.id)
+                .unwrap()
+                .unwrap()
+                .status,
+            "SUCCESS"
+        );
+        let final_snapshot = crate::command_center::snapshot(&database).unwrap();
+        assert_eq!(
+            final_snapshot.projects[0]
+                .current_task
+                .as_ref()
+                .unwrap()
+                .title,
+            "refreshed task"
+        );
     }
 
     #[test]

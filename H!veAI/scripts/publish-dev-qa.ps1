@@ -58,8 +58,12 @@ function Stop-SmokeProcess([System.Diagnostics.Process]$Process) {
 function Invoke-ReadySmoke([string]$Path) {
     $baseline = Get-LogBaseline
     $beforeConhost = @(Get-Process conhost -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id)
+    $qaWebViewData = Join-Path ([IO.Path]::GetTempPath()) ("hiveai-qa-webview2-" + [guid]::NewGuid().ToString('N'))
+    $priorWebViewData = $env:WEBVIEW2_USER_DATA_FOLDER
+    $env:WEBVIEW2_USER_DATA_FOLDER = $qaWebViewData
     $process = $null
     try {
+        New-Item -ItemType Directory -Force -Path $qaWebViewData | Out-Null
         $process = Start-Process -FilePath $Path -PassThru
         Start-Sleep -Seconds 2
         if ($process.HasExited) { throw "Candidate exited during production smoke: $($process.ExitCode)" }
@@ -70,7 +74,11 @@ function Invoke-ReadySmoke([string]$Path) {
         $afterConhost = @(Get-Process conhost -ErrorAction SilentlyContinue)
         $newVisibleConhost = @($afterConhost | Where-Object { $_.Id -notin $beforeConhost -and $_.MainWindowTitle })
         if ($newVisibleConhost.Count -gt 0) { throw 'Candidate created a visible console host.' }
-    } finally { Stop-SmokeProcess $process }
+    } finally {
+        Stop-SmokeProcess $process
+        if ($null -eq $priorWebViewData) { Remove-Item Env:WEBVIEW2_USER_DATA_FOLDER -ErrorAction SilentlyContinue } else { $env:WEBVIEW2_USER_DATA_FOLDER = $priorWebViewData }
+        Remove-Item -LiteralPath $qaWebViewData -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 
 New-Item -ItemType Directory -Force -Path $stableDir | Out-Null

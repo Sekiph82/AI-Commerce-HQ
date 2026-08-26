@@ -2,7 +2,8 @@ use crate::db::DatabaseState;
 use crate::project_dashboard::{self, ProjectDashboardResolution, TaskAuthorityState};
 use crate::projects::{list_projects, ProjectListQuery, ProjectRecord};
 use crate::task_intelligence::{self, ParsedTask, TaskIntelligenceSnapshot};
-use crate::workflow::{self, WorkflowProjectList, WorkflowState, WorkflowTask};
+use crate::watcher::{read_task_refresh_health, TaskRefreshHealth};
+use crate::workflow::{self, WorkflowState, WorkflowTask};
 use serde::Serialize;
 use std::collections::HashSet;
 
@@ -11,6 +12,9 @@ pub const DEFAULT_ACTIVITY_LIMIT: usize = 50;
 pub const MAX_ACTIVITY_LIMIT: usize = 200;
 pub const MAX_ATTENTION_ITEMS: usize = 100;
 pub const MAX_QUEUE_ITEMS: usize = 100;
+pub const MAX_PROJECT_WARNINGS: usize = 64;
+pub const MAX_PORTFOLIO_WARNINGS: usize = 256;
+pub const MAX_WARNING_SCALAR_BYTES: usize = 1024;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,8 +34,8 @@ pub struct CommandCenterSnapshot {
 pub struct PortfolioKpis {
     pub projects: usize,
     pub active_tasks: Option<usize>,
-    pub needs_attention: usize,
-    pub running: usize,
+    pub needs_attention: Option<usize>,
+    pub running: Option<usize>,
     pub completed_tasks: Option<usize>,
     pub healthy: usize,
     pub health_detail: String,
@@ -59,6 +63,9 @@ pub struct ProjectOperationSummary {
     pub completed_tasks: Option<usize>,
     pub progress_percent: Option<u8>,
     pub warnings: Vec<String>,
+    pub refresh_status: Option<String>,
+    pub refresh_at: Option<String>,
+    pub refresh_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -127,6 +134,17 @@ pub struct BriefFact {
     pub label: String,
     pub value: String,
     pub source: String,
+    pub provenance: BriefProvenance,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BriefProvenance {
+    pub source_class: String,
+    pub project_id: Option<String>,
+    pub source_path: Option<String>,
+    pub evidence_type: Option<String>,
+    pub evidence_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -152,9 +170,10 @@ pub fn snapshot(database: &DatabaseState) -> Result<CommandCenterSnapshot, Strin
     });
     let mut warnings = Vec::new();
     if projects.len() > MAX_VISIBLE_PROJECTS {
-        warnings.push(format!(
-            "visible project limit reached ({MAX_VISIBLE_PROJECTS})"
-        ));
+        push_warning(
+            &mut warnings,
+            format!("visible project limit reached ({MAX_VISIBLE_PROJECTS})"),
+        );
         projects.truncate(MAX_VISIBLE_PROJECTS);
     }
     let mut summaries = Vec::new();
@@ -166,9 +185,15 @@ pub fn snapshot(database: &DatabaseState) -> Result<CommandCenterSnapshot, Strin
             summarize_project(database, &project)?;
         attention.extend(project_attention);
         queue.extend(project_queue);
-        warnings.append(&mut project_warnings);
+        for warning in project_warnings.drain(..) {
+            push_portfolio_warning(&mut warnings, warning);
+        }
         summaries.push(summary);
     }
+    let (evidence_attention, evidence_queue) = read_evidence_items(database)?;
+    attention.extend(evidence_attention);
+    queue.extend(evidence_queue);
+    attention.sort_by(|left, right| left.id.cmp(&right.id));
     attention.truncate(MAX_ATTENTION_ITEMS);
     queue.sort_by(|left, right| {
         right
@@ -186,9 +211,17 @@ pub fn snapshot(database: &DatabaseState) -> Result<CommandCenterSnapshot, Strin
         .iter()
         .filter_map(|summary| summary.completed_tasks)
         .sum::<usize>();
-    let known_task_projects = summaries
+    let canonical_projects = summaries
         .iter()
-        .filter(|summary| summary.task_authority != "NOT_CANONICALIZED")
+        .filter(|summary| summary.task_authority == "CANONICAL")
+        .count();
+    let fallback_projects = summaries
+        .iter()
+        .filter(|summary| summary.task_authority == "FALLBACK_M08_M09")
+        .count();
+    let not_canonicalized_projects = summaries
+        .iter()
+        .filter(|summary| summary.task_authority == "NOT_CANONICALIZED")
         .count();
     let healthy = summaries
         .iter()
@@ -200,14 +233,14 @@ pub fn snapshot(database: &DatabaseState) -> Result<CommandCenterSnapshot, Strin
     let completed_tasks_known = summaries
         .iter()
         .all(|summary| summary.completed_tasks.is_some());
+    let workflow_known = summaries.iter().all(|summary| {
+        !summary
+            .warnings
+            .iter()
+            .any(|warning| warning.starts_with("M10 workflow evidence unavailable"))
+    });
     let authority_detail = format!(
-        "{} project{} without canonical task authority",
-        summaries.len().saturating_sub(known_task_projects),
-        if summaries.len().saturating_sub(known_task_projects) == 1 {
-            ""
-        } else {
-            "s"
-        }
+        "{canonical_projects} canonical, {fallback_projects} fallback, {not_canonicalized_projects} not canonicalized"
     );
     let health_detail = format!("{healthy} / {} healthy", summaries.len());
     let mut facts = vec![
@@ -215,6 +248,13 @@ pub fn snapshot(database: &DatabaseState) -> Result<CommandCenterSnapshot, Strin
             label: "Registered projects".into(),
             value: summaries.len().to_string(),
             source: "Project Registry".into(),
+            provenance: BriefProvenance {
+                source_class: "REGISTRY".into(),
+                project_id: None,
+                source_path: None,
+                evidence_type: Some("PROJECTS".into()),
+                evidence_id: None,
+            },
         },
         BriefFact {
             label: "Authoritative active tasks".into(),
@@ -224,20 +264,51 @@ pub fn snapshot(database: &DatabaseState) -> Result<CommandCenterSnapshot, Strin
                 "Unavailable".into()
             },
             source: "M09 + Project Dashboard authority".into(),
+            provenance: BriefProvenance {
+                source_class: "TASK_INTELLIGENCE".into(),
+                project_id: summaries.first().map(|summary| summary.project_id.clone()),
+                source_path: summaries
+                    .first()
+                    .and_then(|summary| summary.canonical_task_source.clone()),
+                evidence_type: Some("TASK_INTELLIGENCE_SNAPSHOT".into()),
+                evidence_id: None,
+            },
         },
         BriefFact {
             label: "Needs attention".into(),
-            value: attention.len().to_string(),
+            value: if workflow_known {
+                attention.len().to_string()
+            } else {
+                "Unavailable".into()
+            },
             source: "M10 workflow + Registry".into(),
+            provenance: BriefProvenance {
+                source_class: "WORKFLOW_AND_REGISTRY".into(),
+                project_id: attention.first().map(|item| item.project_id.clone()),
+                source_path: None,
+                evidence_type: attention.first().map(|item| item.category.clone()),
+                evidence_id: attention.first().map(|item| item.id.clone()),
+            },
         },
         BriefFact {
             label: "Running workflow tasks".into(),
-            value: queue
-                .iter()
-                .filter(|item| is_running_state(&item.state))
-                .count()
-                .to_string(),
+            value: if workflow_known {
+                queue
+                    .iter()
+                    .filter(|item| is_running_state(&item.state))
+                    .count()
+                    .to_string()
+            } else {
+                "Unavailable".into()
+            },
             source: "M10 task state".into(),
+            provenance: BriefProvenance {
+                source_class: "WORKFLOW".into(),
+                project_id: queue.first().map(|item| item.project_id.clone()),
+                source_path: None,
+                evidence_type: queue.first().map(|item| item.stage.clone()),
+                evidence_id: queue.first().map(|item| item.id.clone()),
+            },
         },
     ];
     facts.truncate(8);
@@ -251,11 +322,13 @@ pub fn snapshot(database: &DatabaseState) -> Result<CommandCenterSnapshot, Strin
                 .and_then(|fact| fact.value.parse().ok())
                 .unwrap_or_default(),
             active_tasks: active_tasks_known.then_some(active_tasks),
-            needs_attention: attention.len(),
-            running: queue
-                .iter()
-                .filter(|item| is_running_state(&item.state))
-                .count(),
+            needs_attention: workflow_known.then_some(attention.len()),
+            running: workflow_known.then_some(
+                queue
+                    .iter()
+                    .filter(|item| is_running_state(&item.state))
+                    .count(),
+            ),
             completed_tasks: completed_tasks_known.then_some(completed_tasks),
             healthy,
             health_detail,
@@ -295,26 +368,32 @@ fn summarize_project(
     let mut warnings = dashboard.warnings.clone();
     let intelligence = task_intelligence::list(database, &project.id).ok();
     if intelligence.is_none() && project.status == "ACTIVE" {
-        warnings.push("M09 task intelligence has not been parsed for this project".into());
+        push_warning(
+            &mut warnings,
+            "M09 task intelligence has not been parsed for this project",
+        );
     }
-    let workflows = workflow::project_list(
+    let workflow_result = workflow::project_list(
         database,
         workflow::WorkflowProjectListQuery {
             project_id: project.id.clone(),
-            limit: Some(4096),
+            limit: Some(workflow::MAX_HISTORY_LIMIT),
         },
-    )
-    .unwrap_or(WorkflowProjectList {
-        project_id: project.id.clone(),
-        tasks: Vec::new(),
-    });
+    );
+    let workflows_available = workflow_result.is_ok();
+    let workflows = workflow_result.map(|value| value.tasks).unwrap_or_default();
+    if !workflows_available {
+        push_warning(
+            &mut warnings,
+            "M10 workflow evidence unavailable; workflow-derived state is unknown",
+        );
+    }
     let tasks = authoritative_tasks(&dashboard, intelligence.as_ref());
     let task_ids = tasks
         .iter()
         .map(|task| task.id.as_str())
         .collect::<HashSet<_>>();
     let workflow_tasks = workflows
-        .tasks
         .into_iter()
         .filter(|task| task_ids.contains(task.task_id.as_str()) && task.source_active)
         .collect::<Vec<_>>();
@@ -331,17 +410,25 @@ fn summarize_project(
         .count();
     let active = tasks.len().saturating_sub(completed);
     let task_authority = task_authority_name(&dashboard.task_authority);
-    let total_tasks = match dashboard.task_authority {
-        TaskAuthorityState::NotCanonicalized => None,
-        _ => Some(tasks.len()),
-    };
+    let task_truth_available = !matches!(
+        dashboard.task_authority,
+        TaskAuthorityState::NotCanonicalized
+    ) && intelligence.is_some();
+    let total_tasks = task_truth_available.then_some(tasks.len());
     let completed_tasks = total_tasks.map(|_| completed);
     let active_tasks = total_tasks.map(|_| active);
     let current_workflow = select_current_workflow(&tasks, &workflow_tasks);
     let current_task = current_workflow
         .as_ref()
         .and_then(|workflow| tasks.iter().find(|task| task.id == workflow.task_id))
-        .or_else(|| tasks.iter().find(|task| !task_is_complete(task, None)));
+        .or_else(|| {
+            tasks.iter().find(|task| {
+                let workflow = workflow_tasks
+                    .iter()
+                    .find(|candidate| candidate.task_id == task.id);
+                !task_is_complete(task, workflow)
+            })
+        });
     let current_state = current_workflow
         .as_ref()
         .map(|task| task.current_state.to_string());
@@ -366,7 +453,25 @@ fn summarize_project(
         .as_ref()
         .and_then(|task| task.allowed_next_states.first())
         .map(|state| format!("Advance to {state}"));
-    let health = project_health(project, &dashboard, &workflow_tasks);
+    let refresh_health = read_task_refresh_health(database, &project.id)?;
+    if let Some(refresh) = refresh_health.as_ref() {
+        if refresh.status == "DEGRADED" {
+            push_warning(
+                &mut warnings,
+                refresh
+                    .error
+                    .clone()
+                    .unwrap_or_else(|| "M09 task refresh is degraded".into()),
+            );
+        }
+    }
+    let health = project_health(
+        project,
+        &dashboard,
+        &workflow_tasks,
+        workflows_available,
+        refresh_health.as_ref(),
+    );
     let mut project_attention = Vec::new();
     let mut queue = Vec::new();
     for workflow in &workflow_tasks {
@@ -388,6 +493,7 @@ fn summarize_project(
         }
         if workflow.current_state.is_running()
             || workflow.current_state == WorkflowState::VerifyRequired
+            || workflow.current_state.is_suspension()
         {
             queue.push(WorkQueueItem {
                 id: format!("queue:{}", workflow.task_id),
@@ -397,10 +503,12 @@ fn summarize_project(
                 task: workflow.title.clone(),
                 stage: workflow.current_state.to_string(),
                 state: workflow.current_state.to_string(),
-                actor: workflow
-                    .latest_event
-                    .as_ref()
-                    .and_then(|event| event.actor_type.map(|actor| actor.to_string())),
+                actor: workflow.required_actor.clone().or_else(|| {
+                    workflow
+                        .latest_event
+                        .as_ref()
+                        .and_then(|event| event.actor_type.map(|actor| actor.to_string()))
+                }),
                 updated_at: workflow
                     .latest_event
                     .as_ref()
@@ -433,6 +541,10 @@ fn summarize_project(
             category: "PROJECT_DASHBOARD".into(),
         });
     }
+    let mut bounded_warnings = Vec::new();
+    for warning in warnings.drain(..) {
+        push_warning(&mut bounded_warnings, warning);
+    }
     let summary = ProjectOperationSummary {
         project_id: project.id.clone(),
         name: project.name.clone(),
@@ -461,7 +573,12 @@ fn summarize_project(
         active_tasks,
         completed_tasks,
         progress_percent: progress_percent(completed_tasks, total_tasks),
-        warnings,
+        warnings: bounded_warnings,
+        refresh_status: refresh_health.as_ref().map(|health| health.status.clone()),
+        refresh_at: refresh_health
+            .as_ref()
+            .map(|health| health.refreshed_at.clone()),
+        refresh_error: refresh_health.and_then(|health| health.error),
     };
     Ok((summary, project_attention, queue, Vec::new()))
 }
@@ -496,7 +613,12 @@ fn select_current_workflow<'a>(
 ) -> Option<&'a WorkflowTask> {
     let active_ids = tasks
         .iter()
-        .filter(|task| !task_is_complete(task, None))
+        .filter(|task| {
+            let workflow = workflows
+                .iter()
+                .find(|candidate| candidate.task_id == task.id);
+            !task_is_complete(task, workflow)
+        })
         .map(|task| task.id.as_str())
         .collect::<HashSet<_>>();
     workflows
@@ -538,6 +660,8 @@ fn project_health(
     project: &ProjectRecord,
     dashboard: &ProjectDashboardResolution,
     workflows: &[WorkflowTask],
+    workflows_available: bool,
+    refresh_health: Option<&TaskRefreshHealth>,
 ) -> String {
     if project.status == "MISSING" {
         return "MISSING".into();
@@ -559,6 +683,12 @@ fn project_health(
     }
     if workflows.iter().any(|task| task.current_state.is_running()) {
         return "RUNNING".into();
+    }
+    if refresh_health.is_some_and(|health| health.status == "DEGRADED") {
+        return "ATTENTION".into();
+    }
+    if !workflows_available {
+        return "UNKNOWN".into();
     }
     if dashboard.task_authority == TaskAuthorityState::FallbackM08M09
         && dashboard.manifest_status != project_dashboard::ManifestStatus::Absent
@@ -587,6 +717,107 @@ fn is_running_state(state: &str) -> bool {
         "BUILDER_RUNNING" | "AUDIT_RUNNING" | "VERIFY_RUNNING"
     )
 }
+
+fn read_evidence_items(
+    database: &DatabaseState,
+) -> Result<(Vec<AttentionItem>, Vec<WorkQueueItem>), String> {
+    let connection = database.open_connection()?;
+    let mut attention = Vec::new();
+    let mut queue = Vec::new();
+    {
+        let mut statement = connection.prepare("SELECT t.id, t.project_id, COALESCE(p.name, 'Unassigned'), t.task_id, t.result FROM test_runs t LEFT JOIN projects p ON p.id=t.project_id WHERE (p.status IS NULL OR p.status != 'ARCHIVED') AND t.finished_at IS NOT NULL AND upper(t.result) IN ('FAIL','FAILED','ERROR') ORDER BY COALESCE(t.finished_at, t.started_at) DESC, t.id DESC LIMIT ?1").map_err(|e| format!("read failed test evidence: {e}"))?;
+        let rows = statement
+            .query_map([MAX_ATTENTION_ITEMS as i64], |row| {
+                Ok(AttentionItem {
+                    id: format!("test-failure:{}", row.get::<_, String>(0)?),
+                    project_id: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                    project_name: row.get(2)?,
+                    task_id: row.get(3)?,
+                    title: "Verification/test failed".into(),
+                    state: row.get(4)?,
+                    detail: "A completed verification/test row has a failed result.".into(),
+                    category: "TEST_RUN".into(),
+                })
+            })
+            .map_err(|e| format!("read failed test evidence: {e}"))?;
+        attention.extend(
+            rows.collect::<Result<Vec<_>, _>>()
+                .map_err(|e| format!("read failed test evidence: {e}"))?,
+        );
+    }
+    {
+        let mut statement = connection.prepare("SELECT a.id, a.project_id, COALESCE(p.name, 'Unassigned'), a.task_id, a.result FROM audits a LEFT JOIN projects p ON p.id=a.project_id WHERE (p.status IS NULL OR p.status != 'ARCHIVED') AND upper(a.result) IN ('FAIL','FAILED','ERROR') ORDER BY a.created_at DESC, a.id DESC LIMIT ?1").map_err(|e| format!("read failed audit evidence: {e}"))?;
+        let rows = statement
+            .query_map([MAX_ATTENTION_ITEMS as i64], |row| {
+                Ok(AttentionItem {
+                    id: format!("audit-failure:{}", row.get::<_, String>(0)?),
+                    project_id: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                    project_name: row.get(2)?,
+                    task_id: row.get(3)?,
+                    title: "Audit failed".into(),
+                    state: row.get(4)?,
+                    detail: "A persisted audit row has a failed result.".into(),
+                    category: "AUDIT".into(),
+                })
+            })
+            .map_err(|e| format!("read failed audit evidence: {e}"))?;
+        attention.extend(
+            rows.collect::<Result<Vec<_>, _>>()
+                .map_err(|e| format!("read failed audit evidence: {e}"))?,
+        );
+    }
+    {
+        let mut statement = connection.prepare("SELECT r.id, s.project_id, COALESCE(p.name, 'Unassigned'), s.task_id, r.permission_kind, r.state FROM permission_requests r LEFT JOIN agent_sessions s ON s.id=r.session_id LEFT JOIN projects p ON p.id=s.project_id WHERE (p.status IS NULL OR p.status != 'ARCHIVED') AND upper(r.state) IN ('PENDING','OPEN','REQUESTED') AND r.decided_at IS NULL ORDER BY r.created_at DESC, r.id DESC LIMIT ?1").map_err(|e| format!("read permission requests: {e}"))?;
+        let rows = statement
+            .query_map([MAX_ATTENTION_ITEMS as i64], |row| {
+                Ok(AttentionItem {
+                    id: format!("permission:{}", row.get::<_, String>(0)?),
+                    project_id: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                    project_name: row.get(2)?,
+                    task_id: row.get(3)?,
+                    title: "Permission request pending".into(),
+                    state: row.get(5)?,
+                    detail: format!(
+                        "{} requires an explicit decision.",
+                        row.get::<_, String>(4)?
+                    ),
+                    category: "PERMISSION".into(),
+                })
+            })
+            .map_err(|e| format!("read permission requests: {e}"))?;
+        attention.extend(
+            rows.collect::<Result<Vec<_>, _>>()
+                .map_err(|e| format!("read permission requests: {e}"))?,
+        );
+    }
+    {
+        let mut statement = connection.prepare("SELECT s.id, s.project_id, COALESCE(p.name, 'Unassigned'), s.task_id, s.provider, s.state, COALESCE(s.started_at, s.created_at) FROM agent_sessions s LEFT JOIN projects p ON p.id=s.project_id WHERE (p.status IS NULL OR p.status != 'ARCHIVED') AND upper(s.state) IN ('RUNNING','STARTING','WAITING_PERMISSION','WAITING_USER') AND s.task_id IS NOT NULL ORDER BY COALESCE(s.started_at, s.created_at) DESC, s.id DESC LIMIT ?1").map_err(|e| format!("read active agent sessions: {e}"))?;
+        let rows = statement
+            .query_map([MAX_QUEUE_ITEMS as i64], |row| {
+                Ok(WorkQueueItem {
+                    id: format!("agent:{}", row.get::<_, String>(0)?),
+                    project_id: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                    project_name: row.get(2)?,
+                    task_id: row.get::<_, String>(3)?,
+                    task: "Agent session evidence".into(),
+                    stage: row.get(4)?,
+                    state: row.get(5)?,
+                    actor: row.get(4)?,
+                    updated_at: row.get(6)?,
+                    attention: matches!(
+                        row.get::<_, String>(5)?.as_str(),
+                        "WAITING_PERMISSION" | "WAITING_USER"
+                    ),
+                })
+            })
+            .map_err(|e| format!("read active agent sessions: {e}"))?;
+        queue.extend(
+            rows.collect::<Result<Vec<_>, _>>()
+                .map_err(|e| format!("read active agent sessions: {e}"))?,
+        );
+    }
+    Ok((attention, queue))
+}
 fn task_authority_name(state: &TaskAuthorityState) -> String {
     match state {
         TaskAuthorityState::Canonical => "CANONICAL",
@@ -613,23 +844,211 @@ fn same_path(left: &str, right: &str) -> bool {
 fn read_activity(database: &DatabaseState, limit: usize) -> Result<Vec<ActivityItem>, String> {
     let limit = limit.clamp(1, MAX_ACTIVITY_LIMIT);
     let connection = database.open_connection()?;
-    let mut statement = connection.prepare("SELECT e.id, t.project_id, p.name, e.event_type, e.summary, e.to_state, e.actor_type, e.occurred_at FROM task_events e JOIN tasks t ON t.id=e.task_id JOIN projects p ON p.id=t.project_id WHERE p.status != 'ARCHIVED' ORDER BY e.occurred_at DESC, e.id DESC LIMIT ?1").map_err(|e| format!("read recent workflow activity: {e}"))?;
-    let rows = statement
-        .query_map([limit as i64], |row| {
-            Ok(ActivityItem {
-                id: row.get(0)?,
-                project_id: row.get(1)?,
-                project_name: row.get(2)?,
-                kind: row.get(3)?,
-                event: row.get(4)?,
-                state: row.get(5)?,
-                actor: row.get(6)?,
-                occurred_at: row.get(7)?,
+    let mut items = Vec::new();
+    {
+        let mut statement = connection.prepare("SELECT e.id, t.project_id, p.name, e.event_type, e.summary, e.to_state, e.actor_type, e.occurred_at FROM task_events e JOIN tasks t ON t.id=e.task_id JOIN projects p ON p.id=t.project_id WHERE p.status != 'ARCHIVED' ORDER BY e.occurred_at DESC, e.id DESC LIMIT ?1").map_err(|e| format!("read workflow activity: {e}"))?;
+        let rows = statement
+            .query_map([limit as i64], |row| {
+                Ok(ActivityItem {
+                    id: format!("WORKFLOW:{}", row.get::<_, String>(0)?),
+                    project_id: row.get(1)?,
+                    project_name: row.get(2)?,
+                    kind: "WORKFLOW".into(),
+                    event: row.get(4)?,
+                    state: row.get(5)?,
+                    actor: row.get(6)?,
+                    occurred_at: row.get(7)?,
+                })
             })
-        })
-        .map_err(|e| format!("read recent workflow activity: {e}"))?;
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("read recent workflow activity: {e}"))
+            .map_err(|e| format!("read workflow activity: {e}"))?;
+        items.extend(
+            rows.collect::<Result<Vec<_>, _>>()
+                .map_err(|e| format!("read workflow activity: {e}"))?,
+        );
+    }
+    {
+        let mut statement = connection.prepare("SELECT e.id, s.project_id, COALESCE(p.name, 'Unassigned'), e.event_type, e.payload_json, s.state, s.provider, e.occurred_at FROM agent_events e JOIN agent_sessions s ON s.id=e.session_id LEFT JOIN projects p ON p.id=s.project_id WHERE p.status IS NULL OR p.status != 'ARCHIVED' ORDER BY e.occurred_at DESC, e.id DESC LIMIT ?1").map_err(|e| format!("read agent activity: {e}"))?;
+        let rows = statement
+            .query_map([limit as i64], |row| {
+                Ok(ActivityItem {
+                    id: format!("AGENT_EVENT:{}", row.get::<_, String>(0)?),
+                    project_id: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                    project_name: row.get(2)?,
+                    kind: "AGENT_EVENT".into(),
+                    event: format!("Agent event: {}", row.get::<_, String>(3)?),
+                    state: row.get(5)?,
+                    actor: row.get(6)?,
+                    occurred_at: row.get(7)?,
+                })
+            })
+            .map_err(|e| format!("read agent activity: {e}"))?;
+        items.extend(
+            rows.collect::<Result<Vec<_>, _>>()
+                .map_err(|e| format!("read agent activity: {e}"))?,
+        );
+    }
+    {
+        let mut statement = connection.prepare("SELECT s.id, s.project_id, COALESCE(p.name, 'Unassigned'), s.provider, s.state, s.started_at, s.created_at FROM agent_sessions s LEFT JOIN projects p ON p.id=s.project_id WHERE p.status IS NULL OR p.status != 'ARCHIVED' ORDER BY COALESCE(s.started_at, s.created_at) DESC, s.id DESC LIMIT ?1").map_err(|e| format!("read agent sessions: {e}"))?;
+        let rows = statement
+            .query_map([limit as i64], |row| {
+                Ok(ActivityItem {
+                    id: format!("AGENT_SESSION:{}", row.get::<_, String>(0)?),
+                    project_id: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                    project_name: row.get(2)?,
+                    kind: "AGENT_SESSION".into(),
+                    event: format!(
+                        "{} session {}",
+                        row.get::<_, String>(3)?,
+                        row.get::<_, String>(4)?
+                    ),
+                    state: row.get(4)?,
+                    actor: row.get(3)?,
+                    occurred_at: row
+                        .get::<_, Option<String>>(5)?
+                        .or_else(|| row.get(6).ok())
+                        .unwrap_or_default(),
+                })
+            })
+            .map_err(|e| format!("read agent sessions: {e}"))?;
+        items.extend(
+            rows.collect::<Result<Vec<_>, _>>()
+                .map_err(|e| format!("read agent sessions: {e}"))?,
+        );
+    }
+    {
+        let mut statement = connection.prepare("SELECT a.id, a.project_id, COALESCE(p.name, 'Unassigned'), a.result, a.summary, a.created_at FROM audits a LEFT JOIN projects p ON p.id=a.project_id WHERE p.status IS NULL OR p.status != 'ARCHIVED' ORDER BY a.created_at DESC, a.id DESC LIMIT ?1").map_err(|e| format!("read audit activity: {e}"))?;
+        let rows = statement
+            .query_map([limit as i64], |row| {
+                Ok(ActivityItem {
+                    id: format!("AUDIT:{}", row.get::<_, String>(0)?),
+                    project_id: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                    project_name: row.get(2)?,
+                    kind: "AUDIT".into(),
+                    event: row
+                        .get::<_, Option<String>>(4)?
+                        .unwrap_or_else(|| "Audit evidence recorded".into()),
+                    state: row.get(3)?,
+                    actor: Some("GPT Audit".into()),
+                    occurred_at: row.get(5)?,
+                })
+            })
+            .map_err(|e| format!("read audit activity: {e}"))?;
+        items.extend(
+            rows.collect::<Result<Vec<_>, _>>()
+                .map_err(|e| format!("read audit activity: {e}"))?,
+        );
+    }
+    {
+        let mut statement = connection.prepare("SELECT t.id, t.project_id, COALESCE(p.name, 'Unassigned'), t.result, t.command, t.finished_at, t.started_at FROM test_runs t LEFT JOIN projects p ON p.id=t.project_id WHERE p.status IS NULL OR p.status != 'ARCHIVED' ORDER BY COALESCE(t.finished_at, t.started_at) DESC, t.id DESC LIMIT ?1").map_err(|e| format!("read test activity: {e}"))?;
+        let rows = statement
+            .query_map([limit as i64], |row| {
+                Ok(ActivityItem {
+                    id: format!("TEST:{}", row.get::<_, String>(0)?),
+                    project_id: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                    project_name: row.get(2)?,
+                    kind: "TEST_RUN".into(),
+                    event: format!("Verification {}", row.get::<_, String>(3)?),
+                    state: row.get(3)?,
+                    actor: Some("CI".into()),
+                    occurred_at: row
+                        .get::<_, Option<String>>(5)?
+                        .or_else(|| row.get(6).ok())
+                        .unwrap_or_default(),
+                })
+            })
+            .map_err(|e| format!("read test activity: {e}"))?;
+        items.extend(
+            rows.collect::<Result<Vec<_>, _>>()
+                .map_err(|e| format!("read test activity: {e}"))?,
+        );
+    }
+    {
+        let mut statement = connection.prepare("SELECT g.id, r.project_id, p.name, g.status_json, g.captured_at FROM git_snapshots g JOIN repositories r ON r.id=g.repository_id JOIN projects p ON p.id=r.project_id WHERE p.status != 'ARCHIVED' ORDER BY g.captured_at DESC, g.id DESC LIMIT ?1").map_err(|e| format!("read Git activity: {e}"))?;
+        let rows = statement
+            .query_map([limit as i64], |row| {
+                Ok(ActivityItem {
+                    id: format!("GIT:{}", row.get::<_, String>(0)?),
+                    project_id: row.get(1)?,
+                    project_name: row.get(2)?,
+                    kind: "GIT_SNAPSHOT".into(),
+                    event: "Git snapshot captured".into(),
+                    state: Some("SNAPSHOT".into()),
+                    actor: Some("Git Engine".into()),
+                    occurred_at: row.get(4)?,
+                })
+            })
+            .map_err(|e| format!("read Git activity: {e}"))?;
+        items.extend(
+            rows.collect::<Result<Vec<_>, _>>()
+                .map_err(|e| format!("read Git activity: {e}"))?,
+        );
+    }
+    {
+        let mut statement = connection.prepare("SELECT s.id, s.project_id, p.name, s.watcher_health, s.evidence_generated_at FROM project_snapshots s JOIN projects p ON p.id=s.project_id WHERE p.status != 'ARCHIVED' ORDER BY s.evidence_generated_at DESC, s.id DESC LIMIT ?1").map_err(|e| format!("read project snapshot activity: {e}"))?;
+        let rows = statement
+            .query_map([limit as i64], |row| {
+                Ok(ActivityItem {
+                    id: format!("PROJECT_SNAPSHOT:{}", row.get::<_, String>(0)?),
+                    project_id: row.get(1)?,
+                    project_name: row.get(2)?,
+                    kind: "PROJECT_SNAPSHOT".into(),
+                    event: "Project watcher snapshot refreshed".into(),
+                    state: row.get(3)?,
+                    actor: Some("WATCHER".into()),
+                    occurred_at: row.get(4)?,
+                })
+            })
+            .map_err(|e| format!("read project snapshot activity: {e}"))?;
+        items.extend(
+            rows.collect::<Result<Vec<_>, _>>()
+                .map_err(|e| format!("read project snapshot activity: {e}"))?,
+        );
+    }
+    items.sort_by(|left, right| {
+        right
+            .occurred_at
+            .cmp(&left.occurred_at)
+            .then(left.kind.cmp(&right.kind))
+            .then(left.id.cmp(&right.id))
+    });
+    items.truncate(limit);
+    Ok(items)
+}
+
+fn push_warning(warnings: &mut Vec<String>, message: impl AsRef<str>) {
+    let mut bounded = message.as_ref().to_string();
+    while bounded.len() > MAX_WARNING_SCALAR_BYTES {
+        bounded.pop();
+    }
+    if warnings.iter().any(|existing| existing == &bounded) {
+        return;
+    }
+    if warnings.len() < MAX_PROJECT_WARNINGS.saturating_sub(1) {
+        warnings.push(bounded);
+    } else {
+        warnings.truncate(MAX_PROJECT_WARNINGS.saturating_sub(1));
+        warnings.push(format!(
+            "WARNING_LIMIT_REACHED: project warning limit reached ({MAX_PROJECT_WARNINGS})"
+        ));
+    }
+}
+
+fn push_portfolio_warning(warnings: &mut Vec<String>, message: impl AsRef<str>) {
+    let mut bounded = message.as_ref().to_string();
+    while bounded.len() > MAX_WARNING_SCALAR_BYTES {
+        bounded.pop();
+    }
+    if warnings.iter().any(|existing| existing == &bounded) {
+        return;
+    }
+    if warnings.len() < MAX_PORTFOLIO_WARNINGS.saturating_sub(1) {
+        warnings.push(bounded);
+    } else {
+        warnings.truncate(MAX_PORTFOLIO_WARNINGS.saturating_sub(1));
+        warnings.push(format!(
+            "WARNING_LIMIT_REACHED: portfolio warning limit reached ({MAX_PORTFOLIO_WARNINGS})"
+        ));
+    }
 }
 
 trait SerializedStatus {
@@ -652,6 +1071,63 @@ impl SerializedStatus for project_dashboard::ManifestStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::projects::{register_project, RegisterProjectRequest};
+    use crate::task_intelligence;
+    use std::fs;
+    use tempfile::{tempdir, TempDir};
+
+    fn fixture(
+        contents: &str,
+        manifest: Option<&str>,
+    ) -> (TempDir, TempDir, DatabaseState, String, Vec<ParsedTask>) {
+        let db_dir = tempdir().unwrap();
+        let project_dir = tempdir().unwrap();
+        fs::write(project_dir.path().join("TASKS.md"), contents).unwrap();
+        if let Some(manifest) = manifest {
+            fs::create_dir_all(project_dir.path().join(".hiveai")).unwrap();
+            fs::write(
+                project_dir
+                    .path()
+                    .join(project_dashboard::MANIFEST_RELATIVE_PATH),
+                manifest,
+            )
+            .unwrap();
+        }
+        let database = DatabaseState::initialize(db_dir.path().to_path_buf()).unwrap();
+        let project = register_project(
+            &database,
+            RegisterProjectRequest {
+                path: project_dir.path().to_string_lossy().into_owned(),
+                name: Some("M11A Fixture".into()),
+            },
+        )
+        .unwrap();
+        let parsed = task_intelligence::parse(&database, &project.id).unwrap();
+        (db_dir, project_dir, database, project.id, parsed.tasks)
+    }
+
+    fn canonical_manifest() -> &'static str {
+        "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\n## Source authorities\nCanonical task source: `TASKS.md`\n"
+    }
+
+    fn seed_workflow(
+        database: &DatabaseState,
+        project_id: &str,
+        task_id: &str,
+        state: &str,
+        event_id: &str,
+        occurred_at: &str,
+        summary: &str,
+    ) {
+        database.open_connection().unwrap().execute_batch(&format!("INSERT OR IGNORE INTO tasks (id, project_id, source_id, title, state, required_actor, milestone, metadata_json, created_at, updated_at) VALUES ('{task_id}','{project_id}',NULL,'Fixture workflow task','{state}',NULL,NULL,'{{\"sourceActive\":true}}','{occurred_at}','{occurred_at}'); UPDATE tasks SET state='{state}', updated_at='{occurred_at}' WHERE id='{task_id}'; INSERT INTO task_events (id, task_id, event_type, from_state, to_state, actor_type, summary, evidence_json, occurred_at) VALUES ('{event_id}','{task_id}','WORKFLOW_TRANSITION','READY_FOR_IMPLEMENTATION','{state}','CODEX','{summary}','{{\"resumeState\":\"READY_FOR_IMPLEMENTATION\"}}','{occurred_at}');")).unwrap();
+        let _: String = database
+            .open_connection()
+            .unwrap()
+            .query_row("SELECT id FROM projects WHERE id=?1", [project_id], |row| {
+                row.get(0)
+            })
+            .unwrap();
+    }
 
     #[test]
     fn m11_current_task_selection_is_deterministic() {
@@ -669,5 +1145,212 @@ mod tests {
     #[test]
     fn m11_portfolio_counts_use_authoritative_tasks_only() {
         assert_eq!(same_path("H!veAI\\TASKS.md", "h!veai/tasks.md"), true);
+    }
+
+    #[test]
+    fn m11a_r01_snapshot_reads_real_m10_workflow_rows_with_bound() {
+        let (_db_dir, _project_dir, database, project_id, tasks) = fixture(
+            "# Work\n- [ ] active task\n- [ ] waiting task\n",
+            Some(canonical_manifest()),
+        );
+        let task = &tasks[0];
+        let waiting = &tasks[1];
+        seed_workflow(
+            &database,
+            &project_id,
+            &task.id,
+            "BUILDER_RUNNING",
+            "workflow-live",
+            "2026-08-26T10:00:00Z",
+            "builder started",
+        );
+        seed_workflow(
+            &database,
+            &project_id,
+            &waiting.id,
+            "WAITING_HUMAN",
+            "workflow-waiting",
+            "2026-08-26T11:00:00Z",
+            "owner decision required",
+        );
+        let snapshot = snapshot(&database).unwrap();
+        let project = &snapshot.projects[0];
+        assert_eq!(project.current_state.as_deref(), Some("WAITING_HUMAN"));
+        assert_eq!(
+            project
+                .last_action
+                .as_ref()
+                .map(|action| action.summary.as_str()),
+            Some("owner decision required")
+        );
+        assert!(!project.allowed_actors.is_empty());
+        assert!(snapshot
+            .attention
+            .iter()
+            .any(|item| item.project_id == project_id && item.state == "WAITING_HUMAN"));
+        assert!(snapshot
+            .work_queue
+            .iter()
+            .any(|item| item.task_id == task.id && item.state == "BUILDER_RUNNING"));
+        assert!(!snapshot
+            .warnings
+            .iter()
+            .any(|warning| warning.starts_with("M10 workflow evidence unavailable")));
+    }
+
+    #[test]
+    fn m11a_r02_missing_m09_is_unknown_and_empty_parsed_is_zero() {
+        let db_dir = tempdir().unwrap();
+        let project_dir = tempdir().unwrap();
+        fs::write(project_dir.path().join("TASKS.md"), "# Empty\n").unwrap();
+        fs::create_dir_all(project_dir.path().join(".hiveai")).unwrap();
+        fs::write(
+            project_dir
+                .path()
+                .join(project_dashboard::MANIFEST_RELATIVE_PATH),
+            canonical_manifest(),
+        )
+        .unwrap();
+        let database = DatabaseState::initialize(db_dir.path().to_path_buf()).unwrap();
+        let project = register_project(
+            &database,
+            RegisterProjectRequest {
+                path: project_dir.path().to_string_lossy().into_owned(),
+                name: Some("Unknown Fixture".into()),
+            },
+        )
+        .unwrap();
+        let missing = snapshot(&database).unwrap();
+        assert_eq!(missing.projects[0].total_tasks, None);
+        assert_eq!(missing.projects[0].active_tasks, None);
+        task_intelligence::parse(&database, &project.id).unwrap();
+        let empty = snapshot(&database).unwrap();
+        assert_eq!(empty.projects[0].total_tasks, Some(0));
+        assert_eq!(empty.projects[0].active_tasks, Some(0));
+    }
+
+    #[test]
+    fn m11a_r03_m10_complete_task_is_never_selected() {
+        let (_db_dir, _project_dir, database, project_id, tasks) = fixture(
+            "# Work\n- [ ] task A\n- [ ] task B\n",
+            Some(canonical_manifest()),
+        );
+        seed_workflow(
+            &database,
+            &project_id,
+            &tasks[0].id,
+            "TASK_COMPLETE",
+            "workflow-complete",
+            "2026-08-26T12:00:00Z",
+            "completed A",
+        );
+        seed_workflow(
+            &database,
+            &project_id,
+            &tasks[1].id,
+            "BUILDER_RUNNING",
+            "workflow-active",
+            "2026-08-26T11:00:00Z",
+            "started B",
+        );
+        let snapshot = snapshot(&database).unwrap();
+        assert_eq!(
+            snapshot.projects[0]
+                .current_task
+                .as_ref()
+                .map(|task| task.task_id.as_str()),
+            Some(tasks[1].id.as_str())
+        );
+    }
+
+    #[test]
+    fn m11a_r06_mixed_evidence_attention_queue_and_activity_are_real_and_bounded() {
+        let (_db_dir, _project_dir, database, project_id, tasks) =
+            fixture("# Work\n- [ ] task\n", Some(canonical_manifest()));
+        let task_id = &tasks[0].id;
+        seed_workflow(
+            &database,
+            &project_id,
+            task_id,
+            "WAITING_HUMAN",
+            "workflow-waiting",
+            "2026-08-26T10:00:00Z",
+            "owner decision required",
+        );
+        let connection = database.open_connection().unwrap();
+        connection.execute_batch(&format!("INSERT INTO agent_sessions (id,project_id,task_id,provider,state,started_at,created_at) VALUES ('session-1','{project_id}','{task_id}','CODEX','RUNNING','2026-08-26T09:00:00Z','2026-08-26T09:00:00Z'); INSERT INTO agent_events (id,session_id,event_type,payload_json,occurred_at) VALUES ('agent-event-1','session-1','OUTPUT','{{}}','2026-08-26T09:01:00Z'); INSERT INTO audits (id,project_id,task_id,result,summary,created_at) VALUES ('audit-1','{project_id}','{task_id}','FAIL','audit failed','2026-08-26T09:02:00Z'); INSERT INTO test_runs (id,project_id,task_id,command,result,started_at,finished_at) VALUES ('test-1','{project_id}','{task_id}','cargo test','FAIL','2026-08-26T09:03:00Z','2026-08-26T09:04:00Z'); INSERT INTO permission_requests (id,session_id,permission_kind,requested_resource,state,created_at) VALUES ('permission-1','session-1','FILESYSTEM','bounded fixture','PENDING','2026-08-26T09:05:00Z'); INSERT INTO repositories (id,project_id,remote_url,created_at,updated_at) VALUES ('repo-activity','{project_id}',NULL,'2026-08-26T09:06:00Z','2026-08-26T09:06:00Z'); INSERT INTO git_snapshots (id,repository_id,status_json,captured_at) VALUES ('git-1','repo-activity','{{}}','2026-08-26T09:07:00Z'); INSERT INTO project_snapshots (id,project_id,availability,evidence_generated_at,watcher_health,created_at) VALUES ('snapshot-1','{project_id}','AVAILABLE','2026-08-26T09:08:00Z','HEALTHY','2026-08-26T09:08:00Z');")).unwrap();
+        let first = snapshot(&database).unwrap();
+        let second = snapshot(&database).unwrap();
+        assert!(first
+            .attention
+            .iter()
+            .any(|item| item.category == "TEST_RUN"));
+        assert!(first.attention.iter().any(|item| item.category == "AUDIT"));
+        assert!(first
+            .attention
+            .iter()
+            .any(|item| item.category == "PERMISSION"));
+        assert!(first
+            .work_queue
+            .iter()
+            .any(|item| item.state == "WAITING_HUMAN"));
+        assert!(first
+            .work_queue
+            .iter()
+            .any(|item| item.id == "agent:session-1"));
+        for kind in [
+            "WORKFLOW",
+            "AGENT_EVENT",
+            "AGENT_SESSION",
+            "AUDIT",
+            "TEST_RUN",
+            "GIT_SNAPSHOT",
+            "PROJECT_SNAPSHOT",
+        ] {
+            assert_eq!(
+                first
+                    .recent_activity
+                    .iter()
+                    .filter(|item| item.kind == kind)
+                    .count(),
+                1,
+                "missing or duplicate {kind}"
+            );
+        }
+        assert_eq!(
+            first
+                .recent_activity
+                .iter()
+                .map(|item| &item.id)
+                .collect::<Vec<_>>(),
+            second
+                .recent_activity
+                .iter()
+                .map(|item| &item.id)
+                .collect::<Vec<_>>()
+        );
+        assert!(first.recent_activity.len() <= MAX_ACTIVITY_LIMIT);
+    }
+
+    #[test]
+    fn m11a_r08_warning_bounds_are_deterministic() {
+        let mut project = Vec::new();
+        for index in 0..(MAX_PROJECT_WARNINGS * 3) {
+            push_warning(&mut project, format!("warning-{index}"));
+        }
+        assert_eq!(project.len(), MAX_PROJECT_WARNINGS);
+        assert!(project.last().unwrap().starts_with("WARNING_LIMIT_REACHED"));
+        let mut portfolio = Vec::new();
+        for index in 0..(MAX_PORTFOLIO_WARNINGS * 3) {
+            push_portfolio_warning(&mut portfolio, format!("warning-{index}"));
+        }
+        assert_eq!(portfolio.len(), MAX_PORTFOLIO_WARNINGS);
+        assert!(portfolio
+            .last()
+            .unwrap()
+            .starts_with("WARNING_LIMIT_REACHED"));
+        assert!(portfolio
+            .iter()
+            .all(|warning| warning.len() <= MAX_WARNING_SCALAR_BYTES));
     }
 }

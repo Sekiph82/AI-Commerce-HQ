@@ -13,6 +13,8 @@ pub const MAX_FRONT_MATTER_FIELDS: usize = 32;
 pub const MAX_SOURCE_PATHS: usize = 128;
 pub const MAX_SOURCE_PATHS_PER_ROLE: usize = 32;
 pub const MAX_SOURCE_PATH_BYTES: usize = 512;
+pub const MAX_MANIFEST_WARNINGS: usize = 64;
+pub const MAX_WARNING_SCALAR_BYTES: usize = 1024;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -182,16 +184,18 @@ pub fn resolve(
         for path in paths {
             extracted += 1;
             if extracted > MAX_SOURCE_PATHS {
-                resolution
-                    .warnings
-                    .push(format!("source path limit reached ({MAX_SOURCE_PATHS})"));
+                push_warning(
+                    &mut resolution.warnings,
+                    format!("source path limit reached ({MAX_SOURCE_PATHS})"),
+                );
                 break;
             }
             let (normalized, valid) = normalize_relative_path(&path);
             if !valid {
-                resolution
-                    .warnings
-                    .push(format!("rejected authority path for {role}"));
+                push_warning(
+                    &mut resolution.warnings,
+                    format!("rejected authority path for {role}"),
+                );
                 resolved.push(ResolvedSource {
                     path,
                     role: role.clone(),
@@ -202,7 +206,10 @@ pub fn resolve(
                 continue;
             }
             let candidate = root.join(&normalized);
-            let exists = candidate.is_file();
+            let exists = candidate.exists();
+            let directory_allowed = matches!(role.as_str(), "progressHistory" | "buildTest");
+            let pointer_available =
+                candidate.is_file() || (directory_allowed && candidate.is_dir());
             let contained = exists
                 && fs::canonicalize(&candidate)
                     .map(|path| path.starts_with(&canonical_root))
@@ -213,18 +220,20 @@ pub fn resolve(
                 } else {
                     SourceStatus::Missing
                 }
+            } else if !pointer_available {
+                SourceStatus::Rejected
             } else {
                 SourceStatus::Available
             };
             resolved.push(ResolvedSource {
                 path: normalized.clone(),
                 role: role.clone(),
-                status,
+                status: status.clone(),
                 exists,
                 contained,
             });
             if role == "canonicalTask" && resolution.canonical_task_source.is_none() {
-                if contained {
+                if status == SourceStatus::Available {
                     resolution.canonical_task_source = Some(normalized);
                 }
             }
@@ -235,9 +244,10 @@ pub fn resolve(
             })
         {
             resolution.manifest_status = ManifestStatus::Stale;
-            resolution
-                .warnings
-                .push("canonical task source is unavailable or rejected".into());
+            push_warning(
+                &mut resolution.warnings,
+                "canonical task source is unavailable or rejected",
+            );
         }
         resolution.roles.insert(role, resolved);
     }
@@ -286,8 +296,26 @@ fn rejected_manifest(
     warning: &str,
 ) -> ProjectDashboardResolution {
     base.manifest_status = ManifestStatus::Malformed;
-    base.warnings.push(warning.to_string());
+    push_warning(&mut base.warnings, warning);
     base
+}
+
+fn push_warning(warnings: &mut Vec<String>, message: impl AsRef<str>) {
+    let mut bounded = message.as_ref().to_string();
+    while bounded.len() > MAX_WARNING_SCALAR_BYTES {
+        bounded.pop();
+    }
+    if warnings.iter().any(|existing| existing == &bounded) {
+        return;
+    }
+    if warnings.len() < MAX_MANIFEST_WARNINGS.saturating_sub(1) {
+        warnings.push(bounded);
+        return;
+    }
+    warnings.truncate(MAX_MANIFEST_WARNINGS.saturating_sub(1));
+    warnings.push(format!(
+        "WARNING_LIMIT_REACHED: manifest warning limit reached ({MAX_MANIFEST_WARNINGS})"
+    ));
 }
 
 fn read_manifest(path: &Path) -> Result<String, String> {
@@ -313,6 +341,7 @@ fn parse_manifest(text: &str) -> Result<ParsedManifest, String> {
     let mut roles: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut in_authorities = false;
     let mut warnings = Vec::new();
+    let mut front_matter_fields = 0usize;
     for line in text.lines() {
         if line.as_bytes().len() > MAX_MANIFEST_LINE_BYTES {
             return Err(format!(
@@ -325,8 +354,9 @@ fn parse_manifest(text: &str) -> Result<ParsedManifest, String> {
             || trimmed.contains("[~]")
             || trimmed.contains("[!]")
         {
-            warnings.push(
-                "manifest contains task checkbox syntax; pointer checkboxes are ignored".into(),
+            push_warning(
+                &mut warnings,
+                "manifest contains task checkbox syntax; pointer checkboxes are ignored",
             );
         }
         if trimmed.eq_ignore_ascii_case("## Source authorities") {
@@ -339,6 +369,14 @@ fn parse_manifest(text: &str) -> Result<ParsedManifest, String> {
         if !in_authorities {
             if let Some((key, value)) = trimmed.split_once(':') {
                 let key = key.trim();
+                if !key.is_empty() {
+                    front_matter_fields = front_matter_fields.saturating_add(1);
+                    if front_matter_fields > MAX_FRONT_MATTER_FIELDS {
+                        return Err(format!(
+                            "front-matter field limit reached ({MAX_FRONT_MATTER_FIELDS})"
+                        ));
+                    }
+                }
                 if matches!(
                     key,
                     "hiveaiDashboardSchema"
@@ -348,11 +386,6 @@ fn parse_manifest(text: &str) -> Result<ParsedManifest, String> {
                         | "dashboardMode"
                         | "refreshPolicy"
                 ) {
-                    if fields.len() >= MAX_FRONT_MATTER_FIELDS {
-                        return Err(format!(
-                            "front-matter field limit reached ({MAX_FRONT_MATTER_FIELDS})"
-                        ));
-                    }
                     fields.insert(key.to_string(), clean_scalar(value));
                 }
             }
@@ -374,6 +407,9 @@ fn parse_manifest(text: &str) -> Result<ParsedManifest, String> {
             _ => continue,
         };
         let paths = extract_paths(value)?;
+        if paths.is_empty() {
+            continue;
+        }
         let entry = roles.entry(role.into()).or_default();
         if entry.len().saturating_add(paths.len()) > MAX_SOURCE_PATHS_PER_ROLE {
             return Err(format!("source path limit reached for {label}"));
@@ -485,6 +521,7 @@ mod tests {
             "# Work\n- [ ] canonical\n",
         )
         .unwrap();
+        fs::create_dir_all(project_dir.path().join(".hiveai")).unwrap();
         let db = DatabaseState::initialize(db_dir.path().to_path_buf()).unwrap();
         let project = register_project(
             &db,
@@ -553,5 +590,81 @@ mod tests {
             TaskAuthorityState::NotCanonicalized
         );
         assert_eq!(unverified.canonical_task_source, None);
+    }
+
+    #[test]
+    fn resolver_accepts_directory_backed_history_and_build_roles() {
+        let (_db_dir, project_dir, db, project_id) = fixture();
+        fs::create_dir_all(project_dir.path().join(".hiveai/history")).unwrap();
+        fs::create_dir_all(project_dir.path().join(".hiveai/build")).unwrap();
+        fs::write(
+            project_dir.path().join(MANIFEST_RELATIVE_PATH),
+            "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\n## Source authorities\nCanonical task source: `TASKS.md`\nProgress/history source: `.hiveai/history/`\nBuild/test metadata: `.hiveai/build/`\n",
+        )
+        .unwrap();
+        let resolution = resolve(&db, &project_id).unwrap();
+        assert_eq!(resolution.manifest_status, ManifestStatus::Valid);
+        assert_eq!(resolution.task_authority, TaskAuthorityState::Canonical);
+        assert_eq!(
+            resolution.roles["progressHistory"][0].status,
+            SourceStatus::Available
+        );
+        assert_eq!(
+            resolution.roles["buildTest"][0].status,
+            SourceStatus::Available
+        );
+    }
+
+    #[test]
+    fn resolver_preserves_canonical_authority_when_secondary_directory_is_missing() {
+        let (_db_dir, project_dir, db, project_id) = fixture();
+        fs::write(
+            project_dir.path().join(MANIFEST_RELATIVE_PATH),
+            "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\n## Source authorities\nCanonical task source: `TASKS.md`\nProgress/history source: `.hiveai/history/`\n",
+        )
+        .unwrap();
+        let resolution = resolve(&db, &project_id).unwrap();
+        assert_eq!(resolution.manifest_status, ManifestStatus::Partial);
+        assert_eq!(resolution.task_authority, TaskAuthorityState::Canonical);
+        assert_eq!(
+            resolution.canonical_task_source.as_deref(),
+            Some("TASKS.md")
+        );
+        assert_eq!(
+            resolution.roles["progressHistory"][0].status,
+            SourceStatus::Missing
+        );
+    }
+
+    #[test]
+    fn resolver_rejects_directory_as_canonical_task_source() {
+        let (_db_dir, project_dir, db, project_id) = fixture();
+        fs::remove_file(project_dir.path().join("TASKS.md")).unwrap();
+        fs::create_dir_all(project_dir.path().join("TASKS.md")).unwrap();
+        fs::write(
+            project_dir.path().join(MANIFEST_RELATIVE_PATH),
+            "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\n## Source authorities\nCanonical task source: `TASKS.md`\n",
+        )
+        .unwrap();
+        let resolution = resolve(&db, &project_id).unwrap();
+        assert_eq!(resolution.manifest_status, ManifestStatus::Stale);
+        assert_eq!(
+            resolution.task_authority,
+            TaskAuthorityState::FallbackM08M09
+        );
+        assert_eq!(resolution.canonical_task_source, None);
+        assert_eq!(
+            resolution.roles["canonicalTask"][0].status,
+            SourceStatus::Rejected
+        );
+    }
+
+    #[test]
+    fn warning_scalar_bound_is_utf8_safe() {
+        let mut warnings = Vec::new();
+        push_warning(&mut warnings, "é".repeat(MAX_WARNING_SCALAR_BYTES));
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].len() <= MAX_WARNING_SCALAR_BYTES);
+        assert!(warnings[0].is_char_boundary(warnings[0].len()));
     }
 }

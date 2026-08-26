@@ -87,7 +87,8 @@ Chronological builder logs. Builder logs are claims/evidence records, not indepe
 - Akilta footer link: PASS/ACCEPTED after native user verification that Chrome opens, H!veAI remains open, and no terminal window appears.
 - M10 Workflow State Machine: PASS/CLOSED.
 - Strict completed milestone count is now 11/20 = 55%.
-- M11 Global Command Center: ACTIVE during this run; final builder state will be IMPLEMENTATION COMPLETE / PENDING INDEPENDENT AUDIT + USER VISUAL ACCEPTANCE.
+- M11 original implementation: historical strict-audit FAIL with 8 MAJOR findings.
+- M11A strict closure remediation: ACTIVE during this run; M11 remains NOT CLOSED and final builder state remains IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT + USER VISUAL/NATIVE ACCEPTANCE.
 - M12 remains blocked behind M11. M11/M12 runtime implementation must incorporate the `.hiveai/PROJECT_DASHBOARD.md` authority manifest system, with only M11 active here.
 
 For exact current status, always defer to `H!veAI/TASKS.md`.

@@ -22,14 +22,14 @@ const records = [
 const snapshot = {
   generatedAt: "2026-08-26T12:00:00Z",
   projects: [
-    { projectId: "project-1", name: "Alpha", registryStatus: "ACTIVE", health: "ATTENTION", manifestStatus: "VALID", taskAuthority: "CANONICAL", provenanceMode: "PROJECT_DASHBOARD", canonicalTaskSource: "TASKS.md", currentTask: { taskId: "task-1", title: "Canonical task", sourcePath: "TASKS.md", parsedStatus: "IN_PROGRESS", workflowState: "IMPLEMENTATION", requiredActor: "Codex" }, currentState: "IMPLEMENTATION", lastAction: null, nextAction: "Run focused tests", allowedActors: ["Codex"], totalTasks: 2, activeTasks: 1, completedTasks: 1, progressPercent: 50, warnings: [] },
-    { projectId: "project-2", name: "Beta", registryStatus: "ACTIVE", health: "UNKNOWN", manifestStatus: "ABSENT", taskAuthority: "NOT_CANONICALIZED", provenanceMode: "PROJECT_DASHBOARD", canonicalTaskSource: null, currentTask: null, currentState: null, lastAction: null, nextAction: null, allowedActors: [], totalTasks: null, activeTasks: null, completedTasks: null, progressPercent: null, warnings: ["No verified task source"] },
+    { projectId: "project-1", name: "Alpha", registryStatus: "ACTIVE", health: "ATTENTION", manifestStatus: "VALID", taskAuthority: "CANONICAL", provenanceMode: "PROJECT_DASHBOARD", canonicalTaskSource: "TASKS.md", currentTask: { taskId: "task-1", title: "Canonical task", sourcePath: "TASKS.md", parsedStatus: "IN_PROGRESS", workflowState: "IMPLEMENTATION", requiredActor: "Codex" }, currentState: "IMPLEMENTATION", lastAction: null, nextAction: "Run focused tests", allowedActors: ["Codex"], totalTasks: 2, activeTasks: 1, completedTasks: 1, progressPercent: 50, warnings: [], refreshStatus: "SUCCESS", refreshAt: "2026-08-26T12:00:00Z", refreshError: null },
+    { projectId: "project-2", name: "Beta", registryStatus: "ACTIVE", health: "UNKNOWN", manifestStatus: "ABSENT", taskAuthority: "NOT_CANONICALIZED", provenanceMode: "PROJECT_DASHBOARD", canonicalTaskSource: null, currentTask: null, currentState: null, lastAction: null, nextAction: null, allowedActors: [], totalTasks: null, activeTasks: null, completedTasks: null, progressPercent: null, warnings: ["No verified task source"], refreshStatus: "DEGRADED", refreshAt: "2026-08-26T12:00:00Z", refreshError: "M09 refresh unavailable" },
   ],
   kpis: { projects: 2, activeTasks: 1, needsAttention: 1, running: 0, completedTasks: 1, healthy: 0, healthDetail: "1 attention", authorityDetail: "1 canonical, 1 not canonicalized" },
   attention: [{ id: "attention-1", projectId: "project-1", projectName: "Alpha", taskId: "task-1", title: "Canonical task", state: "AUDIT_REQUIRED", detail: "Review evidence", category: "TASK" }],
   workQueue: [{ id: "queue-1", projectId: "project-1", projectName: "Alpha", taskId: "task-1", task: "Canonical task", stage: "IMPLEMENTATION", state: "RUNNING", actor: "Codex", updatedAt: "2026-08-26T12:00:00Z", attention: false }],
   recentActivity: [{ id: "activity-1", projectId: "project-1", projectName: "Alpha", kind: "TASK", event: "Task parsed", state: "EVIDENCE", actor: "watcher", occurredAt: "2026-08-26T12:00:00Z" }],
-  engineeringBrief: { facts: [{ label: "Authority", value: "TASKS.md", source: "PROJECT_DASHBOARD" }], recommendation: null },
+  engineeringBrief: { facts: [{ label: "Authority", value: "TASKS.md", source: "PROJECT_DASHBOARD", provenance: { sourceClass: "PROJECT_DASHBOARD", projectId: "project-1", sourcePath: "TASKS.md", evidenceType: "TASK_INTELLIGENCE_SNAPSHOT", evidenceId: null } }], recommendation: null },
   warnings: [],
 };
 
@@ -83,5 +83,13 @@ describe("M11 Command Center evidence surface", () => {
     fireEvent.change(activityScope.getByRole("textbox", { name: "Search recent activity" }), { target: { value: "missing" } });
     expect(activityScope.getByText("No matching activity evidence.")).toBeInTheDocument();
     expect(activityScope.queryAllByText("Task parsed")).toHaveLength(0);
+  });
+
+  it("uses a neutral browser preview identity without fixture actions", async () => {
+    delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+    renderCommandCenter();
+    expect(await screen.findByText("Preview / Native data unavailable")).toBeInTheDocument();
+    expect(screen.queryByText(/FormuLab|Scrubbots/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Scrubbots|placeholder/i })).not.toBeInTheDocument();
   });
 });

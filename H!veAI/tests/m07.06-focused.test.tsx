@@ -137,6 +137,7 @@ function renderLive(path = "/") {
 
 beforeEach(() => {
   liveRecords = records;
+  window.sessionStorage.clear();
   vi.stubGlobal("confirm", () => true);
   invoke.mockClear();
   invoke.mockImplementation(defaultInvoke);
@@ -167,9 +168,11 @@ describe("M07.06 live Registry and Command Center boundary", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Bulk-Edit" }));
     expect(window.location.pathname).toBe("/");
-    expect(
-      screen.getByRole("heading", { name: "Bulk-Edit" }),
-    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: "Bulk-Edit" }),
+      ).toBeInTheDocument(),
+    );
   });
 
   it("command_center_selection_can_switch_between_live_projects", async () => {
@@ -208,6 +211,9 @@ describe("M07.06 live Registry and Command Center boundary", () => {
       ).toBeInTheDocument(),
     );
     fireEvent.click(screen.getByRole("button", { name: "Bulk-Edit" }));
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Bulk-Edit" })).toBeInTheDocument(),
+    );
     fireEvent.click(screen.getByRole("button", { name: /Open cockpit/ }));
     await waitFor(() =>
       expect(window.location.pathname).toBe("/projects/bulk-edit"),
@@ -529,7 +535,7 @@ describe("M07.07 live-Registry / route-race boundary", () => {
     window.history.pushState({}, "", "/");
     const { container } = render(<App />);
     expect(container).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "FormuLab" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Preview / Native data unavailable" })).toBeInTheDocument();
     expect(invoke).not.toHaveBeenCalledWith("hiveai_projects_list", expect.anything());
     expect(screen.queryByRole("heading", { name: "AI-Commerce-HQ" })).not.toBeInTheDocument();
     expect(screen.queryByText("Resolving registered project identity")).not.toBeInTheDocument();
