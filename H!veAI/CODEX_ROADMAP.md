@@ -13,7 +13,7 @@ User-facing roadmap denominator remains **20**. `M00` is the historical rebuild/
 - Pre-M10 Native UX Hotfix X01/X02: PASS/CLOSED after independent source audit plus user native acceptance.
 - M10 original strict audit: historical FAIL with 5 MAJOR findings.
 - M10A remediation, independent re-audit, and Akilta native click acceptance: PASS/CLOSED.
-- M11 original implementation: historical strict-audit FAIL with 8 MAJOR findings; M11A REV4 implementation is complete but its independent strict audit is FAIL with R19-R22 open; M11A REV5 implementation is complete but its independent strict audit is FAIL with R23 open and E11 evidence defects; M11A REV6 full-scalar identity final micro-closure is ACTIVE during this run.
+- M11 original implementation: historical strict-audit FAIL with 8 MAJOR findings; M11A REV4 implementation is complete but its independent strict audit is FAIL with R19-R22 open; M11A REV5 implementation is complete but its independent strict audit is FAIL with R23 open and E11 evidence defects; M11A REV6 implementation is complete with historical source-audit PASS superseded by the deeper REV6 strict audit FAIL with R24-R25 open; M11A REV7 Unicode and structured identity final closure is IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT.
 - M11 remains NOT CLOSED; final builder state will remain IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT + USER VISUAL/NATIVE ACCEPTANCE.
 - M12-M20: planned/blocked; M12 remains blocked behind M11.
 - Strict completed progress is 11/20 = 55% because the pre-M10 hotfix is not a numbered roadmap milestone.
@@ -301,7 +301,7 @@ Packages:
 
 Exit: one-screen truthful portfolio operations dashboard backed by Registry/M08/M09/M10 truth and the Project Dashboard authority manifest system.
 
-Status: ACTIVE during this run; final builder state will be IMPLEMENTATION COMPLETE / PENDING INDEPENDENT AUDIT + USER VISUAL ACCEPTANCE.
+Status: IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT; final builder state remains IMPLEMENTATION COMPLETE / PENDING INDEPENDENT AUDIT + USER VISUAL ACCEPTANCE.
 
 ---
 

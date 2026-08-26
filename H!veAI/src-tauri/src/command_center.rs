@@ -101,6 +101,8 @@ pub struct AttentionItem {
     pub state: String,
     pub detail: String,
     pub category: String,
+    #[serde(skip)]
+    operational_identity: Option<AttentionIdentity>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -553,6 +555,15 @@ fn summarize_project(
                     .map(|event| event.summary.clone())
                     .unwrap_or_else(|| "Workflow state requires attention".into()),
                 category: "WORKFLOW".into(),
+                operational_identity: Some(structured_attention_identity(
+                    "WORKFLOW",
+                    Some(workflow.task_id.clone()),
+                    workflow
+                        .latest_event
+                        .as_ref()
+                        .map(|event| event.summary.as_str())
+                        .unwrap_or("Workflow state requires attention"),
+                )),
             });
         }
         if workflow.current_state.is_running()
@@ -597,6 +608,7 @@ fn summarize_project(
             state: "MISSING".into(),
             detail: "Repair the registered path before project operations resume.".into(),
             category: "REGISTRY".into(),
+            operational_identity: None,
         });
     }
     for (index, warning) in dashboard
@@ -615,6 +627,7 @@ fn summarize_project(
             state: dashboard.manifest_status.clone().into_serialized(),
             detail: warning.clone(),
             category: "PROJECT_DASHBOARD".into(),
+            operational_identity: None,
         });
     }
     let mut bounded_warnings = Vec::new();
@@ -870,7 +883,7 @@ fn materialized_operational_evidence(
         .collect::<Vec<_>>();
     let mut blocker_keys = HashSet::new();
     for blocker in &meaningful_blockers {
-        let blocker_key = normalize_attention_source(blocker);
+        let blocker_key = normalize_operational_identity(blocker);
         if !blocker_keys.insert(blocker_key.clone()) {
             continue;
         }
@@ -892,6 +905,11 @@ fn materialized_operational_evidence(
             .into(),
             detail: blocker.clone(),
             category: "PROJECT_DASHBOARD".into(),
+            operational_identity: Some(structured_attention_identity(
+                "PROJECT_DASHBOARD_BLOCKER",
+                dashboard_task_id.clone(),
+                blocker,
+            )),
         });
     }
     if let Some(waiting_on) = materialized
@@ -908,7 +926,7 @@ fn materialized_operational_evidence(
             id: stable_materialized_id(
                 &project.id,
                 "WAITING",
-                &normalize_attention_source(waiting_on),
+                &normalize_operational_identity(waiting_on),
                 0,
             ),
             project_id: project.id.clone(),
@@ -918,6 +936,11 @@ fn materialized_operational_evidence(
             state: "WAITING".into(),
             detail: format!("Waiting on: {waiting_on}"),
             category: "PROJECT_DASHBOARD".into(),
+            operational_identity: Some(structured_attention_identity(
+                "PROJECT_DASHBOARD_WAITING",
+                dashboard_task_id.clone(),
+                waiting_on,
+            )),
         });
     }
     let status_attention = materialized
@@ -957,6 +980,15 @@ fn materialized_operational_evidence(
                 materialized.health.as_deref().unwrap_or("UNKNOWN")
             ),
             category: "PROJECT_DASHBOARD".into(),
+            operational_identity: Some(structured_attention_identity(
+                "PROJECT_DASHBOARD_STATUS",
+                dashboard_task_id.clone(),
+                &format!(
+                    "{}:{}",
+                    materialized.project_status.as_deref().unwrap_or("UNKNOWN"),
+                    materialized.health.as_deref().unwrap_or("UNKNOWN")
+                ),
+            )),
         });
     }
     let mut quality_occurrences = HashMap::new();
@@ -964,8 +996,8 @@ fn materialized_operational_evidence(
         if explicit_materialized_failure(&fact.value) {
             let quality_key = format!(
                 "{}:{}",
-                normalize_attention_source(&fact.label),
-                normalize_attention_source(&fact.value)
+                normalize_operational_identity(&fact.label),
+                normalize_operational_identity(&fact.value)
             );
             let occurrence = materialized_occurrence(&mut quality_occurrences, &quality_key);
             attention.push(AttentionItem {
@@ -977,6 +1009,11 @@ fn materialized_operational_evidence(
                 state: "FAILED".into(),
                 detail: format!("{}: {}", fact.label, fact.value),
                 category: "PROJECT_DASHBOARD".into(),
+                operational_identity: Some(structured_attention_identity(
+                    "PROJECT_DASHBOARD_QUALITY",
+                    dashboard_task_id.clone(),
+                    &fact.label,
+                )),
             });
         }
     }
@@ -987,10 +1024,10 @@ fn materialized_operational_evidence(
         };
         let work_key = format!(
             "{}:{}:{}:{}",
-            normalize_attention_source(&work.item),
-            normalize_attention_source(&work.status),
-            normalize_attention_source(&work.owner_actor),
-            normalize_attention_source(&work.evidence_source)
+            normalize_operational_identity(&work.item),
+            normalize_operational_identity(&work.status),
+            normalize_operational_identity(&work.owner_actor),
+            normalize_operational_identity(&work.evidence_source)
         );
         let occurrence = materialized_occurrence(&mut work_occurrences, &work_key);
         let task_id = if work.id.is_empty() {
@@ -1043,14 +1080,13 @@ fn materialized_occurrence(counts: &mut HashMap<String, usize>, identity: &str) 
     occurrence
 }
 
-fn normalize_attention_source(value: &str) -> String {
-    // Materialized values are bounded by the Project Dashboard parser; retain the full scalar for identity.
+fn normalize_operational_identity(value: &str) -> String {
+    // Preserve the full parser-bounded UTF-8 scalar; fold whitespace and Unicode case only.
     value
-        .split(|character: char| !character.is_ascii_alphanumeric())
-        .filter(|token| !token.is_empty())
-        .map(|token| token.to_ascii_lowercase())
+        .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")
+        .to_lowercase()
 }
 
 fn materialized_values_overlap(left: &str, right: &str) -> bool {
@@ -1060,11 +1096,7 @@ fn materialized_values_overlap(left: &str, right: &str) -> bool {
 }
 
 fn normalize_materialized_text(value: &str) -> String {
-    value
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .to_ascii_lowercase()
+    normalize_operational_identity(value)
 }
 
 fn materialized_queue_state(value: &str) -> Option<&'static str> {
@@ -1122,41 +1154,20 @@ struct AttentionIdentity {
     source: String,
 }
 
+fn structured_attention_identity(
+    evidence_class: &str,
+    task_id: Option<String>,
+    source: &str,
+) -> AttentionIdentity {
+    AttentionIdentity {
+        evidence_class: evidence_class.into(),
+        task_id,
+        source: normalize_operational_identity(source),
+    }
+}
+
 fn attention_identity(item: &AttentionItem) -> Option<AttentionIdentity> {
-    let (evidence_class, source) = if item.category == "PROJECT_DASHBOARD" {
-        let class = item.id.split(':').nth(1)?.to_string();
-        let source = match class.as_str() {
-            "QUALITY" => item
-                .detail
-                .split_once(':')
-                .map(|(label, _)| label)
-                .unwrap_or(&item.detail),
-            "WAITING" => item
-                .detail
-                .strip_prefix("Waiting on:")
-                .unwrap_or(&item.detail),
-            _ => &item.detail,
-        };
-        (format!("PROJECT_DASHBOARD_{class}"), source.to_string())
-    } else {
-        let source = match item.category.as_str() {
-            "TEST_RUN" => item
-                .detail
-                .strip_prefix("Test check:")
-                .unwrap_or(&item.detail),
-            "AUDIT" => item
-                .detail
-                .strip_prefix("Audit check:")
-                .unwrap_or(&item.detail),
-            _ => &item.detail,
-        };
-        (item.category.clone(), source.to_string())
-    };
-    Some(AttentionIdentity {
-        evidence_class,
-        task_id: item.task_id.clone(),
-        source: normalize_attention_source(&source),
-    })
+    item.operational_identity.clone()
 }
 
 fn attention_identities_match(dashboard: &AttentionItem, stronger: &AttentionItem) -> bool {
@@ -1236,13 +1247,13 @@ fn append_materialized_activity(
             {
                 continue;
             }
-            let identity = normalize_attention_source(event);
+            let identity = normalize_operational_identity(event);
             let occurrence = activity
                 .iter()
                 .filter(|item| {
                     item.project_id == summary.project_id
                         && item.kind == "PROJECT_DASHBOARD"
-                        && normalize_attention_source(&item.event) == identity
+                        && normalize_operational_identity(&item.event) == identity
                 })
                 .count();
             activity.push(ActivityItem {
@@ -1298,6 +1309,11 @@ fn read_evidence_items(
                     state: row.get(4)?,
                     detail: format!("Test check: {}", row.get::<_, String>(5)?),
                     category: "TEST_RUN".into(),
+                    operational_identity: Some(structured_attention_identity(
+                        "TEST_RUN",
+                        row.get(3)?,
+                        &row.get::<_, String>(5)?,
+                    )),
                 })
             })
             .map_err(|e| format!("read failed test evidence: {e}"))?;
@@ -1322,6 +1338,11 @@ fn read_evidence_items(
                         row.get::<_, Option<String>>(5)?.unwrap_or_default()
                     ),
                     category: "AUDIT".into(),
+                    operational_identity: Some(structured_attention_identity(
+                        "AUDIT",
+                        row.get(3)?,
+                        &row.get::<_, Option<String>>(5)?.unwrap_or_default(),
+                    )),
                 })
             })
             .map_err(|e| format!("read failed audit evidence: {e}"))?;
@@ -1343,6 +1364,11 @@ fn read_evidence_items(
                     state: row.get(5)?,
                     detail: row.get::<_, String>(4)?,
                     category: "PERMISSION".into(),
+                    operational_identity: Some(structured_attention_identity(
+                        "PERMISSION",
+                        row.get(3)?,
+                        &row.get::<_, String>(4)?,
+                    )),
                 })
             })
             .map_err(|e| format!("read permission requests: {e}"))?;
@@ -2194,6 +2220,336 @@ mod tests {
             exact_match.kpis.needs_attention,
             Some(exact_match.attention.len())
         );
+    }
+
+    #[test]
+    fn m11a_r24_unicode_blocker_activity_and_scalar_identity_are_collision_safe() {
+        let blocker_a = "build ğ blocker";
+        let blocker_b = "build ü blocker";
+        let activity_a = "deploy ç release";
+        let activity_b = "deploy ş release";
+        let long_unicode = format!("bounded {} fact", "λ".repeat(480));
+        let manifest = format!(
+            "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\n## Source authorities\nCanonical task source: `TASKS.md`\n## H!veAI live status\nWaiting on: owner ğ\n## Current work\n| ID | Item | Status | Owner/actor | Evidence/source |\n| --- | --- | --- | --- | --- |\n| | work ğ | ACTIVE | CODEX | dashboard |\n| | work ü | ACTIVE | CODEX | dashboard |\n## Blockers and waiting\n- {blocker_a}\n- {blocker_a}\n- {blocker_b}\n- {long_unicode}\n## Recent meaningful activity\n- {activity_a}\n- {activity_b}\n"
+        );
+        let (_db_dir, project_dir, database, _project_id, _tasks) =
+            fixture("# Work\n- [ ] internal task\n", Some(&manifest));
+        let first = snapshot(&database).unwrap();
+        let blockers = first
+            .attention
+            .iter()
+            .filter(|item| item.category == "PROJECT_DASHBOARD")
+            .filter(|item| item.detail == blocker_a || item.detail == blocker_b)
+            .collect::<Vec<_>>();
+        assert_eq!(blockers.len(), 2);
+        assert_ne!(blockers[0].id, blockers[1].id);
+        assert!(blockers
+            .iter()
+            .all(|item| item.id.len() == "PROJECT_DASHBOARD:BLOCKER:".len() + 16));
+        assert!(blockers
+            .iter()
+            .all(|item| !item.id.contains("blocker") && !item.id.contains("ğ")));
+        assert!(first
+            .attention
+            .iter()
+            .any(|item| item.detail.starts_with("bounded λ")));
+        let waiting_id = first
+            .attention
+            .iter()
+            .find(|item| item.detail == "Waiting on: owner ğ")
+            .unwrap()
+            .id
+            .clone();
+        let work_rows = first
+            .work_queue
+            .iter()
+            .filter(|item| item.id.starts_with("PROJECT_DASHBOARD:WORK:"))
+            .filter(|item| item.task == "work ğ" || item.task == "work ü")
+            .collect::<Vec<_>>();
+        assert_eq!(work_rows.len(), 2);
+        assert_ne!(work_rows[0].id, work_rows[1].id);
+        assert!(work_rows
+            .iter()
+            .all(|item| item.task_id.len() == "PROJECT_DASHBOARD:TASK:".len() + 16));
+
+        let activities = first
+            .recent_activity
+            .iter()
+            .filter(|item| item.kind == "PROJECT_DASHBOARD")
+            .filter(|item| item.event == activity_a || item.event == activity_b)
+            .collect::<Vec<_>>();
+        assert_eq!(activities.len(), 2);
+        assert_ne!(activities[0].id, activities[1].id);
+        assert!(activities
+            .iter()
+            .all(|item| item.id.len() == "PROJECT_DASHBOARD:ACTIVITY:".len() + 16));
+        assert_eq!(first.kpis.needs_attention, Some(first.attention.len()));
+
+        let blocker_a_id = blockers
+            .iter()
+            .find(|item| item.detail == blocker_a)
+            .unwrap()
+            .id
+            .clone();
+        let blocker_b_id = blockers
+            .iter()
+            .find(|item| item.detail == blocker_b)
+            .unwrap()
+            .id
+            .clone();
+        let activity_a_id = activities
+            .iter()
+            .find(|item| item.event == activity_a)
+            .unwrap()
+            .id
+            .clone();
+        let activity_b_id = activities
+            .iter()
+            .find(|item| item.event == activity_b)
+            .unwrap()
+            .id
+            .clone();
+        let repeated = snapshot(&database).unwrap();
+        assert_eq!(
+            repeated
+                .attention
+                .iter()
+                .find(|item| item.detail == blocker_a)
+                .unwrap()
+                .id,
+            blocker_a_id
+        );
+        assert_eq!(
+            repeated
+                .recent_activity
+                .iter()
+                .find(|item| item.event == activity_b)
+                .unwrap()
+                .id,
+            activity_b_id
+        );
+        assert_eq!(
+            repeated
+                .attention
+                .iter()
+                .find(|item| item.detail == "Waiting on: owner ğ")
+                .unwrap()
+                .id,
+            waiting_id
+        );
+
+        let with_unrelated_prefix = format!(
+            "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\n## Source authorities\nCanonical task source: `TASKS.md`\n## Blockers and waiting\n- unrelated blocker\n- {blocker_a}\n- {blocker_a}\n- {blocker_b}\n- {long_unicode}\n## Recent meaningful activity\n- unrelated activity\n- {activity_a}\n- {activity_b}\n"
+        );
+        fs::write(
+            project_dir
+                .path()
+                .join(project_dashboard::MANIFEST_RELATIVE_PATH),
+            with_unrelated_prefix,
+        )
+        .unwrap();
+        let inserted = snapshot(&database).unwrap();
+        assert_eq!(
+            inserted
+                .attention
+                .iter()
+                .find(|item| item.detail == blocker_a)
+                .unwrap()
+                .id,
+            blocker_a_id
+        );
+        assert_eq!(
+            inserted
+                .attention
+                .iter()
+                .find(|item| item.detail == blocker_b)
+                .unwrap()
+                .id,
+            blocker_b_id
+        );
+        assert_eq!(
+            inserted
+                .recent_activity
+                .iter()
+                .find(|item| item.event == activity_a)
+                .unwrap()
+                .id,
+            activity_a_id
+        );
+        assert_eq!(
+            inserted
+                .recent_activity
+                .iter()
+                .find(|item| item.event == activity_b)
+                .unwrap()
+                .id,
+            activity_b_id
+        );
+        assert_eq!(
+            inserted.kpis.needs_attention,
+            Some(inserted.attention.len())
+        );
+    }
+
+    #[test]
+    fn m11a_r25_structured_quality_identity_preserves_colons_and_display_independence() {
+        let dashboard_label = "build: windows: release";
+        let (_db_dir, project_dir, database, project_id, tasks) =
+            fixture("# Work\n- [ ] internal task\n", Some(canonical_manifest()));
+        let task_id = tasks[0].id.clone();
+        let manifest = format!(
+            "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\n## Source authorities\nCanonical task source: `TASKS.md`\n## H!veAI live status\nCurrent task ID: {task_id}\n## Quality and verification\n| Check | Result | Evidence |\n| --- | --- | --- |\n| {dashboard_label} | FAIL | dashboard |\n"
+        );
+        fs::write(
+            project_dir
+                .path()
+                .join(project_dashboard::MANIFEST_RELATIVE_PATH),
+            manifest,
+        )
+        .unwrap();
+        let connection = database.open_connection().unwrap();
+        connection
+            .execute(
+                "INSERT INTO test_runs (id, project_id, task_id, command, result, started_at, finished_at) VALUES ('colon-test', ?1, ?2, 'build', 'FAIL', '2026-08-27T10:00:00Z', '2026-08-27T10:01:00Z')",
+                rusqlite::params![project_id, task_id],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO audits (id, project_id, task_id, result, summary, created_at) VALUES ('colon-audit', ?1, ?2, 'FAIL', 'build', '2026-08-27T10:02:00Z')",
+                rusqlite::params![project_id, task_id],
+            )
+            .unwrap();
+
+        let distinct = snapshot(&database).unwrap();
+        assert!(distinct.attention.iter().any(|item| {
+            item.category == "PROJECT_DASHBOARD"
+                && item.detail == format!("{dashboard_label}: FAIL")
+        }));
+        assert!(distinct
+            .attention
+            .iter()
+            .any(|item| item.category == "TEST_RUN"));
+        assert!(distinct
+            .attention
+            .iter()
+            .any(|item| item.category == "AUDIT"));
+        assert_eq!(
+            distinct.kpis.needs_attention,
+            Some(distinct.attention.len())
+        );
+
+        connection
+            .execute(
+                "UPDATE test_runs SET command=?1 WHERE id='colon-test'",
+                [dashboard_label],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "UPDATE audits SET summary=?1 WHERE id='colon-audit'",
+                [dashboard_label],
+            )
+            .unwrap();
+        let exact = snapshot(&database).unwrap();
+        assert!(!exact
+            .attention
+            .iter()
+            .any(|item| item.category == "PROJECT_DASHBOARD"));
+
+        let mut dashboard = AttentionItem {
+            id: "PROJECT_DASHBOARD:QUALITY:display-independent".into(),
+            project_id: "project".into(),
+            project_name: "Project".into(),
+            task_id: Some("task".into()),
+            title: "Dashboard failure".into(),
+            state: "FAILED".into(),
+            detail: "display label: FAILED".into(),
+            category: "PROJECT_DASHBOARD".into(),
+            operational_identity: Some(structured_attention_identity(
+                "PROJECT_DASHBOARD_QUALITY",
+                Some("task".into()),
+                dashboard_label,
+            )),
+        };
+        let mut stronger = AttentionItem {
+            id: "test-failure:display-independent".into(),
+            project_id: "project".into(),
+            project_name: "Project".into(),
+            task_id: Some("task".into()),
+            title: "Test failure".into(),
+            state: "FAIL".into(),
+            detail: "Test check: an unrelated rendering".into(),
+            category: "TEST_RUN".into(),
+            operational_identity: Some(structured_attention_identity(
+                "TEST_RUN",
+                Some("task".into()),
+                dashboard_label,
+            )),
+        };
+        assert!(attention_identities_match(&dashboard, &stronger));
+        dashboard.detail = "completely different display punctuation".into();
+        stronger.detail = "another display string".into();
+        assert!(attention_identities_match(&dashboard, &stronger));
+    }
+
+    #[test]
+    fn m11a_r24_r25_unicode_colon_identity_remains_conservative() {
+        let dashboard_label = "dağıtım: türkiye";
+        let (_db_dir, project_dir, database, project_id, tasks) =
+            fixture("# Work\n- [ ] internal task\n", Some(canonical_manifest()));
+        let task_id = tasks[0].id.clone();
+        let manifest = format!(
+            "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\n## Source authorities\nCanonical task source: `TASKS.md`\n## H!veAI live status\nCurrent task ID: {task_id}\n## Quality and verification\n| Check | Result | Evidence |\n| --- | --- | --- |\n| {dashboard_label} | FAIL | dashboard |\n"
+        );
+        fs::write(
+            project_dir
+                .path()
+                .join(project_dashboard::MANIFEST_RELATIVE_PATH),
+            manifest,
+        )
+        .unwrap();
+        let connection = database.open_connection().unwrap();
+        connection
+            .execute(
+                "INSERT INTO test_runs (id, project_id, task_id, command, result, started_at, finished_at) VALUES ('unicode-test', ?1, ?2, 'dagitim', 'FAIL', '2026-08-27T11:00:00Z', '2026-08-27T11:01:00Z')",
+                rusqlite::params![project_id, task_id],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO audits (id, project_id, task_id, result, summary, created_at) VALUES ('unicode-audit', ?1, ?2, 'FAIL', 'dağıtım', '2026-08-27T11:02:00Z')",
+                rusqlite::params![project_id, task_id],
+            )
+            .unwrap();
+        let distinct = snapshot(&database).unwrap();
+        assert!(distinct.attention.iter().any(|item| {
+            item.category == "PROJECT_DASHBOARD"
+                && item.detail == format!("{dashboard_label}: FAIL")
+        }));
+        assert_eq!(
+            distinct.kpis.needs_attention,
+            Some(distinct.attention.len())
+        );
+
+        connection
+            .execute(
+                "UPDATE test_runs SET command=?1 WHERE id='unicode-test'",
+                [dashboard_label],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "UPDATE audits SET summary=?1 WHERE id='unicode-audit'",
+                [dashboard_label],
+            )
+            .unwrap();
+        let exact = snapshot(&database).unwrap();
+        assert!(!exact
+            .attention
+            .iter()
+            .any(|item| item.category == "PROJECT_DASHBOARD"));
+        assert_eq!(exact.kpis.needs_attention, Some(exact.attention.len()));
     }
 
     #[test]

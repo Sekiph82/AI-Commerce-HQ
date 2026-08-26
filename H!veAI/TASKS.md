@@ -32,7 +32,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition
 - M10 original strict audit = historical FAIL with 5 MAJOR findings.
 - M10A remediation, independent re-audit, and Akilta native click acceptance are complete; Akilta footer link = PASS/ACCEPTED.
 - Original M11 implementation is a historical strict-audit FAIL with 8 MAJOR findings.
-- M11A REV4 implementation is complete, the independent REV4 strict audit is FAIL with R19-R22 open, and M11A REV5 implementation is complete but its independent strict audit is FAIL with R23 open and E11 evidence defects; M11A REV6 full-scalar identity final micro-closure is ACTIVE during this run. M11 remains NOT CLOSED and user visual/native acceptance remains pending.
+- M11A REV4 implementation is complete, the independent REV4 strict audit is FAIL with R19-R22 open, M11A REV5 implementation is complete but its independent strict audit is FAIL with R23 open and E11 evidence defects, and M11A REV6 implementation is complete with historical source-audit PASS superseded by the deeper REV6 strict audit FAIL with R24-R25 open; M11A REV7 Unicode and structured identity final closure is IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT. M11 remains NOT CLOSED and user visual/native acceptance remains pending.
 - M11/M12 are the runtime consumers of the `.hiveai/PROJECT_DASHBOARD.md` authority system; only M11 scope is active in this run.
 
 ---
@@ -978,7 +978,7 @@ M10A remediation, independent re-audit, and Akilta footer native click acceptanc
 - [ ] User visual acceptance if layout materially changes.
 - [ ] Independent strict audit.
 
-M11A REV6 ACTIVE during this run. M11 remains NOT CLOSED. M12 remains BLOCKED. Final builder state will remain IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT + USER VISUAL ACCEPTANCE.
+M11A REV7 implementation is complete pending independent re-audit. M11 remains NOT CLOSED. M12 remains BLOCKED. Final builder state remains IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT + USER VISUAL ACCEPTANCE.
 
 ---
 
