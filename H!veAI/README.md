@@ -30,7 +30,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is used for traceability and 
 
 ## Current development status
 
-- M00-M09: PASS/CLOSED.
+- M00-M10: PASS/CLOSED.
 - M09 Task Intelligence Parser: PASS/CLOSED after independent M09D final strict audit.
 - M09 original implementation: historical strict-audit FAIL.
 - M09A remediation: historical strict re-audit FAIL after two residual findings remained.
@@ -38,10 +38,12 @@ Package numbering such as `M08.01`, `M08.02`, etc. is used for traceability and 
 - Pre-M10 Native UX Hotfix X01/X02: PASS/CLOSED after independent source audit plus user native acceptance.
 - X01 terminal/console popup suppression: accepted fixed after approximately 45 minutes of native runtime with no unwanted terminal windows.
 - X02 startup intro audio/replay behavior: accepted fixed; audio works and the intro does not replay during same-process route navigation.
-- Strict completed roadmap progress remains 10/20 = 50% because the pre-M10 hotfix is not a numbered milestone.
 - M10 original strict audit: historical FAIL with 5 MAJOR findings.
-- M10A strict-closure remediation: IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT; M10 remains pending independent re-audit.
-- Akilta footer link: implementation in this run; native click acceptance remains PENDING USER ACCEPTANCE.
-- M11/M12 remain planned behind M10; Project Dashboard manifest ingestion is reserved for their runtime implementation.
+- M10A strict-closure remediation: independent re-audit closed all production MAJOR findings.
+- Akilta footer link: PASS/ACCEPTED after native user verification that Chrome opens, H!veAI remains open, and no terminal window appears.
+- M10 Workflow State Machine: PASS/CLOSED.
+- Strict completed roadmap progress is now 11/20 = 55%.
+- M11 Global Command Center: READY.
+- M12 remains blocked behind M11; Project Dashboard manifest ingestion is part of the M11/M12 runtime plan.
 
 For exact live status, acceptance state, and every completed/planned package from M00 through M20, use `TASKS.md` as the canonical source of truth.
