@@ -1044,13 +1044,13 @@ fn materialized_occurrence(counts: &mut HashMap<String, usize>, identity: &str) 
 }
 
 fn normalize_attention_source(value: &str) -> String {
-    let normalized = value
+    // Materialized values are bounded by the Project Dashboard parser; retain the full scalar for identity.
+    value
         .split(|character: char| !character.is_ascii_alphanumeric())
         .filter(|token| !token.is_empty())
         .map(|token| token.to_ascii_lowercase())
         .collect::<Vec<_>>()
-        .join(" ");
-    normalized.chars().take(256).collect()
+        .join(" ")
 }
 
 fn materialized_values_overlap(left: &str, right: &str) -> bool {
@@ -1979,6 +1979,221 @@ mod tests {
         assert!(!snapshot.work_queue.iter().any(|item| {
             item.task == "Same operational task" && item.id.starts_with("PROJECT_DASHBOARD:")
         }));
+    }
+
+    #[test]
+    fn m11a_r23_full_scalar_blocker_and_activity_identity_is_collision_safe() {
+        let prefix = "x".repeat(256);
+        let blocker_a = format!("{prefix} suffix-alpha");
+        let blocker_b = format!("{prefix} suffix-beta");
+        let activity_a = format!("{prefix} activity-alpha");
+        let activity_b = format!("{prefix} activity-beta");
+        let manifest = format!(
+            "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\n## Source authorities\nCanonical task source: `TASKS.md`\n## Blockers and waiting\n- {blocker_a}\n- {blocker_a}\n- {blocker_b}\n## Recent meaningful activity\n- {activity_a}\n- {activity_b}\n"
+        );
+        let (_db_dir, project_dir, database, _project_id, _tasks) =
+            fixture("# Work\n- [ ] internal task\n", Some(&manifest));
+        let first = snapshot(&database).unwrap();
+        let first_blockers = first
+            .attention
+            .iter()
+            .filter(|item| item.category == "PROJECT_DASHBOARD")
+            .filter(|item| item.detail == blocker_a || item.detail == blocker_b)
+            .collect::<Vec<_>>();
+        assert_eq!(first_blockers.len(), 2);
+        assert_ne!(first_blockers[0].id, first_blockers[1].id);
+        assert!(first_blockers
+            .iter()
+            .all(|item| item.id.len() == "PROJECT_DASHBOARD:BLOCKER:".len() + 16));
+        assert!(first_blockers
+            .iter()
+            .all(|item| !item.id.contains("suffix-alpha") && !item.id.contains("suffix-beta")));
+
+        let first_activity = first
+            .recent_activity
+            .iter()
+            .filter(|item| item.kind == "PROJECT_DASHBOARD")
+            .filter(|item| item.event == activity_a || item.event == activity_b)
+            .collect::<Vec<_>>();
+        assert_eq!(first_activity.len(), 2);
+        assert_ne!(first_activity[0].id, first_activity[1].id);
+        assert!(first_activity
+            .iter()
+            .all(|item| item.id.len() == "PROJECT_DASHBOARD:ACTIVITY:".len() + 16));
+        assert_eq!(first.kpis.needs_attention, Some(first.attention.len()));
+
+        let blocker_a_id = first_blockers
+            .iter()
+            .find(|item| item.detail == blocker_a)
+            .unwrap()
+            .id
+            .clone();
+        let blocker_b_id = first_blockers
+            .iter()
+            .find(|item| item.detail == blocker_b)
+            .unwrap()
+            .id
+            .clone();
+        let activity_a_id = first_activity
+            .iter()
+            .find(|item| item.event == activity_a)
+            .unwrap()
+            .id
+            .clone();
+        let activity_b_id = first_activity
+            .iter()
+            .find(|item| item.event == activity_b)
+            .unwrap()
+            .id
+            .clone();
+        let second = snapshot(&database).unwrap();
+        for (detail, id) in [(&blocker_a, &blocker_a_id), (&blocker_b, &blocker_b_id)] {
+            assert_eq!(
+                second
+                    .attention
+                    .iter()
+                    .find(|item| item.detail == *detail)
+                    .unwrap()
+                    .id,
+                *id
+            );
+        }
+        for (event, id) in [(&activity_a, &activity_a_id), (&activity_b, &activity_b_id)] {
+            assert_eq!(
+                second
+                    .recent_activity
+                    .iter()
+                    .find(|item| item.event == *event)
+                    .unwrap()
+                    .id,
+                *id
+            );
+        }
+
+        let with_unrelated_prefix = format!(
+            "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\n## Source authorities\nCanonical task source: `TASKS.md`\n## Blockers and waiting\n- unrelated preceding blocker\n- {blocker_a}\n- {blocker_a}\n- {blocker_b}\n## Recent meaningful activity\n- unrelated preceding activity\n- {activity_a}\n- {activity_b}\n"
+        );
+        fs::write(
+            project_dir
+                .path()
+                .join(project_dashboard::MANIFEST_RELATIVE_PATH),
+            with_unrelated_prefix,
+        )
+        .unwrap();
+        let third = snapshot(&database).unwrap();
+        for (detail, id) in [(&blocker_a, &blocker_a_id), (&blocker_b, &blocker_b_id)] {
+            assert_eq!(
+                third
+                    .attention
+                    .iter()
+                    .find(|item| item.detail == *detail)
+                    .unwrap()
+                    .id,
+                *id
+            );
+        }
+        for (event, id) in [(&activity_a, &activity_a_id), (&activity_b, &activity_b_id)] {
+            assert_eq!(
+                third
+                    .recent_activity
+                    .iter()
+                    .find(|item| item.event == *event)
+                    .unwrap()
+                    .id,
+                *id
+            );
+        }
+    }
+
+    #[test]
+    fn m11a_r23_long_quality_identity_requires_full_match_for_deduplication() {
+        let prefix = "quality".repeat(37);
+        let dashboard_check = format!("{prefix} dashboard-suffix");
+        let prefix_only_test = format!("{prefix} persisted-test-suffix");
+        let prefix_only_audit = format!("{prefix} persisted-audit-suffix");
+        let (_db_dir, project_dir, database, project_id, tasks) =
+            fixture("# Work\n- [ ] internal task\n", Some(canonical_manifest()));
+        let task_id = tasks[0].id.clone();
+        let manifest = format!(
+            "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\n## Source authorities\nCanonical task source: `TASKS.md`\n## H!veAI live status\nCurrent task ID: {task_id}\n## Quality and verification\n| Check | Result | Evidence |\n| --- | --- | --- |\n| {dashboard_check} | FAIL | dashboard |\n"
+        );
+        fs::write(
+            project_dir
+                .path()
+                .join(project_dashboard::MANIFEST_RELATIVE_PATH),
+            manifest,
+        )
+        .unwrap();
+        let connection = database.open_connection().unwrap();
+        connection
+            .execute(
+                "INSERT INTO test_runs (id, project_id, task_id, command, result, started_at, finished_at) VALUES ('long-prefix-test', ?1, ?2, ?3, 'FAIL', '2026-08-26T10:00:00Z', '2026-08-26T10:01:00Z')",
+                rusqlite::params![project_id, task_id, prefix_only_test],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO audits (id, project_id, task_id, result, summary, created_at) VALUES ('long-prefix-audit', ?1, ?2, 'FAIL', ?3, '2026-08-26T10:02:00Z')",
+                rusqlite::params![project_id, task_id, prefix_only_audit],
+            )
+            .unwrap();
+
+        let prefix_only = snapshot(&database).unwrap();
+        assert_eq!(
+            prefix_only
+                .attention
+                .iter()
+                .filter(|item| item.category == "PROJECT_DASHBOARD")
+                .count(),
+            1
+        );
+        assert!(prefix_only
+            .attention
+            .iter()
+            .any(|item| item.category == "TEST_RUN"));
+        assert!(prefix_only
+            .attention
+            .iter()
+            .any(|item| item.category == "AUDIT"));
+        assert_eq!(
+            prefix_only.kpis.needs_attention,
+            Some(prefix_only.attention.len())
+        );
+        let quality_id = prefix_only
+            .attention
+            .iter()
+            .find(|item| item.category == "PROJECT_DASHBOARD")
+            .unwrap()
+            .id
+            .clone();
+        assert_eq!(quality_id.len(), "PROJECT_DASHBOARD:QUALITY:".len() + 16);
+        assert!(!quality_id.contains("dashboard-suffix"));
+
+        connection
+            .execute(
+                "UPDATE test_runs SET command=?1 WHERE id='long-prefix-test'",
+                [&dashboard_check],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "UPDATE audits SET summary=?1 WHERE id='long-prefix-audit'",
+                [&dashboard_check],
+            )
+            .unwrap();
+        let exact_match = snapshot(&database).unwrap();
+        assert_eq!(
+            exact_match
+                .attention
+                .iter()
+                .filter(|item| item.category == "PROJECT_DASHBOARD")
+                .count(),
+            0
+        );
+        assert_eq!(
+            exact_match.kpis.needs_attention,
+            Some(exact_match.attention.len())
+        );
     }
 
     #[test]

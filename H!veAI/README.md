@@ -44,7 +44,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is used for traceability and 
 - M10 Workflow State Machine: PASS/CLOSED.
 - Strict completed roadmap progress is now 11/20 = 55%.
 - M11 original implementation: historical strict-audit FAIL with 8 MAJOR findings.
-- M11A REV4 implementation is complete, but the independent REV4 strict audit is FAIL with R19-R22 open; M11A REV5 final attention truth and identity micro-closure is ACTIVE during this run. M11 remains NOT CLOSED and final builder state remains IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT + USER VISUAL/NATIVE ACCEPTANCE.
+- M11A REV4 implementation is complete, the independent REV4 strict audit is FAIL with R19-R22 open, and M11A REV5 implementation is complete but its independent strict audit is FAIL with R23 open and E11 evidence defects; M11A REV6 full-scalar identity final micro-closure is ACTIVE during this run. M11 remains NOT CLOSED and final builder state remains IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT + USER VISUAL/NATIVE ACCEPTANCE.
 - M12 remains blocked behind M11; Project Dashboard manifest ingestion is part of the M11/M12 runtime plan, with only M11 active here.
 
 For exact live status, acceptance state, and every completed/planned package from M00 through M20, use `TASKS.md` as the canonical source of truth.
