@@ -166,9 +166,18 @@ impl WatcherManager {
         let worker_inner = Arc::clone(&inner);
         let worker_database = database.clone();
         let worker_app_handle = app_handle.clone();
+        let worker_sender = sender.clone();
         let worker = thread::Builder::new()
             .name("hiveai-filesystem-watcher".to_string())
-            .spawn(move || worker_loop(worker_database, worker_inner, receiver, worker_app_handle))
+            .spawn(move || {
+                worker_loop(
+                    worker_database,
+                    worker_inner,
+                    receiver,
+                    worker_app_handle,
+                    worker_sender,
+                )
+            })
             .map_err(|error| format!("start H!veAI filesystem watcher worker: {error}"))?;
         let manager = Self {
             database,
@@ -260,132 +269,145 @@ impl WatcherManager {
                         )
                 })
                 .unwrap_or(false);
-        let status = ProjectWatcherStatus {
-            project_id: project.id.clone(),
-            state: if available { "WATCHING" } else { "MISSING" }.to_string(),
-            watcher_health: if available { "HEALTHY" } else { "DEGRADED" }.to_string(),
-            available,
-            last_event_at: None,
-            last_refresh_at: None,
-            evidence_generated_at: None,
-            changed_path_count: 0,
-            rescan_required: false,
-        };
-        let mut inner = self.inner.lock().expect("watcher state lock");
-        inner
-            .statuses
-            .entry(project.id.clone())
-            .and_modify(|current| {
-                current.state = status.state.clone();
-                current.watcher_health = status.watcher_health.clone();
-                current.available = status.available;
-            })
-            .or_insert(status);
-        let root = PathBuf::from(&project.normalized_path);
-        if inner.watch_roots.get(&project.id) != Some(&root) {
+        configure_project_watcher(&self.inner, &self.sender, project, single_dashboard)
+    }
+}
+
+fn configure_project_watcher(
+    inner: &Arc<Mutex<Inner>>,
+    sender: &SyncSender<RawInput>,
+    project: ProjectRecord,
+    single_dashboard: bool,
+) -> Result<(), String> {
+    let available = project.status == "ACTIVE" && Path::new(&project.normalized_path).is_dir();
+    let status = ProjectWatcherStatus {
+        project_id: project.id.clone(),
+        state: if available { "WATCHING" } else { "MISSING" }.to_string(),
+        watcher_health: if available { "HEALTHY" } else { "DEGRADED" }.to_string(),
+        available,
+        last_event_at: None,
+        last_refresh_at: None,
+        evidence_generated_at: None,
+        changed_path_count: 0,
+        rescan_required: false,
+    };
+    let callback_inner = Arc::clone(inner);
+    let mut inner = inner.lock().expect("watcher state lock");
+    inner
+        .statuses
+        .entry(project.id.clone())
+        .and_modify(|current| {
+            current.state = status.state.clone();
+            current.watcher_health = status.watcher_health.clone();
+            current.available = status.available;
+        })
+        .or_insert(status);
+    let root = PathBuf::from(&project.normalized_path);
+    let desired_scope = if single_dashboard {
+        "SINGLE_DASHBOARD"
+    } else {
+        "LEGACY_RECURSIVE"
+    };
+    let root_changed = inner.watch_roots.get(&project.id) != Some(&root);
+    let scope_changed =
+        inner.watch_scopes.get(&project.id).map(String::as_str) != Some(desired_scope);
+    if root_changed || scope_changed {
+        inner.watches.remove(&project.id);
+        inner.watch_roots.remove(&project.id);
+        inner.watch_scopes.remove(&project.id);
+    }
+    if !available || inner.watches.contains_key(&project.id) {
+        if !available {
             inner.watches.remove(&project.id);
             inner.watch_roots.remove(&project.id);
             inner.watch_scopes.remove(&project.id);
         }
-        if !available || inner.watches.contains_key(&project.id) {
-            if !available {
-                inner.watches.remove(&project.id);
-                inner.watch_roots.remove(&project.id);
-                inner.watch_scopes.remove(&project.id);
-            }
-            return Ok(());
+        return Ok(());
+    }
+    let project_id = project.id.clone();
+    let project_root = project.normalized_path.clone();
+    let sender = sender.clone();
+    #[cfg(test)]
+    if FAIL_NEXT_WATCH_ATTACH.with(|failpoint| failpoint.replace(false)) {
+        if let Some(status) = inner.statuses.get_mut(&project.id) {
+            status.state = "DEGRADED".to_string();
+            status.watcher_health = "DEGRADED".to_string();
+            status.rescan_required = true;
         }
-        let project_id = project.id.clone();
-        let project_root = project.normalized_path.clone();
-        let sender = self.sender.clone();
-        let callback_inner = Arc::clone(&self.inner);
-        #[cfg(test)]
-        if FAIL_NEXT_WATCH_ATTACH.with(|failpoint| failpoint.replace(false)) {
-            if let Some(status) = inner.statuses.get_mut(&project.id) {
-                status.state = "DEGRADED".to_string();
-                status.watcher_health = "DEGRADED".to_string();
-                status.rescan_required = true;
-            }
-            return Err("test-only watcher attachment failpoint".to_string());
-        }
-        let mut watcher = match RecommendedWatcher::new(
-            move |event| {
-                let input = RawInput {
-                    project_id: project_id.clone(),
-                    root: PathBuf::from(&project_root),
-                    single_dashboard,
-                    event,
-                };
-                match sender.try_send(input) {
-                    Ok(()) => {}
-                    Err(TrySendError::Full(_)) => {
-                        if let Ok(mut state) = callback_inner.lock() {
-                            if let Some(status) = state.statuses.get_mut(&project_id) {
-                                status.rescan_required = true;
-                                status.state = "DEGRADED".to_string();
-                                status.watcher_health = "OVERFLOW".to_string();
-                            }
+        return Err("test-only watcher attachment failpoint".to_string());
+    }
+    let mut watcher = match RecommendedWatcher::new(
+        move |event| {
+            let input = RawInput {
+                project_id: project_id.clone(),
+                root: PathBuf::from(&project_root),
+                single_dashboard,
+                event,
+            };
+            match sender.try_send(input) {
+                Ok(()) => {}
+                Err(TrySendError::Full(_)) => {
+                    if let Ok(mut state) = callback_inner.lock() {
+                        if let Some(status) = state.statuses.get_mut(&project_id) {
+                            status.rescan_required = true;
+                            status.state = "DEGRADED".to_string();
+                            status.watcher_health = "OVERFLOW".to_string();
                         }
                     }
-                    Err(TrySendError::Disconnected(_)) => {}
                 }
-            },
-            Config::default(),
-        ) {
-            Ok(watcher) => watcher,
-            Err(_) => {
-                if let Some(status) = inner.statuses.get_mut(&project.id) {
-                    status.state = "DEGRADED".to_string();
-                    status.watcher_health = "DEGRADED".to_string();
-                }
-                return if available {
-                    Err("watcher backend failed to initialize".to_string())
-                } else {
-                    Ok(())
-                };
+                Err(TrySendError::Disconnected(_)) => {}
             }
-        };
-        let root_path = Path::new(&project.normalized_path);
-        let root_mode = if single_dashboard {
-            RecursiveMode::NonRecursive
-        } else {
-            RecursiveMode::Recursive
-        };
-        if watcher.watch(root_path, root_mode).is_err() {
+        },
+        Config::default(),
+    ) {
+        Ok(watcher) => watcher,
+        Err(_) => {
             if let Some(status) = inner.statuses.get_mut(&project.id) {
                 status.state = "DEGRADED".to_string();
                 status.watcher_health = "DEGRADED".to_string();
             }
-            if available {
-                return Err("watcher failed to attach to registered root".to_string());
-            }
-            return Ok(());
-        }
-        if single_dashboard {
-            let dashboard_dir = root_path.join(".hiveai");
-            if watcher
-                .watch(&dashboard_dir, RecursiveMode::NonRecursive)
-                .is_err()
-            {
-                if let Some(status) = inner.statuses.get_mut(&project.id) {
-                    status.state = "DEGRADED".to_string();
-                    status.watcher_health = "DEGRADED".to_string();
-                }
-                return Err("single-dashboard watcher failed to attach .hiveai".to_string());
-            }
-        }
-        inner.watches.insert(project.id.clone(), watcher);
-        inner.watch_roots.insert(project.id.clone(), root);
-        inner.watch_scopes.insert(
-            project.id,
-            if single_dashboard {
-                "SINGLE_DASHBOARD".to_string()
+            return if available {
+                Err("watcher backend failed to initialize".to_string())
             } else {
-                "LEGACY_RECURSIVE".to_string()
-            },
-        );
-        Ok(())
+                Ok(())
+            };
+        }
+    };
+    let root_path = Path::new(&project.normalized_path);
+    let root_mode = if single_dashboard {
+        RecursiveMode::NonRecursive
+    } else {
+        RecursiveMode::Recursive
+    };
+    if watcher.watch(root_path, root_mode).is_err() {
+        if let Some(status) = inner.statuses.get_mut(&project.id) {
+            status.state = "DEGRADED".to_string();
+            status.watcher_health = "DEGRADED".to_string();
+        }
+        if available {
+            return Err("watcher failed to attach to registered root".to_string());
+        }
+        return Ok(());
     }
+    if single_dashboard {
+        let dashboard_dir = root_path.join(".hiveai");
+        if watcher
+            .watch(&dashboard_dir, RecursiveMode::NonRecursive)
+            .is_err()
+        {
+            if let Some(status) = inner.statuses.get_mut(&project.id) {
+                status.state = "DEGRADED".to_string();
+                status.watcher_health = "DEGRADED".to_string();
+            }
+            return Err("single-dashboard watcher failed to attach .hiveai".to_string());
+        }
+    }
+    inner.watches.insert(project.id.clone(), watcher);
+    inner.watch_roots.insert(project.id.clone(), root);
+    inner
+        .watch_scopes
+        .insert(project.id, desired_scope.to_string());
+    Ok(())
 }
 
 impl Drop for WatcherManager {
@@ -415,6 +437,7 @@ fn worker_loop(
     inner: Arc<Mutex<Inner>>,
     receiver: Receiver<RawInput>,
     app_handle: Option<AppHandle>,
+    sender: SyncSender<RawInput>,
 ) {
     let mut pending: HashMap<(String, String), PendingEvent> = HashMap::new();
     loop {
@@ -464,6 +487,17 @@ fn worker_loop(
                         );
                     }
                 } else {
+                    let dashboard_signal = events
+                        .iter()
+                        .any(|event| is_project_dashboard_path(&event.relative_path));
+                    let dashboard_lifecycle_signal = events
+                        .iter()
+                        .any(|event| is_project_dashboard_lifecycle_path(&event.relative_path));
+                    let single_dashboard = inner
+                        .lock()
+                        .ok()
+                        .and_then(|state| state.watch_scopes.get(&project_id).cloned())
+                        .is_some_and(|scope| scope == "SINGLE_DASHBOARD");
                     let relevant = events.iter().any(|event| {
                         matches!(
                             event.category_hint,
@@ -473,14 +507,38 @@ fn worker_loop(
                     let refreshed =
                         refresh_project_snapshot(&database, &inner, &project_id, events, false)
                             .is_ok();
-                    if refreshed && relevant {
+                    if refreshed && dashboard_lifecycle_signal {
+                        if let Ok(project) = fetch_project(&database, &project_id) {
+                            let available = project.status == "ACTIVE"
+                                && Path::new(&project.normalized_path).is_dir();
+                            let single_dashboard = available
+                                && project_dashboard::resolve(&database, &project.id)
+                                    .map(|dashboard| {
+                                        dashboard.tracking_mode.as_deref()
+                                            == Some("single-dashboard-watch")
+                                            && matches!(
+                                                dashboard.manifest_status,
+                                                ManifestStatus::Valid | ManifestStatus::Partial
+                                            )
+                                    })
+                                    .unwrap_or(false);
+                            let _ = configure_project_watcher(
+                                &inner,
+                                &sender,
+                                project,
+                                single_dashboard,
+                            );
+                        }
+                    }
+                    let task_refresh_allowed = relevant && (!single_dashboard || dashboard_signal);
+                    if refreshed && task_refresh_allowed {
                         let _ = refresh_task_intelligence(
                             &database,
                             &project_id,
                             false,
                             app_handle.as_ref(),
                         );
-                    } else if relevant && !refreshed {
+                    } else if task_refresh_allowed && !refreshed {
                         let error = "WATCHER_REFRESH_FAILED: filesystem snapshot refresh failed";
                         let _ =
                             persist_task_refresh_health(&database, &project_id, Err(error.into()));
@@ -559,7 +617,7 @@ fn refresh_project_snapshot(
     let git_relevant = explicit
         || events.iter().any(|event| {
             matches!(event.category_hint, EventCategory::GitMetadata)
-                || is_project_dashboard_path(&event.relative_path)
+                || is_project_dashboard_lifecycle_path(&event.relative_path)
         });
     let git_id = if available
         && project
@@ -696,7 +754,7 @@ fn normalize_event_with_mode(
         .iter()
         .filter_map(|path| relative_path(path, root))
         .filter(|path| !is_excluded(path))
-        .filter(|path| !single_dashboard || is_project_dashboard_path(path))
+        .filter(|path| !single_dashboard || is_project_dashboard_lifecycle_path(path))
         .collect::<Vec<_>>();
     if paths.is_empty() {
         return Vec::new();
@@ -805,6 +863,12 @@ fn category_hint(path: &str) -> EventCategory {
 fn is_project_dashboard_path(path: &str) -> bool {
     path.replace('\\', "/")
         .eq_ignore_ascii_case(project_dashboard::MANIFEST_RELATIVE_PATH)
+}
+
+fn is_project_dashboard_lifecycle_path(path: &str) -> bool {
+    let normalized = path.replace('\\', "/");
+    normalized.eq_ignore_ascii_case(project_dashboard::MANIFEST_RELATIVE_PATH)
+        || normalized.eq_ignore_ascii_case(".hiveai")
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1448,6 +1512,138 @@ mod tests {
         assert_eq!(
             crate::command_center::snapshot(&database).unwrap().projects[0].manifest_status,
             "VALID"
+        );
+    }
+
+    #[test]
+    fn live_dashboard_contract_changes_reconcile_watcher_scope_without_restart() {
+        let app_data = tempdir().unwrap();
+        let project_root = tempdir().unwrap();
+        fs::write(
+            project_root.path().join("TASKS.md"),
+            "# Work\n- [ ] legacy task\n",
+        )
+        .unwrap();
+        let database = DatabaseState::initialize(app_data.path().to_path_buf()).unwrap();
+        let project = crate::projects::register_project(
+            &database,
+            crate::projects::RegisterProjectRequest {
+                path: project_root.path().to_string_lossy().into_owned(),
+                name: Some("Live scope transition".into()),
+            },
+        )
+        .unwrap();
+        let manager = WatcherManager::initialize(database.clone()).unwrap();
+        assert_eq!(
+            manager.inner.lock().unwrap().watch_scopes[&project.id],
+            "LEGACY_RECURSIVE"
+        );
+        manager.rescan_project(&project.id).unwrap();
+
+        fs::create_dir_all(project_root.path().join(".hiveai")).unwrap();
+        fs::write(
+            project_root.path().join(MANIFEST_RELATIVE_PATH),
+            "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\n## Source authorities\nCanonical task source: `TASKS.md`\n",
+        )
+        .unwrap();
+        manager
+            .sender
+            .try_send(RawInput {
+                project_id: project.id.clone(),
+                root: project_root.path().to_path_buf(),
+                single_dashboard: false,
+                event: Ok(Event::new(EventKind::Create(CreateKind::File))
+                    .add_path(project_root.path().join(MANIFEST_RELATIVE_PATH))),
+            })
+            .unwrap();
+        std::thread::sleep(Duration::from_millis(1200));
+        assert_eq!(
+            manager.inner.lock().unwrap().watch_scopes[&project.id],
+            "SINGLE_DASHBOARD"
+        );
+
+        fs::write(
+            project_root.path().join("TASKS.md"),
+            "# Work\n- [ ] ignored while migrated\n",
+        )
+        .unwrap();
+        manager
+            .sender
+            .try_send(RawInput {
+                project_id: project.id.clone(),
+                root: project_root.path().to_path_buf(),
+                single_dashboard: true,
+                event: Ok(Event::new(EventKind::Modify(ModifyKind::Data(
+                    notify::event::DataChange::Content,
+                )))
+                .add_path(project_root.path().join("TASKS.md"))),
+            })
+            .unwrap();
+        std::thread::sleep(Duration::from_millis(1000));
+        assert_eq!(
+            crate::task_intelligence::list(&database, &project.id)
+                .unwrap()
+                .tasks[0]
+                .title,
+            "legacy task"
+        );
+
+        fs::remove_file(project_root.path().join(MANIFEST_RELATIVE_PATH)).unwrap();
+        manager
+            .sender
+            .try_send(RawInput {
+                project_id: project.id.clone(),
+                root: project_root.path().to_path_buf(),
+                single_dashboard: true,
+                event: Ok(Event::new(EventKind::Remove(RemoveKind::File))
+                    .add_path(project_root.path().join(MANIFEST_RELATIVE_PATH))),
+            })
+            .unwrap();
+        std::thread::sleep(Duration::from_millis(1200));
+        assert_eq!(
+            manager.inner.lock().unwrap().watch_scopes[&project.id],
+            "LEGACY_RECURSIVE"
+        );
+        fs::write(
+            project_root.path().join("TASKS.md"),
+            "# Work\n- [ ] legacy resumed\n",
+        )
+        .unwrap();
+        manager
+            .sender
+            .try_send(RawInput {
+                project_id: project.id.clone(),
+                root: project_root.path().to_path_buf(),
+                single_dashboard: false,
+                event: Ok(Event::new(EventKind::Modify(ModifyKind::Data(
+                    notify::event::DataChange::Content,
+                )))
+                .add_path(project_root.path().join("TASKS.md"))),
+            })
+            .unwrap();
+        std::thread::sleep(Duration::from_millis(1100));
+        assert_eq!(
+            crate::task_intelligence::list(&database, &project.id)
+                .unwrap()
+                .tasks[0]
+                .title,
+            "legacy resumed"
+        );
+        fs::create_dir_all(project_root.path().join(".hiveai")).unwrap();
+        fs::write(
+            project_root.path().join(MANIFEST_RELATIVE_PATH),
+            "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\n## Source authorities\nCanonical task source: `TASKS.md`\n",
+        )
+        .unwrap();
+        manager.rescan_project(&project.id).unwrap();
+        assert_eq!(
+            manager.inner.lock().unwrap().watch_scopes[&project.id],
+            "SINGLE_DASHBOARD"
+        );
+        manager.rescan_project(&project.id).unwrap();
+        assert_eq!(
+            manager.inner.lock().unwrap().watch_scopes[&project.id],
+            "SINGLE_DASHBOARD"
         );
     }
     #[test]

@@ -396,6 +396,7 @@ fn read_manifest(path: &Path) -> Result<String, String> {
 fn parse_manifest(text: &str) -> Result<ParsedManifest, String> {
     let mut fields = BTreeMap::new();
     let mut roles: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut in_header = true;
     let mut in_authorities = false;
     let mut warnings = Vec::new();
     let mut front_matter_fields = 0usize;
@@ -416,14 +417,48 @@ fn parse_manifest(text: &str) -> Result<ParsedManifest, String> {
                 "manifest contains task checkbox syntax; pointer checkboxes are ignored",
             );
         }
-        if trimmed.eq_ignore_ascii_case("## Source authorities") {
-            in_authorities = true;
+        if trimmed.starts_with("## ") {
+            in_header = false;
+            in_authorities = trimmed.eq_ignore_ascii_case("## Source authorities");
             continue;
         }
-        if trimmed.starts_with("## ") && !trimmed.eq_ignore_ascii_case("## Source authorities") {
-            in_authorities = false;
+        if in_authorities {
+            let Some((label, value)) = trimmed.split_once(':') else {
+                continue;
+            };
+            let role = match label
+                .trim()
+                .trim_start_matches('-')
+                .trim()
+                .to_ascii_lowercase()
+                .as_str()
+            {
+                "canonical task source" => "canonicalTask",
+                "handoff source" | "handoff sources" => "handoff",
+                "roadmap source" | "roadmap/plan source" | "roadmap / plan source" => "roadmap",
+                "progress/history source" | "progress/history sources" => "progressHistory",
+                "architecture source" | "architecture/design source" => "architecture",
+                "decision source" | "decision/governance source" => "decision",
+                "agent instruction source" | "agent instruction sources" => "instructions",
+                "security source" => "security",
+                "build/test metadata" => "buildTest",
+                _ => continue,
+            };
+            let paths = extract_paths(value)?;
+            if paths.is_empty() {
+                continue;
+            }
+            let entry = roles.entry(role.into()).or_default();
+            if entry.len().saturating_add(paths.len()) > MAX_SOURCE_PATHS_PER_ROLE {
+                return Err(format!("source path limit reached for {label}"));
+            }
+            entry.extend(paths);
+            continue;
         }
-        if !in_authorities {
+        if !in_header {
+            continue;
+        }
+        {
             if let Some((key, value)) = trimmed.split_once(':') {
                 let key = key.trim();
                 if !key.is_empty() {
@@ -449,36 +484,6 @@ fn parse_manifest(text: &str) -> Result<ParsedManifest, String> {
             }
             continue;
         }
-        let Some((label, value)) = trimmed.split_once(':') else {
-            continue;
-        };
-        let role = match label
-            .trim()
-            .trim_start_matches('-')
-            .trim()
-            .to_ascii_lowercase()
-            .as_str()
-        {
-            "canonical task source" => "canonicalTask",
-            "handoff source" | "handoff sources" => "handoff",
-            "roadmap source" | "roadmap/plan source" | "roadmap / plan source" => "roadmap",
-            "progress/history source" | "progress/history sources" => "progressHistory",
-            "architecture source" | "architecture/design source" => "architecture",
-            "decision source" | "decision/governance source" => "decision",
-            "agent instruction source" | "agent instruction sources" => "instructions",
-            "security source" => "security",
-            "build/test metadata" => "buildTest",
-            _ => continue,
-        };
-        let paths = extract_paths(value)?;
-        if paths.is_empty() {
-            continue;
-        }
-        let entry = roles.entry(role.into()).or_default();
-        if entry.len().saturating_add(paths.len()) > MAX_SOURCE_PATHS_PER_ROLE {
-            return Err(format!("source path limit reached for {label}"));
-        }
-        entry.extend(paths);
     }
     let schema = fields.get("hiveaiDashboardSchema").cloned();
     if schema.as_deref() != Some("hiveai-project-dashboard/v1") {
@@ -566,6 +571,41 @@ fn parse_materialized_sections(text: &str) -> (MaterializedDashboardStatus, Vec<
             _ => {}
         }
     }
+    if let Some(value) = status.project_status.take() {
+        status.project_status = Some(normalize_materialized_enum(
+            &value,
+            "Project status",
+            &[
+                "ACTIVE", "PAUSED", "WAITING", "BLOCKED", "COMPLETE", "UNKNOWN",
+            ],
+            &mut warnings,
+        ));
+    }
+    if let Some(value) = status.health.take() {
+        status.health = Some(normalize_materialized_enum(
+            &value,
+            "Health",
+            &["HEALTHY", "ATTENTION", "BLOCKED", "UNKNOWN"],
+            &mut warnings,
+        ));
+    }
+    if let Some(value) = status.required_actor.take() {
+        status.required_actor = Some(normalize_materialized_enum(
+            &value,
+            "Required actor",
+            &[
+                "HUMAN",
+                "CODEX",
+                "CLAUDE",
+                "GPT_AUDIT",
+                "CI",
+                "EXTERNAL",
+                "NONE",
+                "UNKNOWN",
+            ],
+            &mut warnings,
+        ));
+    }
     if let Some(lines) = sections.get("current work") {
         status.current_work = parse_work_rows(lines, &mut warnings);
     }
@@ -585,6 +625,23 @@ fn parse_materialized_sections(text: &str) -> (MaterializedDashboardStatus, Vec<
         status.provenance = parse_bounded_facts(lines, MAX_MATERIALIZED_PROVENANCE);
     }
     (status, warnings)
+}
+
+fn normalize_materialized_enum(
+    value: &str,
+    field: &str,
+    allowed: &[&str],
+    warnings: &mut Vec<String>,
+) -> String {
+    let normalized = value.trim().to_ascii_uppercase().replace([' ', '-'], "_");
+    if allowed.iter().any(|candidate| *candidate == normalized) {
+        return normalized;
+    }
+    push_warning(
+        warnings,
+        format!("invalid materialized {field} value; using UNKNOWN"),
+    );
+    "UNKNOWN".into()
 }
 
 fn table_or_colon_facts(lines: &[String]) -> Vec<(String, String)> {
@@ -831,6 +888,47 @@ mod tests {
     fn manifest_parser_treats_none_verified_as_no_authority() {
         let parsed = parse_manifest("hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\n## Source authorities\nCanonical task source: none verified at repository root\n").unwrap();
         assert!(!parsed.roles.contains_key("canonicalTask"));
+    }
+
+    #[test]
+    fn materialized_colons_do_not_consume_front_matter_budget() {
+        let mut manifest = String::from(
+            "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\n## Source authorities\nCanonical task source: `TASKS.md`\n## Recent meaningful activity\n",
+        );
+        for index in 0..40 {
+            manifest.push_str(&format!("- Activity {index}: detail with a colon\n"));
+        }
+        assert!(parse_manifest(&manifest).is_ok());
+    }
+
+    #[test]
+    fn genuinely_excessive_header_fields_still_fail_closed() {
+        let mut manifest = String::from(
+            "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\n",
+        );
+        for index in 0..31 {
+            manifest.push_str(&format!("header-{index}: value\n"));
+        }
+        let error = parse_manifest(&manifest).unwrap_err();
+        assert!(error.contains("front-matter field limit reached"));
+    }
+
+    #[test]
+    fn materialized_enum_values_normalize_and_invalid_values_become_unknown() {
+        let parsed = parse_manifest(
+            "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\n## H!veAI live status\nProject status: waiting\nHealth: SUPER_HEALTHY\nRequired actor: human\n",
+        )
+        .unwrap();
+        assert_eq!(
+            parsed.materialized.project_status.as_deref(),
+            Some("WAITING")
+        );
+        assert_eq!(parsed.materialized.health.as_deref(), Some("UNKNOWN"));
+        assert_eq!(parsed.materialized.required_actor.as_deref(), Some("HUMAN"));
+        assert!(parsed
+            .materialized_warnings
+            .iter()
+            .any(|warning| warning.contains("invalid materialized Health")));
     }
 
     #[test]

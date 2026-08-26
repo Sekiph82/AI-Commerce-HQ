@@ -195,6 +195,9 @@ pub fn snapshot(database: &DatabaseState) -> Result<CommandCenterSnapshot, Strin
     let (evidence_attention, evidence_queue) = read_evidence_items(database)?;
     attention.extend(evidence_attention);
     queue.extend(evidence_queue);
+    deduplicate_materialized_attention(&mut attention);
+    deduplicate_materialized_queue(&mut queue);
+    append_materialized_activity(&summaries, &mut activity);
     attention.sort_by(|left, right| left.id.cmp(&right.id));
     attention.truncate(MAX_ATTENTION_ITEMS);
     queue.sort_by(|left, right| {
@@ -313,6 +316,25 @@ pub fn snapshot(database: &DatabaseState) -> Result<CommandCenterSnapshot, Strin
             },
         },
     ];
+    for summary in &summaries {
+        if !is_single_dashboard_summary(summary) {
+            continue;
+        }
+        for fact in summary.materialized.quality_verification.iter().take(10) {
+            facts.push(BriefFact {
+                label: format!("{} quality: {}", summary.name, fact.label),
+                value: fact.value.clone(),
+                source: "Project Dashboard".into(),
+                provenance: BriefProvenance {
+                    source_class: "PROJECT_DASHBOARD".into(),
+                    project_id: Some(summary.project_id.clone()),
+                    source_path: Some(project_dashboard::MANIFEST_RELATIVE_PATH.into()),
+                    evidence_type: Some("QUALITY_VERIFICATION".into()),
+                    evidence_id: Some(fact.label.clone()),
+                },
+            });
+        }
+    }
     facts.truncate(8);
     Ok(CommandCenterSnapshot {
         generated_at: crate::time::utc_timestamp(),
@@ -558,6 +580,12 @@ fn summarize_project(
             });
         }
     }
+    if is_single_dashboard_resolution(&dashboard) {
+        let (dashboard_attention, dashboard_queue) =
+            materialized_operational_evidence(&project, &dashboard);
+        project_attention.extend(dashboard_attention);
+        queue.extend(dashboard_queue);
+    }
     if project.status == "MISSING" {
         project_attention.push(AttentionItem {
             id: format!("project:{}", project.id),
@@ -783,8 +811,8 @@ fn project_health(
         return "UNKNOWN".into();
     }
     if let Some(health) = dashboard.materialized.health.as_deref() {
-        if !matches!(health, "UNKNOWN" | "NOT_VERIFIED" | "NONE" | "") {
-            return health.to_ascii_uppercase();
+        if matches!(health, "HEALTHY" | "ATTENTION" | "BLOCKED") {
+            return health.to_string();
         }
     }
     if workflows.is_empty() {
@@ -808,6 +836,260 @@ fn dashboard_warning_requires_attention(
                 || lower.contains("degraded")
                 || lower.contains("rejected")
                 || lower.contains("canonical task source is unavailable")
+        }
+    }
+}
+
+fn is_single_dashboard_resolution(dashboard: &ProjectDashboardResolution) -> bool {
+    matches!(
+        dashboard.manifest_status,
+        project_dashboard::ManifestStatus::Valid | project_dashboard::ManifestStatus::Partial
+    ) && dashboard.tracking_mode.as_deref() == Some("single-dashboard-watch")
+}
+
+fn is_single_dashboard_summary(summary: &ProjectOperationSummary) -> bool {
+    matches!(summary.manifest_status.as_str(), "VALID" | "PARTIAL")
+        && summary.tracking_mode.as_deref() == Some("single-dashboard-watch")
+}
+
+fn materialized_operational_evidence(
+    project: &ProjectRecord,
+    dashboard: &ProjectDashboardResolution,
+) -> (Vec<AttentionItem>, Vec<WorkQueueItem>) {
+    let materialized = &dashboard.materialized;
+    let mut attention = Vec::new();
+    let mut queue = Vec::new();
+    let meaningful_blockers = materialized
+        .blockers_waiting
+        .iter()
+        .filter(|value| is_meaningful_materialized_value(value))
+        .cloned()
+        .collect::<Vec<_>>();
+    for (index, blocker) in meaningful_blockers.iter().enumerate() {
+        attention.push(AttentionItem {
+            id: format!("PROJECT_DASHBOARD:BLOCKER:{}:{index}", project.id),
+            project_id: project.id.clone(),
+            project_name: project.name.clone(),
+            task_id: None,
+            title: "Project Dashboard blocker or wait".into(),
+            state: if materialized
+                .project_status
+                .as_deref()
+                .is_some_and(|status| status == "BLOCKED")
+            {
+                "BLOCKED"
+            } else {
+                "WAITING"
+            }
+            .into(),
+            detail: blocker.clone(),
+            category: "PROJECT_DASHBOARD".into(),
+        });
+    }
+    if let Some(waiting_on) = materialized
+        .waiting_on
+        .as_deref()
+        .filter(|value| is_meaningful_materialized_value(value))
+        .filter(|value| {
+            !meaningful_blockers
+                .iter()
+                .any(|blocker| materialized_values_overlap(blocker, value))
+        })
+    {
+        attention.push(AttentionItem {
+            id: format!("PROJECT_DASHBOARD:WAITING:{}", project.id),
+            project_id: project.id.clone(),
+            project_name: project.name.clone(),
+            task_id: None,
+            title: "Project Dashboard waiting".into(),
+            state: "WAITING".into(),
+            detail: format!("Waiting on: {waiting_on}"),
+            category: "PROJECT_DASHBOARD".into(),
+        });
+    }
+    let status_attention = materialized
+        .project_status
+        .as_deref()
+        .is_some_and(|status| matches!(status, "BLOCKED" | "WAITING"))
+        || materialized
+            .health
+            .as_deref()
+            .is_some_and(|health| matches!(health, "BLOCKED" | "ATTENTION"));
+    if status_attention && attention.is_empty() {
+        let state = materialized
+            .project_status
+            .as_deref()
+            .filter(|status| matches!(*status, "BLOCKED" | "WAITING"))
+            .or_else(|| materialized.health.as_deref())
+            .unwrap_or("ATTENTION");
+        attention.push(AttentionItem {
+            id: format!("PROJECT_DASHBOARD:STATUS:{}", project.id),
+            project_id: project.id.clone(),
+            project_name: project.name.clone(),
+            task_id: None,
+            title: "Project Dashboard status requires attention".into(),
+            state: state.into(),
+            detail: format!(
+                "Project status {}, health {}",
+                materialized.project_status.as_deref().unwrap_or("UNKNOWN"),
+                materialized.health.as_deref().unwrap_or("UNKNOWN")
+            ),
+            category: "PROJECT_DASHBOARD".into(),
+        });
+    }
+    for fact in &materialized.quality_verification {
+        if explicit_materialized_failure(&fact.value) {
+            attention.push(AttentionItem {
+                id: format!("PROJECT_DASHBOARD:QUALITY:{}:{}", project.id, fact.label),
+                project_id: project.id.clone(),
+                project_name: project.name.clone(),
+                task_id: None,
+                title: "Project Dashboard verification failed".into(),
+                state: "FAILED".into(),
+                detail: format!("{}: {}", fact.label, fact.value),
+                category: "PROJECT_DASHBOARD".into(),
+            });
+        }
+    }
+    for (index, work) in materialized.current_work.iter().enumerate() {
+        let Some(state) = materialized_queue_state(&work.status) else {
+            continue;
+        };
+        let task_id = if work.id.is_empty() {
+            format!("PROJECT_DASHBOARD:{index}")
+        } else {
+            work.id.clone()
+        };
+        queue.push(WorkQueueItem {
+            id: format!("PROJECT_DASHBOARD:WORK:{}:{task_id}", project.id),
+            project_id: project.id.clone(),
+            project_name: project.name.clone(),
+            task_id,
+            task: work.item.clone(),
+            stage: state.to_string(),
+            state: state.to_string(),
+            actor: meaningful_optional_value(&work.owner_actor),
+            updated_at: None,
+            attention: matches!(state, "WAITING" | "BLOCKED" | "VERIFYING"),
+        });
+    }
+    (attention, queue)
+}
+
+fn is_meaningful_materialized_value(value: &str) -> bool {
+    !matches!(
+        value.trim().to_ascii_uppercase().as_str(),
+        "" | "NONE" | "UNKNOWN" | "NOT_VERIFIED" | "NONE VERIFIED"
+    )
+}
+
+fn meaningful_optional_value(value: &str) -> Option<String> {
+    is_meaningful_materialized_value(value).then(|| value.to_string())
+}
+
+fn materialized_values_overlap(left: &str, right: &str) -> bool {
+    let left = normalize_materialized_text(left);
+    let right = normalize_materialized_text(right);
+    left == right || left.contains(&right) || right.contains(&left)
+}
+
+fn normalize_materialized_text(value: &str) -> String {
+    value
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase()
+}
+
+fn materialized_queue_state(value: &str) -> Option<&'static str> {
+    match value
+        .trim()
+        .to_ascii_uppercase()
+        .replace(['-', ' '], "_")
+        .as_str()
+    {
+        "ACTIVE" | "IN_PROGRESS" | "RUNNING" | "IMPLEMENTING" => Some("RUNNING"),
+        "AUDITING" => Some("AUDITING"),
+        "VERIFYING" | "VERIFICATION" => Some("VERIFYING"),
+        "WAITING" => Some("WAITING"),
+        "BLOCKED" => Some("BLOCKED"),
+        "COMPLETE_PENDING_AUDIT" | "IMPLEMENTATION_COMPLETE_PENDING_AUDIT" => Some("VERIFYING"),
+        _ => None,
+    }
+}
+
+fn explicit_materialized_failure(value: &str) -> bool {
+    value
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .any(|token| {
+            matches!(
+                token.to_ascii_uppercase().as_str(),
+                "FAIL" | "FAILED" | "ERROR" | "BLOCKED"
+            )
+        })
+}
+
+fn deduplicate_materialized_attention(items: &mut Vec<AttentionItem>) {
+    let stronger = items
+        .iter()
+        .filter(|item| item.category != "PROJECT_DASHBOARD")
+        .cloned()
+        .collect::<Vec<_>>();
+    items.retain(|item| {
+        item.category != "PROJECT_DASHBOARD"
+            || !stronger.iter().any(|candidate| {
+                candidate.project_id == item.project_id
+                    && materialized_values_overlap(&candidate.detail, &item.detail)
+            })
+    });
+}
+
+fn deduplicate_materialized_queue(items: &mut Vec<WorkQueueItem>) {
+    let stronger = items
+        .iter()
+        .filter(|item| !item.id.starts_with("PROJECT_DASHBOARD:"))
+        .cloned()
+        .collect::<Vec<_>>();
+    items.retain(|item| {
+        !item.id.starts_with("PROJECT_DASHBOARD:")
+            || !stronger.iter().any(|candidate| {
+                candidate.project_id == item.project_id
+                    && (candidate.task_id == item.task_id
+                        || materialized_values_overlap(&candidate.task, &item.task))
+            })
+    });
+}
+
+fn append_materialized_activity(
+    summaries: &[ProjectOperationSummary],
+    activity: &mut Vec<ActivityItem>,
+) {
+    for summary in summaries {
+        if !is_single_dashboard_summary(summary) {
+            continue;
+        }
+        for (index, event) in summary
+            .materialized
+            .recent_meaningful_activity
+            .iter()
+            .enumerate()
+        {
+            if activity
+                .iter()
+                .any(|item| item.project_id == summary.project_id && item.event == *event)
+            {
+                continue;
+            }
+            activity.push(ActivityItem {
+                id: format!("PROJECT_DASHBOARD:ACTIVITY:{}:{index}", summary.project_id),
+                project_id: summary.project_id.clone(),
+                project_name: summary.name.clone(),
+                kind: "PROJECT_DASHBOARD".into(),
+                event: event.clone(),
+                state: Some("DASHBOARD".into()),
+                actor: None,
+                occurred_at: "UNDATED".into(),
+            });
         }
     }
 }
@@ -1451,6 +1733,98 @@ mod tests {
         assert_eq!(
             project.current_task.as_ref().unwrap().source_path,
             project_dashboard::MANIFEST_RELATIVE_PATH
+        );
+    }
+
+    #[test]
+    fn m11a_r16_materialized_dashboard_feeds_attention_queue_brief_and_undated_activity() {
+        let manifest = "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\n## Source authorities\nCanonical task source: `TASKS.md`\n## H!veAI live status\n| Field | Value |\n| --- | --- |\n| Project status | ACTIVE |\n| Health | unknown |\n| Required actor | human |\n| Waiting on | Human approval |\n## Current work\n| ID | Item | Status | Owner/actor | Evidence/source |\n| --- | --- | --- | --- | --- |\n| active-row | External implementation | IN_PROGRESS | CODEX | TASKS.md |\n| closed-row | Historical work | COMPLETE | CODEX | TASKS.md |\n| unknown-row | Unclear prose | MAYBE | CODEX | TASKS.md |\n## Blockers and waiting\n- Human approval\n## Quality and verification\n| Check | Result |\n| --- | --- |\n| Native tests | FAIL |\n| Frontend build | PASS |\n## Recent meaningful activity\n- Dashboard status was materialized\n";
+        let (_db_dir, _project_dir, database, _project_id, _tasks) =
+            fixture("# Work\n- [ ] internal task\n", Some(manifest));
+        let snapshot = snapshot(&database).unwrap();
+        let project = &snapshot.projects[0];
+        assert_eq!(project.total_tasks, Some(1));
+        assert_eq!(project.materialized.health.as_deref(), Some("UNKNOWN"));
+        assert_eq!(
+            project.materialized.required_actor.as_deref(),
+            Some("HUMAN")
+        );
+        assert_eq!(
+            snapshot
+                .attention
+                .iter()
+                .filter(|item| item.category == "PROJECT_DASHBOARD")
+                .filter(|item| item.detail.contains("Human approval"))
+                .count(),
+            1
+        );
+        assert!(snapshot.attention.iter().any(|item| {
+            item.category == "PROJECT_DASHBOARD" && item.detail.contains("Native tests: FAIL")
+        }));
+        assert!(!snapshot.attention.iter().any(|item| {
+            item.category == "PROJECT_DASHBOARD" && item.detail.contains("Frontend build: PASS")
+        }));
+        assert!(snapshot.work_queue.iter().any(|item| {
+            item.id.starts_with("PROJECT_DASHBOARD:") && item.task == "External implementation"
+        }));
+        assert!(!snapshot
+            .work_queue
+            .iter()
+            .any(|item| item.task == "Historical work"));
+        assert!(!snapshot
+            .work_queue
+            .iter()
+            .any(|item| item.task == "Unclear prose"));
+        assert!(snapshot
+            .engineering_brief
+            .facts
+            .iter()
+            .any(|fact| { fact.source == "Project Dashboard" && fact.value == "FAIL" }));
+        let dashboard_activity = snapshot
+            .recent_activity
+            .iter()
+            .find(|item| item.kind == "PROJECT_DASHBOARD")
+            .unwrap();
+        assert_eq!(dashboard_activity.occurred_at, "UNDATED");
+    }
+
+    #[test]
+    fn m11a_r16_stronger_m10_workflow_suppresses_matching_dashboard_queue_row() {
+        let manifest = "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\n## Source authorities\nCanonical task source: `TASKS.md`\n## Current work\n| ID | Item | Status | Owner/actor | Evidence/source |\n| --- | --- | --- | --- | --- |\n| workflow-row | Same operational task | RUNNING | CODEX | TASKS.md |\n";
+        let (_db_dir, _project_dir, database, _project_id, tasks) =
+            fixture("# Work\n- [ ] internal task\n", Some(manifest));
+        let task_id = tasks[0].id.clone();
+        let connection = database.open_connection().unwrap();
+        connection
+            .execute_batch(&format!(
+                "UPDATE tasks SET title='Same operational task', state='BUILDER_RUNNING', updated_at='2026-08-26T10:00:00Z' WHERE id='{task_id}'; INSERT INTO task_events (id, task_id, event_type, from_state, to_state, actor_type, summary, evidence_json, occurred_at) VALUES ('workflow-row-event','{task_id}','WORKFLOW_TRANSITION','READY_FOR_IMPLEMENTATION','BUILDER_RUNNING','CODEX','builder running','{{}}','2026-08-26T10:00:00Z');"
+            ))
+            .unwrap();
+        let snapshot = snapshot(&database).unwrap();
+        assert!(snapshot
+            .work_queue
+            .iter()
+            .any(|item| item.task == "Same operational task"
+                && !item.id.starts_with("PROJECT_DASHBOARD:")));
+        assert!(!snapshot.work_queue.iter().any(|item| {
+            item.task == "Same operational task" && item.id.starts_with("PROJECT_DASHBOARD:")
+        }));
+    }
+
+    #[test]
+    fn m11a_r18_invalid_materialized_health_stays_unknown_in_command_center() {
+        let manifest = "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\n## Source authorities\nCanonical task source: `TASKS.md`\n## H!veAI live status\nProject status: SUPER_ACTIVE\nHealth: BROKENISH\nRequired actor: mystery-agent\n";
+        let (_db_dir, _project_dir, database, _project_id, _tasks) =
+            fixture("# Work\n- [ ] internal task\n", Some(manifest));
+        let project = &snapshot(&database).unwrap().projects[0];
+        assert_eq!(project.health, "UNKNOWN");
+        assert_eq!(
+            project.materialized.project_status.as_deref(),
+            Some("UNKNOWN")
+        );
+        assert_eq!(
+            project.materialized.required_actor.as_deref(),
+            Some("UNKNOWN")
         );
     }
 

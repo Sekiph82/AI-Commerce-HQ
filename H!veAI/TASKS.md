@@ -32,7 +32,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition
 - M10 original strict audit = historical FAIL with 5 MAJOR findings.
 - M10A remediation, independent re-audit, and Akilta native click acceptance are complete; Akilta footer link = PASS/ACCEPTED.
 - Original M11 implementation is a historical strict-audit FAIL with 8 MAJOR findings.
-- M11A REV3 consolidated strict-closure continuation is ACTIVE during this run: P0 topbar attribution/footer removal, real single-dashboard watcher scope, materialized dashboard consumption, legacy attention semantics, and actor provenance; M11 remains NOT CLOSED and user visual/native acceptance remains pending.
+- M11A REV4 final single-dashboard integration closure is ACTIVE during this run: R15-R18 live scope reconciliation, materialized operational aggregation, parser bounds, and enum validation; M11 remains NOT CLOSED and user visual/native acceptance remains pending.
 - M11/M12 are the runtime consumers of the `.hiveai/PROJECT_DASHBOARD.md` authority system; only M11 scope is active in this run.
 
 ---
@@ -897,8 +897,8 @@ M10A remediation, independent re-audit, and Akilta footer native click acceptanc
 
 ### M11.00 - User-observed UX closure scope
 - [~] P0 remove the bottom footer and move the complete Akilta attribution into the topbar between Workspace and Search Workspace.
-- [~] P1 implement actual SINGLE_DASHBOARD watcher attachment/filtering for migrated projects, with legacy fallback.
-- [~] P2 parse and consume bounded materialized `.hiveai/PROJECT_DASHBOARD.md` status sections without weakening M10 precedence.
+- [x] P1 implement actual SINGLE_DASHBOARD watcher attachment/filtering for migrated projects, with legacy fallback.
+- [x] P2 parse and consume bounded materialized `.hiveai/PROJECT_DASHBOARD.md` status sections without weakening M10 precedence.
 - [~] P3 dogfood the extended dashboard contract on H!veAI's own `.hiveai/PROJECT_DASHBOARD.md`.
 - [~] P4 correct informational ABSENT fallback and explicit configuration-attention semantics.
 - [~] P5 omit unproved GPT Audit and CI actors from audit/test activity.
@@ -974,11 +974,11 @@ M10A remediation, independent re-audit, and Akilta footer native click acceptanc
 - [x] Stale project-switch/race tests.
 - [ ] Manifest present/absent/malformed/stale/cross-project/directory containment tests and actual native direct execution.
 - [ ] Prove authority resolution does not double-count duplicate task sources.
-- [~] Full regression/publication after M11A REV3 remediation.
+- [x] Full regression/publication after M11A REV4 remediation.
 - [ ] User visual acceptance if layout materially changes.
 - [ ] Independent strict audit.
 
-M11 ACTIVE during this run. Final builder state: IMPLEMENTATION COMPLETE / PENDING INDEPENDENT AUDIT + USER VISUAL ACCEPTANCE.
+M11A REV4 ACTIVE during this run. M11 remains NOT CLOSED. Final builder state will remain IMPLEMENTATION COMPLETE / PENDING INDEPENDENT AUDIT + USER VISUAL ACCEPTANCE.
 
 ---
 

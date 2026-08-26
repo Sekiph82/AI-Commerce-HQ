@@ -817,6 +817,10 @@ mod tests {
         .unwrap();
         let dir2 = tempdir().unwrap();
         git_repo_no_remote(dir2.path());
+        std::fs::write(dir2.path().join("README.md"), "unrelated").unwrap();
+        git(dir2.path(), &["add", "README.md"]);
+        git(dir2.path(), &["commit", "--amend", "-qm", "unrelated-root"]);
+        assert_ne!(get_head(dir1.path()), get_head(dir2.path()));
         assert!(repair_project_path(
             &database,
             RepairProjectPathRequest {
