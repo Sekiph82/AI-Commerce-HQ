@@ -8,14 +8,14 @@ User-facing roadmap denominator remains **20**. `M00` is the historical rebuild/
 
 ## Current status
 
-- M00-M09: PASS/CLOSED.
+- M00-M10: PASS/CLOSED.
 - M09 Task Intelligence Parser: PASS/CLOSED after the independent M09D final strict audit.
 - Pre-M10 Native UX Hotfix X01/X02: PASS/CLOSED after independent source audit plus user native acceptance.
 - M10 original strict audit: historical FAIL with 5 MAJOR findings.
-- M10A strict-closure remediation: IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT; M10 remains pending independent re-audit.
-- Akilta footer link: implementation in this run; native click acceptance PENDING USER ACCEPTANCE.
-- M11-M20: planned/blocked.
-- Strict completed progress remains 10/20 = 50% because the pre-M10 hotfix is not a numbered roadmap milestone.
+- M10A remediation, independent re-audit, and Akilta native click acceptance: PASS/CLOSED.
+- M11: ACTIVE during this run; final builder state will remain IMPLEMENTATION COMPLETE / PENDING INDEPENDENT AUDIT + USER VISUAL ACCEPTANCE.
+- M12-M20: planned/blocked; M12 remains blocked behind M11.
+- Strict completed progress is 11/20 = 55% because the pre-M10 hotfix is not a numbered roadmap milestone.
 
 ---
 
@@ -230,7 +230,7 @@ Packages:
 
 Current status:
 - Original M10 strict audit: historical FAIL with 5 MAJOR findings.
-- M10A strict-closure remediation: IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT; the Akilta footer native click remains PENDING USER ACCEPTANCE.
+- M10A remediation, independent re-audit, and Akilta footer native click acceptance: PASS/CLOSED.
 - Original M09: historical FAIL.
 - M09A: historical FAIL after exposing R01/R02.
 - M09B/M09C: historical remediation records preserved.
@@ -278,7 +278,7 @@ Packages:
 
 Exit: every task operational state is explainable, evidence-backed and recoverable.
 
-Status: IMPLEMENTATION COMPLETE / PENDING INDEPENDENT AUDIT.
+Status: PASS/CLOSED.
 
 ---
 
@@ -300,7 +300,7 @@ Packages:
 
 Exit: one-screen truthful portfolio operations dashboard backed by Registry/M08/M09/M10 truth and the Project Dashboard authority manifest system.
 
-Status: PLANNED/BLOCKED until M10.
+Status: ACTIVE during this run; final builder state will be IMPLEMENTATION COMPLETE / PENDING INDEPENDENT AUDIT + USER VISUAL ACCEPTANCE.
 
 ---
 

@@ -11,6 +11,7 @@ use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TryRecvError, TrySendE
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, SystemTime};
+use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
 #[cfg(test)]
@@ -119,11 +120,26 @@ pub struct WatcherManager {
     database: DatabaseState,
     inner: Arc<Mutex<Inner>>,
     sender: SyncSender<RawInput>,
+    app_handle: Option<AppHandle>,
     worker: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl WatcherManager {
     pub fn initialize(database: DatabaseState) -> Result<Self, String> {
+        Self::initialize_internal(database, None)
+    }
+
+    pub fn initialize_with_app_handle(
+        database: DatabaseState,
+        app_handle: AppHandle,
+    ) -> Result<Self, String> {
+        Self::initialize_internal(database, Some(app_handle))
+    }
+
+    fn initialize_internal(
+        database: DatabaseState,
+        app_handle: Option<AppHandle>,
+    ) -> Result<Self, String> {
         let (sender, receiver) = sync_channel(CHANNEL_CAPACITY);
         let inner = Arc::new(Mutex::new(Inner {
             statuses: HashMap::new(),
@@ -135,14 +151,16 @@ impl WatcherManager {
         }));
         let worker_inner = Arc::clone(&inner);
         let worker_database = database.clone();
+        let worker_app_handle = app_handle.clone();
         let worker = thread::Builder::new()
             .name("hiveai-filesystem-watcher".to_string())
-            .spawn(move || worker_loop(worker_database, worker_inner, receiver))
+            .spawn(move || worker_loop(worker_database, worker_inner, receiver, worker_app_handle))
             .map_err(|error| format!("start H!veAI filesystem watcher worker: {error}"))?;
         let manager = Self {
             database,
             inner,
             sender,
+            app_handle,
             worker: Mutex::new(Some(worker)),
         };
         manager.refresh_from_registry()?;
@@ -210,6 +228,7 @@ impl WatcherManager {
         let project = fetch_project(&self.database, project_id)?;
         self.configure_project(project)?;
         refresh_project_snapshot(&self.database, &self.inner, project_id, Vec::new(), true)?;
+        refresh_task_intelligence(&self.database, project_id, true, self.app_handle.as_ref());
         self.project_status(project_id)
     }
 
@@ -339,7 +358,12 @@ impl Drop for WatcherManager {
     }
 }
 
-fn worker_loop(database: DatabaseState, inner: Arc<Mutex<Inner>>, receiver: Receiver<RawInput>) {
+fn worker_loop(
+    database: DatabaseState,
+    inner: Arc<Mutex<Inner>>,
+    receiver: Receiver<RawInput>,
+    app_handle: Option<AppHandle>,
+) {
     let mut pending: HashMap<(String, String), PendingEvent> = HashMap::new();
     loop {
         match receiver.recv_timeout(Duration::from_millis(50)) {
@@ -388,7 +412,23 @@ fn worker_loop(database: DatabaseState, inner: Arc<Mutex<Inner>>, receiver: Rece
                         );
                     }
                 } else {
-                    let _ = refresh_project_snapshot(&database, &inner, &project_id, events, false);
+                    let relevant = events.iter().any(|event| {
+                        matches!(
+                            event.category_hint,
+                            EventCategory::TaskCandidate | EventCategory::Source
+                        )
+                    });
+                    let refreshed =
+                        refresh_project_snapshot(&database, &inner, &project_id, events, false)
+                            .is_ok();
+                    if refreshed && relevant {
+                        refresh_task_intelligence(
+                            &database,
+                            &project_id,
+                            false,
+                            app_handle.as_ref(),
+                        );
+                    }
                 }
             }
             if let Ok(mut state) = inner.lock() {
@@ -667,6 +707,8 @@ fn category_hint(path: &str) -> EventCategory {
     } else if lower.ends_with("tasks.md")
         || lower.ends_with("/tasks")
         || lower.ends_with("plans.md")
+        || lower == ".hiveai"
+        || lower.starts_with(".hiveai/")
         || lower.contains("/.hiveai/")
     {
         EventCategory::TaskCandidate
@@ -680,6 +722,33 @@ fn category_hint(path: &str) -> EventCategory {
         EventCategory::Source
     } else {
         EventCategory::Other
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct IntelligenceRefreshEvent {
+    project_id: String,
+    category: String,
+    generated_at: String,
+    success: bool,
+}
+
+fn refresh_task_intelligence(
+    database: &DatabaseState,
+    project_id: &str,
+    explicit: bool,
+    app_handle: Option<&AppHandle>,
+) {
+    let result = crate::task_intelligence::parse(database, project_id);
+    if let Some(app) = app_handle {
+        let event = IntelligenceRefreshEvent {
+            project_id: project_id.to_string(),
+            category: if explicit { "RESCAN" } else { "TASK_DASHBOARD" }.to_string(),
+            generated_at: timestamp(),
+            success: result.is_ok(),
+        };
+        let _ = app.emit("hiveai-command-center-refresh", event);
     }
 }
 fn merge_kind(current: &NormalizedEventKind, next: &NormalizedEventKind) -> NormalizedEventKind {
@@ -989,6 +1058,10 @@ mod tests {
         ));
         assert!(matches!(
             category_hint("TASKS.md"),
+            EventCategory::TaskCandidate
+        ));
+        assert!(matches!(
+            category_hint(".hiveai/PROJECT_DASHBOARD.md"),
             EventCategory::TaskCandidate
         ));
         assert!(matches!(

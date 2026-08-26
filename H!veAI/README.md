@@ -43,7 +43,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is used for traceability and 
 - Akilta footer link: PASS/ACCEPTED after native user verification that Chrome opens, H!veAI remains open, and no terminal window appears.
 - M10 Workflow State Machine: PASS/CLOSED.
 - Strict completed roadmap progress is now 11/20 = 55%.
-- M11 Global Command Center: READY.
-- M12 remains blocked behind M11; Project Dashboard manifest ingestion is part of the M11/M12 runtime plan.
+- M11 Global Command Center: ACTIVE during this run; final builder state will be IMPLEMENTATION COMPLETE / PENDING INDEPENDENT AUDIT + USER VISUAL ACCEPTANCE.
+- M12 remains blocked behind M11; Project Dashboard manifest ingestion is part of the M11/M12 runtime plan, with only M11 active here.
 
 For exact live status, acceptance state, and every completed/planned package from M00 through M20, use `TASKS.md` as the canonical source of truth.

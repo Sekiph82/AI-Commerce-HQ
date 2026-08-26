@@ -52,6 +52,7 @@ import { getGitSnapshot } from "./gitEngine";
 import type { GitSnapshot } from "./gitEngine";
 import type { Project } from "./types";
 import { useProjectRegistry } from "./registryContext";
+import { CommandCenterLive } from "./command_center_view";
 import {
   addCustomSourcePath,
   discoverTaskSources,
@@ -85,7 +86,7 @@ function Placeholder({
       <div className="placeholder-grid">
         <EmptyState
           title="UI surface ready"
-          detail="Live project data becomes available in a later milestone."
+          detail={title === "Task Sources" ? "Browser preview uses no filesystem discovery. Open the native H!veAI build for live sources." : "Live project data becomes available in a later milestone."}
         />
         <div className="placeholder-notes">
           <span className="eyebrow">M02 placeholder</span>
@@ -100,7 +101,7 @@ function Placeholder({
   );
 }
 
-export function CommandCenter() {
+function LegacyCommandCenter() {
   const navigate = useNavigate();
   const [notice, setNotice] = React.useState<string | null>(null);
   const {
@@ -478,6 +479,10 @@ export function CommandCenter() {
       </div>
     </div>
   );
+}
+
+export function CommandCenter() {
+  return <CommandCenterLive />;
 }
 
 function AttentionCard({

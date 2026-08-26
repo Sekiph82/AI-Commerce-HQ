@@ -17,7 +17,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition
 
 ## Current truth
 
-- M00 through M09 are PASS/CLOSED.
+- M00 through M10 are PASS/CLOSED.
 - M08 presentation bootstrap, Task Source Discovery, remediation chain, and native `/tasks` manual acceptance are PASS/CLOSED.
 - M09 original strict audit = historical FAIL.
 - M09A strict re-audit = historical FAIL after closing the original seven findings but exposing two residual production defects.
@@ -28,11 +28,11 @@ Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition
 - Pre-M10 Native UX Hotfix X01/X02 = PASS/CLOSED after independent source audit plus user native acceptance.
   - X01: terminal/console popup suppression accepted fixed after approximately 45 minutes of native runtime with no unwanted terminal windows.
   - X02: startup intro audio/replay behavior accepted fixed; audio works and same-process route navigation does not replay the intro.
-- Strict completed milestone count remains **10 / 20 = 50%** because the pre-M10 hotfix is not a numbered roadmap milestone.
+- Strict completed milestone count is **11 / 20 = 55%** because the pre-M10 hotfix is not a numbered roadmap milestone.
 - M10 original strict audit = historical FAIL with 5 MAJOR findings.
-- M10A strict-closure remediation = IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT; M10 remains pending independent re-audit.
-- Akilta footer link implementation is in this run; native click acceptance remains PENDING USER ACCEPTANCE.
-- M11/M12 remain planned behind M10. Their runtime scope must incorporate the `.hiveai/PROJECT_DASHBOARD.md` authority manifest system without pretending the current manifest documentation is already a live Dashboard engine.
+- M10A remediation, independent re-audit, and Akilta native click acceptance are complete; Akilta footer link = PASS/ACCEPTED.
+- M11 is ACTIVE during this run and must close as IMPLEMENTATION COMPLETE / PENDING INDEPENDENT AUDIT + USER VISUAL ACCEPTANCE.
+- M11/M12 are the runtime consumers of the `.hiveai/PROJECT_DASHBOARD.md` authority system; only M11 scope is active in this run.
 
 ---
 
@@ -883,89 +883,89 @@ Pre-M10 Native UX Hotfix X01/X02 PASS/CLOSED.
 ### M10.10 - Regression/audit/closure
 - [x] Full Rust/frontend/security regression.
 - [x] Production QA publication.
-- [ ] Independent strict audit.
-- [ ] Close M10 before M11/M12 live operational UI is unlocked.
+- [x] Independent strict audit.
+- [x] Close M10 before M11/M12 live operational UI is unlocked.
 
-M10 IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT.
+M10 PASS/CLOSED.
 
-M10A strict-closure remediation IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT; Akilta footer native click acceptance PENDING USER ACCEPTANCE.
+M10A remediation, independent re-audit, and Akilta footer native click acceptance PASS/CLOSED.
 
 ---
 
 # M11 - Global Command Center
 
 ### M11.01 - Live portfolio data model
-- [ ] Replace placeholder KPI data with Registry/task/workflow-backed data.
-- [ ] Define portfolio aggregation contract.
-- [ ] Add native Project Dashboard authority resolver for `.hiveai/PROJECT_DASHBOARD.md` on registered projects.
-- [ ] Resolve declared task/handoff/roadmap/history/architecture/instruction roles without duplicating the same task truth across sources.
-- [ ] Fall back safely to existing M08/M09 authority when a manifest is absent, malformed, stale, or references unavailable files.
-- [ ] Keep manifest reads bounded, containment-safe, deterministic, and project-scoped.
-- [ ] Avoid fake live metrics.
+- [x] Replace placeholder KPI data with Registry/task/workflow-backed data.
+- [x] Define portfolio aggregation contract.
+- [x] Add native Project Dashboard authority resolver for `.hiveai/PROJECT_DASHBOARD.md` on registered projects.
+- [x] Resolve declared task/handoff/roadmap/history/architecture/instruction roles without duplicating the same task truth across sources.
+- [x] Fall back safely to existing M08/M09 authority when a manifest is absent, malformed, stale, or references unavailable files.
+- [x] Keep manifest reads bounded, containment-safe, deterministic, and project-scoped.
+- [x] Avoid fake live metrics.
 
 ### M11.02 - KPI strip
-- [ ] Project count/health.
-- [ ] Active tasks.
-- [ ] Blocked/waiting attention counts.
-- [ ] Running agents/audits when real.
-- [ ] CI/audit health indicators where available.
+- [x] Project count/health.
+- [x] Active tasks.
+- [x] Blocked/waiting attention counts.
+- [x] Running agents/audits when real.
+- [x] CI/audit health indicators where available.
 
 ### M11.03 - Project operation cards
-- [ ] Current task.
-- [ ] Current workflow state.
-- [ ] Last action.
-- [ ] Next action.
-- [ ] Required actor.
-- [ ] Project health/progress.
-- [ ] Use resolved Project Dashboard authority roles for project summaries where available.
+- [x] Current task.
+- [x] Current workflow state.
+- [x] Last action.
+- [x] Next action.
+- [x] Required actor.
+- [x] Project health/progress.
+- [x] Use resolved Project Dashboard authority roles for project summaries where available.
 
 ### M11.04 - Needs Your Attention
-- [ ] Human decisions/gates.
-- [ ] Blocked tasks.
-- [ ] External waits.
-- [ ] Failed audits/CI.
+- [x] Human decisions/gates.
+- [x] Blocked tasks.
+- [x] External waits.
+- [x] Failed audits/CI.
 - [ ] Permission requests.
 
 ### M11.05 - Active Work Queue
-- [ ] Active builder sessions.
-- [ ] Active audits.
-- [ ] Pending verification.
-- [ ] Waiting/blocked work.
+- [x] Active builder sessions.
+- [x] Active audits.
+- [x] Pending verification.
+- [x] Waiting/blocked work.
 
 ### M11.06 - AI Engineering Brief surface
-- [ ] Create deterministic data contract for brief inputs.
-- [ ] Surface current project/portfolio situation.
-- [ ] Include resolved dashboard source provenance so factual statements remain traceable.
-- [ ] Keep AI-generated recommendations clearly separate from factual state.
+- [x] Create deterministic data contract for brief inputs.
+- [x] Surface current project/portfolio situation.
+- [x] Include resolved dashboard source provenance so factual statements remain traceable.
+- [x] Keep AI-generated recommendations clearly separate from factual state.
 
 ### M11.07 - Recent Activity
 - [ ] Show real task/workflow/agent/audit/Git activity.
-- [ ] Add search/filter.
-- [ ] Bound long histories.
+- [x] Add search/filter.
+- [x] Bound long histories.
 
 ### M11.08 - Selected-project interaction
-- [ ] Keep project rail names-only.
-- [ ] Click selects in place.
-- [ ] Current Project panel updates.
-- [ ] `Open cockpit` remains the explicit navigation action.
-- [ ] Session remembers selected project.
+- [x] Keep project rail names-only.
+- [x] Click selects in place.
+- [x] Current Project panel updates.
+- [x] `Open cockpit` remains the explicit navigation action.
+- [x] Session remembers selected project.
 
 ### M11.09 - Layout/performance/accessibility
-- [ ] Preserve accepted sidebar/background/glass system.
-- [ ] Avoid outer-body overflow at accepted desktop viewports.
-- [ ] Avoid unnecessary nested scrollbars.
-- [ ] Preserve keyboard/focus behavior.
+- [x] Preserve accepted sidebar/background/glass system.
+- [x] Avoid outer-body overflow at accepted desktop viewports.
+- [x] Avoid unnecessary nested scrollbars.
+- [x] Preserve keyboard/focus behavior.
 
 ### M11.10 - Tests/audit/closure
-- [ ] Mounted live-data tests.
-- [ ] Stale project-switch/race tests.
+- [x] Mounted live-data tests.
+- [x] Stale project-switch/race tests.
 - [ ] Manifest present/absent/malformed/stale/cross-project containment tests.
 - [ ] Prove authority resolution does not double-count duplicate task sources.
-- [ ] Full regression/publication.
+- [x] Full regression/publication.
 - [ ] User visual acceptance if layout materially changes.
 - [ ] Independent strict audit.
 
-M11 PLANNED/BLOCKED until M10.
+M11 ACTIVE during this run. Final builder state: IMPLEMENTATION COMPLETE / PENDING INDEPENDENT AUDIT + USER VISUAL ACCEPTANCE.
 
 ---
 

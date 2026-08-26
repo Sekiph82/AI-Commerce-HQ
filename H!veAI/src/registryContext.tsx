@@ -13,7 +13,7 @@ type RegistryContextValue = {
   loading: boolean;
   error: string | null;
   selectedProjectId: string | null;
-  selectProject: (projectId: string | null) => void;
+  selectProject: (projectId: string | null, persist?: boolean) => void;
   refresh: () => Promise<void>;
 };
 
@@ -63,12 +63,16 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
   const [records, setRecords] = React.useState<ProjectRecord[]>([]);
   const [loading, setLoading] = React.useState(live);
   const [error, setError] = React.useState<string | null>(null);
-  const [selectedProjectId, setSelectedProjectId] = React.useState<
-    string | null
-  >(live ? null : (fixtureProjects[0]?.id ?? null));
-  const selectProject = React.useCallback((projectId: string | null) => {
+  const [selectedProjectId, setSelectedProjectId] = React.useState<string | null>(() =>
+    live ? window.sessionStorage.getItem("hiveai.selectedProjectId") : null,
+  );
+  const selectProject = React.useCallback((projectId: string | null, persist = false) => {
     setSelectedProjectId(projectId);
-  }, []);
+    if (live && persist) {
+      if (projectId) window.sessionStorage.setItem("hiveai.selectedProjectId", projectId);
+      else window.sessionStorage.removeItem("hiveai.selectedProjectId");
+    }
+  }, [live]);
   const refresh = React.useCallback(async () => {
     if (!live) {
       setLoading(false);
@@ -95,7 +99,10 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     ) {
       return;
     }
-    setSelectedProjectId(records[0]?.id ?? null);
+    const saved = window.sessionStorage.getItem("hiveai.selectedProjectId");
+    const next = saved && records.some((record) => record.id === saved) ? saved : records[0]?.id ?? null;
+    setSelectedProjectId(next);
+    if (next) window.sessionStorage.setItem("hiveai.selectedProjectId", next);
   }, [live, records, selectedProjectId]);
   const value = React.useMemo(
     () => ({

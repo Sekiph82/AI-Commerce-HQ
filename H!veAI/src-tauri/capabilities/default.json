@@ -14,6 +14,7 @@
     "allow-request-restart",
     "allow-runtime-status",
     "allow-database-status",
+    "allow-command-center-read",
     "allow-project-registry",
     "allow-git-engine-read",
     "allow-filesystem-watcher",

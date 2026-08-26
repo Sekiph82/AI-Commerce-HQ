@@ -3,9 +3,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{Emitter, Manager};
 use tauri_plugin_log::{Target, TargetKind};
 
+mod command_center;
 mod db;
 mod external_browser;
 mod git_engine;
+mod project_dashboard;
 mod projects;
 mod runtime;
 mod task_intelligence;
@@ -13,7 +15,9 @@ mod task_sources;
 mod time;
 mod watcher;
 mod workflow;
+use command_center::CommandCenterSnapshot;
 use db::{DatabaseState, DatabaseStatus};
+use project_dashboard::ProjectDashboardResolution;
 use projects::{
     ProjectListQuery, ProjectRecord, RegisterProjectRequest, RepairProjectPathRequest,
     UpdateProjectSettingsRequest,
@@ -119,6 +123,21 @@ fn hiveai_runtime_status(supervisor: tauri::State<'_, RuntimeSupervisor>) -> Run
 fn hiveai_database_status(database: tauri::State<'_, DatabaseState>) -> DatabaseStatus {
     log::info!("H!veAI database status requested.");
     database.status()
+}
+
+#[tauri::command]
+fn hiveai_command_center_snapshot(
+    database: tauri::State<'_, DatabaseState>,
+) -> Result<CommandCenterSnapshot, String> {
+    command_center::snapshot(&database)
+}
+
+#[tauri::command]
+fn hiveai_project_dashboard_resolve(
+    database: tauri::State<'_, DatabaseState>,
+    project_id: String,
+) -> Result<ProjectDashboardResolution, String> {
+    command_center::resolve_project(&database, &project_id)
 }
 
 #[tauri::command]
@@ -350,6 +369,8 @@ pub fn run() {
             hiveai_request_restart,
             hiveai_runtime_status,
             hiveai_database_status,
+            hiveai_command_center_snapshot,
+            hiveai_project_dashboard_resolve,
             hiveai_projects_list,
             hiveai_project_register,
             hiveai_project_get,
@@ -390,8 +411,9 @@ pub fn run() {
             workflow::recover_stale(&database)
                 .map_err(|error| format!("H!veAI workflow recovery failed: {error}"))?;
             let database_status = database.status();
-            let watcher_manager = WatcherManager::initialize(database.clone())
-                .map_err(|error| format!("H!veAI watcher initialization failed: {error}"))?;
+            let watcher_manager =
+                WatcherManager::initialize_with_app_handle(database.clone(), app.handle().clone())
+                    .map_err(|error| format!("H!veAI watcher initialization failed: {error}"))?;
             app.manage(database);
             app.manage(watcher_manager);
 
