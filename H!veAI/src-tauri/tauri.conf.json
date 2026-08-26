@@ -30,6 +30,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "icon": ["icons/icon.ico"],
     "publisher": "H!veAI",
     "copyright": "Copyright 2026 H!veAI",
     "category": "DeveloperTool",

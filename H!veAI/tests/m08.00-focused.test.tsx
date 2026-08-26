@@ -131,6 +131,11 @@ describe("M08.00B presentation remediation", () => {
     expect(introSource).not.toContain("sessionStorage");
   });
 
+  it("uses_the_canonical_hiveai_startup_asset", () => {
+    expect(introSource).toContain('from "../assets/H!veAI.mp4"');
+    expect(introSource).not.toContain("opening-video.mp4");
+  });
+
   it("frontend_ready_remains_independent_of_intro_completion", () => {
     expect(mainSource).toContain('invoke("hiveai_frontend_ready")');
     expect(mainSource).toContain("<App />");

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import openingVideo from "../assets/opening-video.mp4";
+import startupVideo from "../assets/H!veAI.mp4";
 import { isTauriDesktop } from "../projectRegistry";
 
 const INTRO_FAILSAFE_MS = 15_000;
@@ -74,7 +74,7 @@ export function StartupIntro() {
         <video
           ref={videoRef}
           aria-label="H!veAI opening video"
-          src={openingVideo}
+          src={startupVideo}
           autoPlay
           playsInline
           preload="auto"
