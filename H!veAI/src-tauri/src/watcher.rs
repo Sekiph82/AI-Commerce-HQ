@@ -1703,6 +1703,73 @@ mod tests {
     }
 
     #[test]
+    fn actual_notify_path_reconciles_dashboard_scope_without_restart() {
+        let app_data = tempdir().unwrap();
+        let project_root = tempdir().unwrap();
+        fs::write(
+            project_root.path().join("TASKS.md"),
+            "# Work\n- [ ] legacy task\n",
+        )
+        .unwrap();
+        let database = DatabaseState::initialize(app_data.path().to_path_buf()).unwrap();
+        let project = crate::projects::register_project(
+            &database,
+            crate::projects::RegisterProjectRequest {
+                path: project_root.path().to_string_lossy().into_owned(),
+                name: Some("Actual notify scope transition".into()),
+            },
+        )
+        .unwrap();
+        let manager = WatcherManager::initialize(database).unwrap();
+        assert_eq!(
+            manager.inner.lock().unwrap().watch_scopes[&project.id],
+            "LEGACY_RECURSIVE"
+        );
+        fs::create_dir_all(project_root.path().join(".hiveai")).unwrap();
+        fs::write(
+            project_root.path().join(MANIFEST_RELATIVE_PATH),
+            "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\n## Source authorities\nCanonical task source: `TASKS.md`\n",
+        )
+        .unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(8);
+        while std::time::Instant::now() < deadline
+            && manager
+                .inner
+                .lock()
+                .unwrap()
+                .watch_scopes
+                .get(&project.id)
+                .map(String::as_str)
+                != Some("SINGLE_DASHBOARD")
+        {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        assert_eq!(
+            manager.inner.lock().unwrap().watch_scopes[&project.id],
+            "SINGLE_DASHBOARD"
+        );
+
+        fs::remove_file(project_root.path().join(MANIFEST_RELATIVE_PATH)).unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(8);
+        while std::time::Instant::now() < deadline
+            && manager
+                .inner
+                .lock()
+                .unwrap()
+                .watch_scopes
+                .get(&project.id)
+                .map(String::as_str)
+                != Some("LEGACY_RECURSIVE")
+        {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        assert_eq!(
+            manager.inner.lock().unwrap().watch_scopes[&project.id],
+            "LEGACY_RECURSIVE"
+        );
+    }
+
+    #[test]
     fn manager_marks_missing_root_without_deleting_registry_row() {
         let app_data = tempdir().unwrap();
         let project_root = tempdir().unwrap();

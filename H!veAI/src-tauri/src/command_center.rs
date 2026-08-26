@@ -5,7 +5,8 @@ use crate::task_intelligence::{self, ParsedTask, TaskIntelligenceSnapshot};
 use crate::watcher::{read_task_refresh_health, TaskRefreshHealth};
 use crate::workflow::{self, WorkflowState, WorkflowTask};
 use serde::Serialize;
-use std::collections::HashSet;
+use sha2::{Digest, Sha256};
+use std::collections::{HashMap, HashSet};
 
 pub const MAX_VISIBLE_PROJECTS: usize = 128;
 pub const DEFAULT_ACTIVITY_LIMIT: usize = 50;
@@ -859,18 +860,25 @@ fn materialized_operational_evidence(
     let materialized = &dashboard.materialized;
     let mut attention = Vec::new();
     let mut queue = Vec::new();
+    let dashboard_task_id =
+        meaningful_optional_value(materialized.current_task_id.as_deref().unwrap_or_default());
     let meaningful_blockers = materialized
         .blockers_waiting
         .iter()
         .filter(|value| is_meaningful_materialized_value(value))
         .cloned()
         .collect::<Vec<_>>();
-    for (index, blocker) in meaningful_blockers.iter().enumerate() {
+    let mut blocker_keys = HashSet::new();
+    for blocker in &meaningful_blockers {
+        let blocker_key = normalize_attention_source(blocker);
+        if !blocker_keys.insert(blocker_key.clone()) {
+            continue;
+        }
         attention.push(AttentionItem {
-            id: format!("PROJECT_DASHBOARD:BLOCKER:{}:{index}", project.id),
+            id: stable_materialized_id(&project.id, "BLOCKER", &blocker_key, 0),
             project_id: project.id.clone(),
             project_name: project.name.clone(),
-            task_id: None,
+            task_id: dashboard_task_id.clone(),
             title: "Project Dashboard blocker or wait".into(),
             state: if materialized
                 .project_status
@@ -897,10 +905,15 @@ fn materialized_operational_evidence(
         })
     {
         attention.push(AttentionItem {
-            id: format!("PROJECT_DASHBOARD:WAITING:{}", project.id),
+            id: stable_materialized_id(
+                &project.id,
+                "WAITING",
+                &normalize_attention_source(waiting_on),
+                0,
+            ),
             project_id: project.id.clone(),
             project_name: project.name.clone(),
-            task_id: None,
+            task_id: dashboard_task_id.clone(),
             title: "Project Dashboard waiting".into(),
             state: "WAITING".into(),
             detail: format!("Waiting on: {waiting_on}"),
@@ -910,7 +923,7 @@ fn materialized_operational_evidence(
     let status_attention = materialized
         .project_status
         .as_deref()
-        .is_some_and(|status| matches!(status, "BLOCKED" | "WAITING"))
+        .is_some_and(|status| status == "BLOCKED")
         || materialized
             .health
             .as_deref()
@@ -919,14 +932,23 @@ fn materialized_operational_evidence(
         let state = materialized
             .project_status
             .as_deref()
-            .filter(|status| matches!(*status, "BLOCKED" | "WAITING"))
+            .filter(|status| *status == "BLOCKED")
             .or_else(|| materialized.health.as_deref())
             .unwrap_or("ATTENTION");
         attention.push(AttentionItem {
-            id: format!("PROJECT_DASHBOARD:STATUS:{}", project.id),
+            id: stable_materialized_id(
+                &project.id,
+                "STATUS",
+                &format!(
+                    "{}:{}",
+                    materialized.project_status.as_deref().unwrap_or("UNKNOWN"),
+                    materialized.health.as_deref().unwrap_or("UNKNOWN")
+                ),
+                0,
+            ),
             project_id: project.id.clone(),
             project_name: project.name.clone(),
-            task_id: None,
+            task_id: dashboard_task_id.clone(),
             title: "Project Dashboard status requires attention".into(),
             state: state.into(),
             detail: format!(
@@ -937,13 +959,20 @@ fn materialized_operational_evidence(
             category: "PROJECT_DASHBOARD".into(),
         });
     }
+    let mut quality_occurrences = HashMap::new();
     for fact in &materialized.quality_verification {
         if explicit_materialized_failure(&fact.value) {
+            let quality_key = format!(
+                "{}:{}",
+                normalize_attention_source(&fact.label),
+                normalize_attention_source(&fact.value)
+            );
+            let occurrence = materialized_occurrence(&mut quality_occurrences, &quality_key);
             attention.push(AttentionItem {
-                id: format!("PROJECT_DASHBOARD:QUALITY:{}:{}", project.id, fact.label),
+                id: stable_materialized_id(&project.id, "QUALITY", &quality_key, occurrence),
                 project_id: project.id.clone(),
                 project_name: project.name.clone(),
-                task_id: None,
+                task_id: dashboard_task_id.clone(),
                 title: "Project Dashboard verification failed".into(),
                 state: "FAILED".into(),
                 detail: format!("{}: {}", fact.label, fact.value),
@@ -951,12 +980,21 @@ fn materialized_operational_evidence(
             });
         }
     }
-    for (index, work) in materialized.current_work.iter().enumerate() {
+    let mut work_occurrences = HashMap::new();
+    for work in &materialized.current_work {
         let Some(state) = materialized_queue_state(&work.status) else {
             continue;
         };
+        let work_key = format!(
+            "{}:{}:{}:{}",
+            normalize_attention_source(&work.item),
+            normalize_attention_source(&work.status),
+            normalize_attention_source(&work.owner_actor),
+            normalize_attention_source(&work.evidence_source)
+        );
+        let occurrence = materialized_occurrence(&mut work_occurrences, &work_key);
         let task_id = if work.id.is_empty() {
-            format!("PROJECT_DASHBOARD:{index}")
+            stable_materialized_id(&project.id, "TASK", &work_key, occurrence)
         } else {
             work.id.clone()
         };
@@ -985,6 +1023,34 @@ fn is_meaningful_materialized_value(value: &str) -> bool {
 
 fn meaningful_optional_value(value: &str) -> Option<String> {
     is_meaningful_materialized_value(value).then(|| value.to_string())
+}
+
+fn stable_materialized_id(
+    project_id: &str,
+    evidence_class: &str,
+    identity: &str,
+    occurrence: usize,
+) -> String {
+    let key =
+        format!("PROJECT_DASHBOARD\0{project_id}\0{evidence_class}\0{identity}\0{occurrence}");
+    let digest = format!("{:x}", Sha256::digest(key.as_bytes()));
+    format!("PROJECT_DASHBOARD:{evidence_class}:{}", &digest[..16])
+}
+
+fn materialized_occurrence(counts: &mut HashMap<String, usize>, identity: &str) -> usize {
+    let occurrence = counts.get(identity).copied().unwrap_or_default();
+    counts.insert(identity.to_string(), occurrence.saturating_add(1));
+    occurrence
+}
+
+fn normalize_attention_source(value: &str) -> String {
+    let normalized = value
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .filter(|token| !token.is_empty())
+        .map(|token| token.to_ascii_lowercase())
+        .collect::<Vec<_>>()
+        .join(" ");
+    normalized.chars().take(256).collect()
 }
 
 fn materialized_values_overlap(left: &str, right: &str) -> bool {
@@ -1035,13 +1101,108 @@ fn deduplicate_materialized_attention(items: &mut Vec<AttentionItem>) {
         .filter(|item| item.category != "PROJECT_DASHBOARD")
         .cloned()
         .collect::<Vec<_>>();
+    let mut seen_materialized_ids = HashSet::new();
     items.retain(|item| {
-        item.category != "PROJECT_DASHBOARD"
-            || !stronger.iter().any(|candidate| {
-                candidate.project_id == item.project_id
-                    && materialized_values_overlap(&candidate.detail, &item.detail)
-            })
+        if item.category != "PROJECT_DASHBOARD" {
+            return true;
+        }
+        if !seen_materialized_ids.insert(item.id.clone()) {
+            return false;
+        }
+        !stronger
+            .iter()
+            .any(|candidate| attention_identities_match(item, candidate))
     });
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct AttentionIdentity {
+    evidence_class: String,
+    task_id: Option<String>,
+    source: String,
+}
+
+fn attention_identity(item: &AttentionItem) -> Option<AttentionIdentity> {
+    let (evidence_class, source) = if item.category == "PROJECT_DASHBOARD" {
+        let class = item.id.split(':').nth(1)?.to_string();
+        let source = match class.as_str() {
+            "QUALITY" => item
+                .detail
+                .split_once(':')
+                .map(|(label, _)| label)
+                .unwrap_or(&item.detail),
+            "WAITING" => item
+                .detail
+                .strip_prefix("Waiting on:")
+                .unwrap_or(&item.detail),
+            _ => &item.detail,
+        };
+        (format!("PROJECT_DASHBOARD_{class}"), source.to_string())
+    } else {
+        let source = match item.category.as_str() {
+            "TEST_RUN" => item
+                .detail
+                .strip_prefix("Test check:")
+                .unwrap_or(&item.detail),
+            "AUDIT" => item
+                .detail
+                .strip_prefix("Audit check:")
+                .unwrap_or(&item.detail),
+            _ => &item.detail,
+        };
+        (item.category.clone(), source.to_string())
+    };
+    Some(AttentionIdentity {
+        evidence_class,
+        task_id: item.task_id.clone(),
+        source: normalize_attention_source(&source),
+    })
+}
+
+fn attention_identities_match(dashboard: &AttentionItem, stronger: &AttentionItem) -> bool {
+    if dashboard.category != "PROJECT_DASHBOARD"
+        || stronger.category == "PROJECT_DASHBOARD"
+        || dashboard.project_id != stronger.project_id
+    {
+        return false;
+    }
+    let Some(dashboard_identity) = attention_identity(dashboard) else {
+        return false;
+    };
+    let Some(stronger_identity) = attention_identity(stronger) else {
+        return false;
+    };
+    let task_matches = match (&dashboard_identity.task_id, &stronger_identity.task_id) {
+        (Some(left), Some(right)) => left == right,
+        _ => false,
+    };
+    let source_matches = dashboard_identity.source == stronger_identity.source;
+    if !source_matches {
+        return false;
+    }
+    match dashboard_identity.evidence_class.as_str() {
+        "PROJECT_DASHBOARD_QUALITY" => {
+            task_matches
+                && matches!(
+                    stronger_identity.evidence_class.as_str(),
+                    "TEST_RUN" | "AUDIT"
+                )
+        }
+        "PROJECT_DASHBOARD_WAITING" | "PROJECT_DASHBOARD_BLOCKER" => {
+            task_matches
+                && matches!(
+                    stronger_identity.evidence_class.as_str(),
+                    "WORKFLOW" | "PERMISSION"
+                )
+                || dashboard_identity.task_id.is_none()
+                    && stronger_identity.task_id.is_none()
+                    && matches!(
+                        stronger_identity.evidence_class.as_str(),
+                        "WORKFLOW" | "PERMISSION"
+                    )
+        }
+        _ => false,
+    }
 }
 
 fn deduplicate_materialized_queue(items: &mut Vec<WorkQueueItem>) {
@@ -1068,20 +1229,24 @@ fn append_materialized_activity(
         if !is_single_dashboard_summary(summary) {
             continue;
         }
-        for (index, event) in summary
-            .materialized
-            .recent_meaningful_activity
-            .iter()
-            .enumerate()
-        {
+        for event in summary.materialized.recent_meaningful_activity.iter() {
             if activity
                 .iter()
                 .any(|item| item.project_id == summary.project_id && item.event == *event)
             {
                 continue;
             }
+            let identity = normalize_attention_source(event);
+            let occurrence = activity
+                .iter()
+                .filter(|item| {
+                    item.project_id == summary.project_id
+                        && item.kind == "PROJECT_DASHBOARD"
+                        && normalize_attention_source(&item.event) == identity
+                })
+                .count();
             activity.push(ActivityItem {
-                id: format!("PROJECT_DASHBOARD:ACTIVITY:{}:{index}", summary.project_id),
+                id: stable_materialized_id(&summary.project_id, "ACTIVITY", &identity, occurrence),
                 project_id: summary.project_id.clone(),
                 project_name: summary.name.clone(),
                 kind: "PROJECT_DASHBOARD".into(),
@@ -1121,7 +1286,7 @@ fn read_evidence_items(
     let mut attention = Vec::new();
     let mut queue = Vec::new();
     {
-        let mut statement = connection.prepare("SELECT t.id, t.project_id, COALESCE(p.name, 'Unassigned'), t.task_id, t.result FROM test_runs t LEFT JOIN projects p ON p.id=t.project_id WHERE (p.status IS NULL OR p.status != 'ARCHIVED') AND t.finished_at IS NOT NULL AND upper(t.result) IN ('FAIL','FAILED','ERROR') ORDER BY COALESCE(t.finished_at, t.started_at) DESC, t.id DESC LIMIT ?1").map_err(|e| format!("read failed test evidence: {e}"))?;
+        let mut statement = connection.prepare("SELECT t.id, t.project_id, COALESCE(p.name, 'Unassigned'), t.task_id, t.result, t.command FROM test_runs t LEFT JOIN projects p ON p.id=t.project_id WHERE (p.status IS NULL OR p.status != 'ARCHIVED') AND t.finished_at IS NOT NULL AND upper(t.result) IN ('FAIL','FAILED','ERROR') ORDER BY COALESCE(t.finished_at, t.started_at) DESC, t.id DESC LIMIT ?1").map_err(|e| format!("read failed test evidence: {e}"))?;
         let rows = statement
             .query_map([MAX_ATTENTION_ITEMS as i64], |row| {
                 Ok(AttentionItem {
@@ -1131,7 +1296,7 @@ fn read_evidence_items(
                     task_id: row.get(3)?,
                     title: "Verification/test failed".into(),
                     state: row.get(4)?,
-                    detail: "A completed verification/test row has a failed result.".into(),
+                    detail: format!("Test check: {}", row.get::<_, String>(5)?),
                     category: "TEST_RUN".into(),
                 })
             })
@@ -1142,7 +1307,7 @@ fn read_evidence_items(
         );
     }
     {
-        let mut statement = connection.prepare("SELECT a.id, a.project_id, COALESCE(p.name, 'Unassigned'), a.task_id, a.result FROM audits a LEFT JOIN projects p ON p.id=a.project_id WHERE (p.status IS NULL OR p.status != 'ARCHIVED') AND upper(a.result) IN ('FAIL','FAILED','ERROR') ORDER BY a.created_at DESC, a.id DESC LIMIT ?1").map_err(|e| format!("read failed audit evidence: {e}"))?;
+        let mut statement = connection.prepare("SELECT a.id, a.project_id, COALESCE(p.name, 'Unassigned'), a.task_id, a.result, a.summary FROM audits a LEFT JOIN projects p ON p.id=a.project_id WHERE (p.status IS NULL OR p.status != 'ARCHIVED') AND upper(a.result) IN ('FAIL','FAILED','ERROR') ORDER BY a.created_at DESC, a.id DESC LIMIT ?1").map_err(|e| format!("read failed audit evidence: {e}"))?;
         let rows = statement
             .query_map([MAX_ATTENTION_ITEMS as i64], |row| {
                 Ok(AttentionItem {
@@ -1152,7 +1317,10 @@ fn read_evidence_items(
                     task_id: row.get(3)?,
                     title: "Audit failed".into(),
                     state: row.get(4)?,
-                    detail: "A persisted audit row has a failed result.".into(),
+                    detail: format!(
+                        "Audit check: {}",
+                        row.get::<_, Option<String>>(5)?.unwrap_or_default()
+                    ),
                     category: "AUDIT".into(),
                 })
             })
@@ -1173,10 +1341,7 @@ fn read_evidence_items(
                     task_id: row.get(3)?,
                     title: "Permission request pending".into(),
                     state: row.get(5)?,
-                    detail: format!(
-                        "{} requires an explicit decision.",
-                        row.get::<_, String>(4)?
-                    ),
+                    detail: row.get::<_, String>(4)?,
                     category: "PERMISSION".into(),
                 })
             })
@@ -1780,6 +1945,11 @@ mod tests {
             .facts
             .iter()
             .any(|fact| { fact.source == "Project Dashboard" && fact.value == "FAIL" }));
+        assert!(!snapshot
+            .engineering_brief
+            .facts
+            .iter()
+            .any(|fact| { fact.label.ends_with(" quality: Check") && fact.value == "Result" }));
         let dashboard_activity = snapshot
             .recent_activity
             .iter()
@@ -1809,6 +1979,291 @@ mod tests {
         assert!(!snapshot.work_queue.iter().any(|item| {
             item.task == "Same operational task" && item.id.starts_with("PROJECT_DASHBOARD:")
         }));
+    }
+
+    #[test]
+    fn m11a_r19_waiting_without_real_wait_fact_stays_out_of_attention() {
+        for waiting_value in ["NONE", "UNKNOWN"] {
+            let manifest = format!(
+                "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\n## Source authorities\nCanonical task source: `TASKS.md`\n## H!veAI live status\nProject status: WAITING\nHealth: UNKNOWN\nWaiting on: {waiting_value}\n"
+            );
+            let (_db_dir, _project_dir, database, _project_id, _tasks) =
+                fixture("# Work\n- [ ] internal task\n", Some(&manifest));
+            let snapshot = snapshot(&database).unwrap();
+            assert!(!snapshot
+                .attention
+                .iter()
+                .any(|item| item.category == "PROJECT_DASHBOARD"));
+        }
+    }
+
+    #[test]
+    fn m11a_r19_waiting_requires_one_real_fact_and_blocked_is_independent() {
+        let waiting = "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\n## Source authorities\nCanonical task source: `TASKS.md`\n## H!veAI live status\nProject status: WAITING\nHealth: UNKNOWN\nWaiting on: Human approval\n## Blockers and waiting\n- Human approval\n- Human approval\n";
+        let (_db_dir, _project_dir, database, _project_id, _tasks) =
+            fixture("# Work\n- [ ] internal task\n", Some(waiting));
+        let waiting_snapshot = snapshot(&database).unwrap();
+        assert_eq!(
+            waiting_snapshot
+                .attention
+                .iter()
+                .filter(|item| item.category == "PROJECT_DASHBOARD")
+                .count(),
+            1
+        );
+
+        let blocked = "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\n## Source authorities\nCanonical task source: `TASKS.md`\n## H!veAI live status\nProject status: BLOCKED\nHealth: UNKNOWN\n";
+        let (_db_dir, _project_dir, database, _project_id, _tasks) =
+            fixture("# Work\n- [ ] internal task\n", Some(blocked));
+        let snapshot = snapshot(&database).unwrap();
+        assert_eq!(
+            snapshot
+                .attention
+                .iter()
+                .filter(|item| item.category == "PROJECT_DASHBOARD")
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn m11a_r19_health_attention_and_blocked_remain_actionable() {
+        for health in ["ATTENTION", "BLOCKED"] {
+            let manifest = format!(
+                "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\n## Source authorities\nCanonical task source: `TASKS.md`\n## H!veAI live status\nProject status: ACTIVE\nHealth: {health}\n"
+            );
+            let (_db_dir, _project_dir, database, _project_id, _tasks) =
+                fixture("# Work\n- [ ] internal task\n", Some(&manifest));
+            let snapshot = snapshot(&database).unwrap();
+            assert_eq!(
+                snapshot
+                    .attention
+                    .iter()
+                    .filter(|item| item.category == "PROJECT_DASHBOARD")
+                    .count(),
+                1
+            );
+        }
+    }
+
+    #[test]
+    fn m11a_r20_matching_test_and_audit_quality_suppress_only_dashboard_duplicates() {
+        let (_db_dir, project_dir, database, project_id, tasks) =
+            fixture("# Work\n- [ ] internal task\n", Some(canonical_manifest()));
+        let task_id = tasks[0].id.clone();
+        let manifest = format!(
+            "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\n## Source authorities\nCanonical task source: `TASKS.md`\n## H!veAI live status\nCurrent task ID: {task_id}\n## Quality and verification\n| Check | Result | Evidence |\n| --- | --- | --- |\n| Native tests | FAIL | persisted test |\n| Security audit | FAIL | persisted audit |\n"
+        );
+        fs::write(
+            project_dir
+                .path()
+                .join(project_dashboard::MANIFEST_RELATIVE_PATH),
+            manifest,
+        )
+        .unwrap();
+        let connection = database.open_connection().unwrap();
+        connection
+            .execute(
+                "INSERT INTO test_runs (id, project_id, task_id, command, result, started_at, finished_at) VALUES (?1, ?2, ?3, ?4, 'FAIL', '2026-08-26T10:00:00Z', '2026-08-26T10:01:00Z')",
+                rusqlite::params!["matching-test", project_id, task_id, "Native tests"],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO audits (id, project_id, task_id, result, summary, created_at) VALUES (?1, ?2, ?3, 'FAIL', ?4, '2026-08-26T10:02:00Z')",
+                rusqlite::params!["matching-audit", project_id, task_id, "Security audit"],
+            )
+            .unwrap();
+        let snapshot = snapshot(&database).unwrap();
+        assert_eq!(
+            snapshot
+                .attention
+                .iter()
+                .filter(|item| item.category == "PROJECT_DASHBOARD")
+                .count(),
+            0
+        );
+        assert_eq!(
+            snapshot
+                .attention
+                .iter()
+                .filter(|item| item.category == "TEST_RUN")
+                .count(),
+            1
+        );
+        assert_eq!(
+            snapshot
+                .attention
+                .iter()
+                .filter(|item| item.category == "AUDIT")
+                .count(),
+            1
+        );
+        assert_eq!(
+            snapshot.kpis.needs_attention,
+            Some(snapshot.attention.len())
+        );
+    }
+
+    #[test]
+    fn m11a_r20_unproven_failures_remain_distinct_and_snapshot_ids_repeat() {
+        let (_db_dir, project_dir, database, project_id, tasks) =
+            fixture("# Work\n- [ ] internal task\n", Some(canonical_manifest()));
+        let task_id = tasks[0].id.clone();
+        let manifest = format!(
+            "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\n## Source authorities\nCanonical task source: `TASKS.md`\n## H!veAI live status\nCurrent task ID: {task_id}\n## Quality and verification\n| Check | Result | Evidence |\n| --- | --- | --- |\n| Native tests | FAIL | dashboard |\n"
+        );
+        fs::write(
+            project_dir
+                .path()
+                .join(project_dashboard::MANIFEST_RELATIVE_PATH),
+            manifest,
+        )
+        .unwrap();
+        database
+            .open_connection()
+            .unwrap()
+            .execute(
+                "INSERT INTO test_runs (id, project_id, task_id, command, result, started_at, finished_at) VALUES ('unrelated-test', ?1, ?2, 'cargo fmt', 'FAIL', '2026-08-26T10:00:00Z', '2026-08-26T10:01:00Z')",
+                rusqlite::params![project_id, task_id],
+            )
+            .unwrap();
+        let first = snapshot(&database).unwrap();
+        let second = snapshot(&database).unwrap();
+        assert_eq!(
+            first
+                .attention
+                .iter()
+                .map(|item| item.id.as_str())
+                .collect::<Vec<_>>(),
+            second
+                .attention
+                .iter()
+                .map(|item| item.id.as_str())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(first.kpis.needs_attention, Some(first.attention.len()));
+        assert_eq!(
+            first
+                .attention
+                .iter()
+                .filter(|item| item.category == "PROJECT_DASHBOARD")
+                .count(),
+            1
+        );
+        assert_eq!(
+            first
+                .attention
+                .iter()
+                .filter(|item| item.category == "TEST_RUN")
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn m11a_r20_matching_wait_uses_task_and_source_identity() {
+        let (_db_dir, project_dir, database, project_id, tasks) =
+            fixture("# Work\n- [ ] internal task\n", Some(canonical_manifest()));
+        let task_id = tasks[0].id.clone();
+        let manifest = format!(
+            "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\n## Source authorities\nCanonical task source: `TASKS.md`\n## H!veAI live status\nCurrent task ID: {task_id}\nWaiting on: FILESYSTEM\n"
+        );
+        fs::write(
+            project_dir
+                .path()
+                .join(project_dashboard::MANIFEST_RELATIVE_PATH),
+            manifest,
+        )
+        .unwrap();
+        let connection = database.open_connection().unwrap();
+        connection
+            .execute_batch(&format!(
+                "INSERT INTO agent_sessions (id,project_id,task_id,provider,state,created_at) VALUES ('permission-session','{project_id}','{task_id}','CODEX','WAITING_PERMISSION','2026-08-26T10:00:00Z'); INSERT INTO permission_requests (id,session_id,permission_kind,state,created_at) VALUES ('matching-permission','permission-session','FILESYSTEM','PENDING','2026-08-26T10:01:00Z');"
+            ))
+            .unwrap();
+        let snapshot = snapshot(&database).unwrap();
+        assert_eq!(
+            snapshot
+                .attention
+                .iter()
+                .filter(|item| item.category == "PROJECT_DASHBOARD")
+                .count(),
+            0
+        );
+        assert_eq!(
+            snapshot
+                .attention
+                .iter()
+                .filter(|item| item.category == "PERMISSION")
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn m11a_r22_materialized_ids_survive_unrelated_preceding_rows_and_duplicate_facts() {
+        let (_db_dir, project_dir, database, _project_id, _tasks) =
+            fixture("# Work\n- [ ] internal task\n", Some(canonical_manifest()));
+        let first_manifest = "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\n## Source authorities\nCanonical task source: `TASKS.md`\n## Blockers and waiting\n- Later blocker\n## Quality and verification\n| Check | Result | Evidence |\n| --- | --- | --- |\n| Same check | FAIL | one |\n| Same check | FAIL | two |\n## Recent meaningful activity\n- Later activity\n";
+        fs::write(
+            project_dir
+                .path()
+                .join(project_dashboard::MANIFEST_RELATIVE_PATH),
+            first_manifest,
+        )
+        .unwrap();
+        let first = snapshot(&database).unwrap();
+        let first_blocker = first
+            .attention
+            .iter()
+            .find(|item| item.detail == "Later blocker")
+            .unwrap()
+            .id
+            .clone();
+        let first_activity = first
+            .recent_activity
+            .iter()
+            .find(|item| item.event == "Later activity")
+            .unwrap()
+            .id
+            .clone();
+        let quality_ids = first
+            .attention
+            .iter()
+            .filter(|item| item.category == "PROJECT_DASHBOARD")
+            .map(|item| item.id.clone())
+            .collect::<Vec<_>>();
+        assert_eq!(quality_ids.len(), 3);
+        assert_ne!(quality_ids[1], quality_ids[2]);
+
+        let second_manifest = "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\n## Source authorities\nCanonical task source: `TASKS.md`\n## Blockers and waiting\n- Unrelated blocker\n- Later blocker\n## Quality and verification\n| Check | Result | Evidence |\n| --- | --- | --- |\n| Same check | FAIL | one |\n| Same check | FAIL | two |\n## Recent meaningful activity\n- Unrelated activity\n- Later activity\n";
+        fs::write(
+            project_dir
+                .path()
+                .join(project_dashboard::MANIFEST_RELATIVE_PATH),
+            second_manifest,
+        )
+        .unwrap();
+        let second = snapshot(&database).unwrap();
+        assert_eq!(
+            second
+                .attention
+                .iter()
+                .find(|item| item.detail == "Later blocker")
+                .unwrap()
+                .id,
+            first_blocker
+        );
+        assert_eq!(
+            second
+                .recent_activity
+                .iter()
+                .find(|item| item.event == "Later activity")
+                .unwrap()
+                .id,
+            first_activity
+        );
     }
 
     #[test]

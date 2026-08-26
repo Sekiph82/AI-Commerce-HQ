@@ -32,7 +32,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition
 - M10 original strict audit = historical FAIL with 5 MAJOR findings.
 - M10A remediation, independent re-audit, and Akilta native click acceptance are complete; Akilta footer link = PASS/ACCEPTED.
 - Original M11 implementation is a historical strict-audit FAIL with 8 MAJOR findings.
-- M11A REV4 final single-dashboard integration closure is ACTIVE during this run: R15-R18 live scope reconciliation, materialized operational aggregation, parser bounds, and enum validation; M11 remains NOT CLOSED and user visual/native acceptance remains pending.
+- M11A REV4 implementation is complete, but the independent REV4 strict audit is FAIL with R19-R22 open; M11A REV5 final attention truth and identity micro-closure is ACTIVE during this run. M11 remains NOT CLOSED and user visual/native acceptance remains pending.
 - M11/M12 are the runtime consumers of the `.hiveai/PROJECT_DASHBOARD.md` authority system; only M11 scope is active in this run.
 
 ---
@@ -974,11 +974,11 @@ M10A remediation, independent re-audit, and Akilta footer native click acceptanc
 - [x] Stale project-switch/race tests.
 - [ ] Manifest present/absent/malformed/stale/cross-project/directory containment tests and actual native direct execution.
 - [ ] Prove authority resolution does not double-count duplicate task sources.
-- [x] Full regression/publication after M11A REV4 remediation.
+- [x] Full regression/publication after M11A REV5 remediation.
 - [ ] User visual acceptance if layout materially changes.
 - [ ] Independent strict audit.
 
-M11A REV4 ACTIVE during this run. M11 remains NOT CLOSED. Final builder state will remain IMPLEMENTATION COMPLETE / PENDING INDEPENDENT AUDIT + USER VISUAL ACCEPTANCE.
+M11A REV5 ACTIVE during this run. M11 remains NOT CLOSED. M12 remains BLOCKED. Final builder state will remain IMPLEMENTATION COMPLETE / PENDING INDEPENDENT AUDIT + USER VISUAL ACCEPTANCE.
 
 ---
 

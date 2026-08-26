@@ -741,6 +741,13 @@ fn parse_bounded_facts(lines: &[String], limit: usize) -> Vec<MaterializedFact> 
     let mut facts = Vec::new();
     for (index, line) in lines.iter().enumerate() {
         let cells = table_cells(line);
+        if cells.len() >= 3
+            && cells[0].eq_ignore_ascii_case("check")
+            && cells[1].eq_ignore_ascii_case("result")
+            && cells[2].eq_ignore_ascii_case("evidence")
+        {
+            continue;
+        }
         let pair = if cells.len() >= 2 && !is_table_separator(&cells) {
             Some((cells[0].clone(), cells[1].clone()))
         } else {
@@ -753,6 +760,7 @@ fn parse_bounded_facts(lines: &[String], limit: usize) -> Vec<MaterializedFact> 
         let Some((label, value)) = pair else { continue };
         if label.is_empty()
             || value.is_empty()
+            || (label.eq_ignore_ascii_case("check") && value.eq_ignore_ascii_case("result"))
             || label.eq_ignore_ascii_case("field")
             || label.eq_ignore_ascii_case("role")
             || label.eq_ignore_ascii_case("source")
@@ -932,6 +940,20 @@ mod tests {
     }
 
     #[test]
+    fn quality_table_header_is_not_a_materialized_fact() {
+        let parsed = parse_manifest(
+            "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\n## Quality and verification\n| Check | Result | Evidence |\n| --- | --- | --- |\n| Native tests | PASS | cargo test |\n",
+        )
+        .unwrap();
+        assert_eq!(parsed.materialized.quality_verification.len(), 1);
+        assert_eq!(
+            parsed.materialized.quality_verification[0].label,
+            "Native tests"
+        );
+        assert_eq!(parsed.materialized.quality_verification[0].value, "PASS");
+    }
+
+    #[test]
     fn paths_reject_traversal_absolute_and_drive_qualified_values() {
         for path in [
             "../TASKS.md",
@@ -1001,7 +1023,7 @@ mod tests {
         );
         assert_eq!(
             resolution.materialized.current_milestone.as_deref(),
-            Some("M11A REV3")
+            Some("M11A REV5")
         );
     }
 
