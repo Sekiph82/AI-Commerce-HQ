@@ -50,8 +50,10 @@ pub struct ProjectOperationSummary {
     pub registry_status: String,
     pub health: String,
     pub manifest_status: String,
+    pub tracking_mode: Option<String>,
     pub task_authority: String,
     pub provenance_mode: String,
+    pub materialized: project_dashboard::MaterializedDashboardStatus,
     pub canonical_task_source: Option<String>,
     pub current_task: Option<TaskSummary>,
     pub current_state: Option<String>,
@@ -395,7 +397,9 @@ fn summarize_project(
         .collect::<HashSet<_>>();
     let workflow_tasks = workflows
         .into_iter()
-        .filter(|task| task_ids.contains(task.task_id.as_str()) && task.source_active)
+        .filter(|task| {
+            task_ids.contains(task.task_id.as_str()) && task.source_active && task.workflow_managed
+        })
         .collect::<Vec<_>>();
     let completed = tasks
         .iter()
@@ -418,10 +422,32 @@ fn summarize_project(
     let completed_tasks = total_tasks.map(|_| completed);
     let active_tasks = total_tasks.map(|_| active);
     let current_workflow = select_current_workflow(&tasks, &workflow_tasks);
+    let has_materialized_current = dashboard.materialized.current_task_title.is_some()
+        || dashboard.materialized.current_task_id.is_some();
     let current_task = current_workflow
         .as_ref()
         .and_then(|workflow| tasks.iter().find(|task| task.id == workflow.task_id))
         .or_else(|| {
+            dashboard
+                .materialized
+                .current_task_id
+                .as_deref()
+                .and_then(|task_id| {
+                    tasks.iter().find(|task| {
+                        task.id == task_id
+                            && !task_is_complete(
+                                task,
+                                workflow_tasks
+                                    .iter()
+                                    .find(|workflow| workflow.task_id == task.id),
+                            )
+                    })
+                })
+        })
+        .or_else(|| {
+            if has_materialized_current {
+                return None;
+            }
             tasks.iter().find(|task| {
                 let workflow = workflow_tasks
                     .iter()
@@ -432,6 +458,19 @@ fn summarize_project(
     let current_state = current_workflow
         .as_ref()
         .map(|task| task.current_state.to_string());
+    let materialized_conflict = current_workflow.as_ref().and_then(|workflow| {
+        dashboard
+            .materialized
+            .declared_workflow_state
+            .as_ref()
+            .filter(|declared| declared.as_str() != workflow.current_state.to_string())
+    });
+    if materialized_conflict.is_some() {
+        push_warning(
+            &mut warnings,
+            "materialized dashboard workflow state conflicts with stronger M10 workflow truth",
+        );
+    }
     let last_action = current_workflow
         .as_ref()
         .and_then(|task| task.latest_event.as_ref())
@@ -440,7 +479,7 @@ fn summarize_project(
             occurred_at: event.occurred_at.clone(),
             actor: event.actor_type.map(|actor| actor.to_string()),
         });
-    let allowed_actors = current_workflow
+    let allowed_actors: Vec<String> = current_workflow
         .as_ref()
         .map(|task| {
             task.allowed_actors
@@ -452,7 +491,8 @@ fn summarize_project(
     let next_action = current_workflow
         .as_ref()
         .and_then(|task| task.allowed_next_states.first())
-        .map(|state| format!("Advance to {state}"));
+        .map(|state| format!("Advance to {state}"))
+        .or_else(|| dashboard.materialized.next_action.clone());
     let refresh_health = read_task_refresh_health(database, &project.id)?;
     if let Some(refresh) = refresh_health.as_ref() {
         if refresh.status == "DEGRADED" {
@@ -471,6 +511,7 @@ fn summarize_project(
         &workflow_tasks,
         workflows_available,
         refresh_health.as_ref(),
+        materialized_conflict.is_some(),
     );
     let mut project_attention = Vec::new();
     let mut queue = Vec::new();
@@ -529,7 +570,13 @@ fn summarize_project(
             category: "REGISTRY".into(),
         });
     }
-    for (index, warning) in dashboard.warnings.iter().take(4).enumerate() {
+    for (index, warning) in dashboard
+        .warnings
+        .iter()
+        .filter(|warning| dashboard_warning_requires_attention(&dashboard, warning))
+        .take(4)
+        .enumerate()
+    {
         project_attention.push(AttentionItem {
             id: format!("manifest:{}:{index}", project.id),
             project_id: project.id.clone(),
@@ -551,28 +598,63 @@ fn summarize_project(
         registry_status: project.status.clone(),
         health,
         manifest_status: dashboard.manifest_status.clone().into_serialized(),
+        tracking_mode: dashboard.tracking_mode.clone(),
         task_authority,
         provenance_mode: dashboard.provenance_mode.clone(),
+        materialized: dashboard.materialized.clone(),
         canonical_task_source: dashboard.canonical_task_source.clone(),
-        current_task: current_task.map(|task| TaskSummary {
-            task_id: task.id.clone(),
-            title: task.title.clone(),
-            source_path: task.source_path.clone(),
-            parsed_status: task.parsed_status.clone(),
-            workflow_state: workflow_tasks
-                .iter()
-                .find(|workflow| workflow.task_id == task.id)
-                .map(|workflow| workflow.current_state.to_string()),
-            required_actor: task.required_actor.clone(),
-        }),
-        current_state,
+        current_task: current_task
+            .map(|task| TaskSummary {
+                task_id: task.id.clone(),
+                title: task.title.clone(),
+                source_path: task.source_path.clone(),
+                parsed_status: task.parsed_status.clone(),
+                workflow_state: workflow_tasks
+                    .iter()
+                    .find(|workflow| workflow.task_id == task.id)
+                    .map(|workflow| workflow.current_state.to_string()),
+                required_actor: task.required_actor.clone(),
+            })
+            .or_else(|| {
+                dashboard
+                    .materialized
+                    .current_task_title
+                    .as_ref()
+                    .map(|title| TaskSummary {
+                        task_id: dashboard
+                            .materialized
+                            .current_task_id
+                            .clone()
+                            .unwrap_or_else(|| "MATERIALIZED_DASHBOARD".into()),
+                        title: title.clone(),
+                        source_path: project_dashboard::MANIFEST_RELATIVE_PATH.into(),
+                        parsed_status: "MATERIALIZED".into(),
+                        workflow_state: dashboard.materialized.declared_workflow_state.clone(),
+                        required_actor: dashboard.materialized.required_actor.clone(),
+                    })
+            }),
+        current_state: current_state
+            .or_else(|| dashboard.materialized.declared_workflow_state.clone()),
         last_action,
         next_action,
-        allowed_actors,
+        allowed_actors: if allowed_actors.is_empty() {
+            dashboard
+                .materialized
+                .required_actor
+                .clone()
+                .into_iter()
+                .collect()
+        } else {
+            allowed_actors
+        },
         total_tasks,
         active_tasks,
         completed_tasks,
-        progress_percent: progress_percent(completed_tasks, total_tasks),
+        progress_percent: dashboard
+            .materialized
+            .progress_percent
+            .map(|value| value as u8)
+            .or_else(|| progress_percent(completed_tasks, total_tasks)),
         warnings: bounded_warnings,
         refresh_status: refresh_health.as_ref().map(|health| health.status.clone()),
         refresh_at: refresh_health
@@ -662,6 +744,7 @@ fn project_health(
     workflows: &[WorkflowTask],
     workflows_available: bool,
     refresh_health: Option<&TaskRefreshHealth>,
+    materialized_conflict: bool,
 ) -> String {
     if project.status == "MISSING" {
         return "MISSING".into();
@@ -677,7 +760,11 @@ fn project_health(
     if workflows
         .iter()
         .any(|task| attention_state(task.current_state))
-        || !dashboard.warnings.is_empty()
+        || materialized_conflict
+        || dashboard
+            .warnings
+            .iter()
+            .any(|warning| dashboard_warning_requires_attention(dashboard, warning))
     {
         return "ATTENTION".into();
     }
@@ -695,7 +782,34 @@ fn project_health(
     {
         return "UNKNOWN".into();
     }
+    if let Some(health) = dashboard.materialized.health.as_deref() {
+        if !matches!(health, "UNKNOWN" | "NOT_VERIFIED" | "NONE" | "") {
+            return health.to_ascii_uppercase();
+        }
+    }
+    if workflows.is_empty() {
+        return "UNKNOWN".into();
+    }
     "HEALTHY".into()
+}
+
+fn dashboard_warning_requires_attention(
+    dashboard: &ProjectDashboardResolution,
+    warning: &str,
+) -> bool {
+    match dashboard.manifest_status {
+        project_dashboard::ManifestStatus::Absent => false,
+        project_dashboard::ManifestStatus::Malformed
+        | project_dashboard::ManifestStatus::Stale
+        | project_dashboard::ManifestStatus::Unavailable => true,
+        project_dashboard::ManifestStatus::Partial | project_dashboard::ManifestStatus::Valid => {
+            let lower = warning.to_ascii_lowercase();
+            lower.contains("conflict")
+                || lower.contains("degraded")
+                || lower.contains("rejected")
+                || lower.contains("canonical task source is unavailable")
+        }
+    }
 }
 
 fn attention_state(state: WorkflowState) -> bool {
@@ -928,7 +1042,7 @@ fn read_activity(database: &DatabaseState, limit: usize) -> Result<Vec<ActivityI
                         .get::<_, Option<String>>(4)?
                         .unwrap_or_else(|| "Audit evidence recorded".into()),
                     state: row.get(3)?,
-                    actor: Some("GPT Audit".into()),
+                    actor: None,
                     occurred_at: row.get(5)?,
                 })
             })
@@ -949,7 +1063,7 @@ fn read_activity(database: &DatabaseState, limit: usize) -> Result<Vec<ActivityI
                     kind: "TEST_RUN".into(),
                     event: format!("Verification {}", row.get::<_, String>(3)?),
                     state: row.get(3)?,
-                    actor: Some("CI".into()),
+                    actor: None,
                     occurred_at: row
                         .get::<_, Option<String>>(5)?
                         .or_else(|| row.get(6).ok())
@@ -1142,6 +1256,60 @@ mod tests {
         assert_eq!(attention_state(WorkflowState::TaskComplete), false);
     }
 
+    fn dashboard_for_attention(
+        status: project_dashboard::ManifestStatus,
+    ) -> ProjectDashboardResolution {
+        ProjectDashboardResolution {
+            project_id: "p".into(),
+            manifest_status: status,
+            manifest_path: ".hiveai/PROJECT_DASHBOARD.md".into(),
+            schema: None,
+            project_key: None,
+            repository: None,
+            branch_policy: None,
+            dashboard_mode: None,
+            tracking_mode: None,
+            refresh_policy: None,
+            task_authority: TaskAuthorityState::FallbackM08M09,
+            canonical_task_source: None,
+            roles: std::collections::BTreeMap::new(),
+            provenance_mode: "FALLBACK_M08_M09".into(),
+            materialized: project_dashboard::MaterializedDashboardStatus::default(),
+            warnings: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn m11a_r14_absent_is_informational_but_malformed_and_stale_need_attention() {
+        let mut absent = dashboard_for_attention(project_dashboard::ManifestStatus::Absent);
+        absent
+            .warnings
+            .push(".hiveai/PROJECT_DASHBOARD.md is absent".into());
+        assert!(!dashboard_warning_requires_attention(
+            &absent,
+            &absent.warnings[0]
+        ));
+        let malformed = dashboard_for_attention(project_dashboard::ManifestStatus::Malformed);
+        assert!(dashboard_warning_requires_attention(
+            &malformed,
+            "manifest parse failed"
+        ));
+        let stale = dashboard_for_attention(project_dashboard::ManifestStatus::Stale);
+        assert!(dashboard_warning_requires_attention(
+            &stale,
+            "repository identity conflict"
+        ));
+        let partial = dashboard_for_attention(project_dashboard::ManifestStatus::Partial);
+        assert!(!dashboard_warning_requires_attention(
+            &partial,
+            "secondary provenance is missing"
+        ));
+        assert!(dashboard_warning_requires_attention(
+            &partial,
+            "materialized dashboard conflict"
+        ));
+    }
+
     #[test]
     fn m11_portfolio_counts_use_authoritative_tasks_only() {
         assert_eq!(same_path("H!veAI\\TASKS.md", "h!veai/tasks.md"), true);
@@ -1264,6 +1432,29 @@ mod tests {
     }
 
     #[test]
+    fn m11a_p2_materialized_dashboard_current_task_is_primary_without_double_counting_m09() {
+        let (_db_dir, _project_dir, database, _project_id, _tasks) = fixture(
+            "# Work\n- [ ] internal supporting task\n",
+            Some("hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\n## Source authorities\nCanonical task source: `TASKS.md`\n## H!veAI live status\n| Field | Value |\n| --- | --- |\n| Health | UNKNOWN |\n| Current task | Materialized dashboard task |\n| Current task ID | DASHBOARD-TASK |\n| Progress | 50% |\n| Next action | Run the dashboard gate |\n"),
+        );
+        let snapshot = snapshot(&database).unwrap();
+        let project = &snapshot.projects[0];
+        assert_eq!(project.total_tasks, Some(1));
+        assert_eq!(project.progress_percent, Some(50));
+        assert_eq!(
+            project
+                .current_task
+                .as_ref()
+                .map(|task| task.title.as_str()),
+            Some("Materialized dashboard task")
+        );
+        assert_eq!(
+            project.current_task.as_ref().unwrap().source_path,
+            project_dashboard::MANIFEST_RELATIVE_PATH
+        );
+    }
+
+    #[test]
     fn m11a_r06_mixed_evidence_attention_queue_and_activity_are_real_and_bounded() {
         let (_db_dir, _project_dir, database, project_id, tasks) =
             fixture("# Work\n- [ ] task\n", Some(canonical_manifest()));
@@ -1298,6 +1489,11 @@ mod tests {
             .work_queue
             .iter()
             .any(|item| item.id == "agent:session-1"));
+        assert!(first
+            .recent_activity
+            .iter()
+            .filter(|item| matches!(item.kind.as_str(), "AUDIT" | "TEST_RUN"))
+            .all(|item| item.actor.is_none()));
         for kind in [
             "WORKFLOW",
             "AGENT_EVENT",

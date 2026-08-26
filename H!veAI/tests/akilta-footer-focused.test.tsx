@@ -9,7 +9,7 @@ vi.mock("../src/registryContext", () => ({
   useProjectRegistry: () => ({ records: [], selectProject: vi.fn() }),
 }));
 
-describe("Akilta footer link", () => {
+describe("Akilta topbar link", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     Object.defineProperty(window, "__TAURI_INTERNALS__", {
@@ -18,19 +18,24 @@ describe("Akilta footer link", () => {
     });
   });
 
-  it("preserves the exact sentence and exposes Akilta as a native link", () => {
+  it("moves the exact sentence into one native topbar target", () => {
     render(
       <BrowserRouter>
         <AppShell>content</AppShell>
       </BrowserRouter>,
     );
 
-    const footer = screen.getByRole("contentinfo");
-    expect(footer.textContent).toBe(
+    expect(screen.queryByRole("contentinfo")).toBeNull();
+    const link = screen.getByRole("link", { name: /Akilta/ });
+    expect(link.textContent).toBe(
       "Built with ♥ for maximum productivity by Akilta",
     );
-    const link = screen.getByRole("link", { name: "Akilta" });
+    expect(link.querySelector("img")).not.toBeNull();
     expect(link).toHaveAttribute("href", "https://www.akilta.com/");
+    expect(link).toHaveAttribute("title", "Developed by Akilta");
+    expect(link.closest(".topbar")).not.toBeNull();
+    expect(screen.getByText("Workspace /")).toBeInTheDocument();
+    expect(screen.getByText("Search workspace")).toBeInTheDocument();
 
     fireEvent.click(link);
     expect(invoke).toHaveBeenCalledWith("hiveai_open_akilta");

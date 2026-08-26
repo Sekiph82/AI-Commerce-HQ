@@ -20,10 +20,6 @@ html,body,#root{height:100%;min-height:0}
 .cockpit-inline-label{align-items:baseline;display:flex;gap:9px}
 .cockpit-inline-label .eyebrow{margin:0}
 .current-task,.workflow-mini,.compact-activity,.system-compact{overflow:hidden}
-.global-footer{align-items:center;color:var(--text-muted);display:flex;flex:0 0 27px;font-size:.58rem;gap:7px;justify-content:center;padding:0 0 7px}
-.global-footer img{height:13px;object-fit:contain;width:54px}
-.global-footer b{color:#f17d7d}
-.global-footer a{color:inherit}.global-footer a:focus-visible,.global-footer a:hover{color:var(--text-secondary)}
 .surface-panel{background:#121922;border:1px solid #3a465a;border-radius:8px;box-shadow:var(--shadow);max-width:540px;padding:18px;width:calc(100% - 32px)}
 .surface-panel .palette-head{align-items:center;display:flex;gap:9px;margin-bottom:14px}
 .surface-panel .palette-head h2{flex:1;font-size:1rem}
@@ -32,7 +28,16 @@ html,body,#root{height:100%;min-height:0}
 .surface-placeholder{display:flex;flex-direction:column;gap:8px;color:var(--text-secondary);font-size:.76rem;line-height:1.45}
 .surface-placeholder strong{color:var(--text);font-size:.84rem}
 .shortcut-empty,.rail-empty{color:var(--text-muted);font-size:.65rem;padding:8px 10px}
-@media(max-width:760px){.sidebar{flex-basis:244px}.global-footer{display:none}}
+@media(max-width:760px){.sidebar{flex-basis:244px}}
+/* P0: keep the complete Akilta credit in the flexible topbar, with no footer band. */
+.topbar-title{flex:0 1 auto;min-width:0;white-space:nowrap}
+.topbar-akilta{align-items:center;color:var(--text-muted);display:flex;flex:1 1 auto;gap:8px;justify-content:center;min-width:0;overflow:hidden;padding:4px 14px;white-space:nowrap}
+.topbar-akilta img{flex:0 0 auto;height:15px;object-fit:contain;object-position:right center;width:58px}
+.topbar-akilta-copy{font-size:.59rem;overflow:hidden;text-overflow:ellipsis}
+.topbar-akilta-copy b{color:#f17d7d}
+.topbar-akilta:hover,.topbar-akilta:focus-visible{color:var(--text-secondary)}
+@media(max-width:1100px){.topbar-akilta{justify-content:flex-end;padding-left:8px;padding-right:8px}.topbar-akilta-copy{display:none}}
+@media(max-width:760px){.topbar-title .crumb{display:none}.topbar-akilta{flex:0 1 auto;padding:4px}.topbar-akilta img{height:14px;width:52px}.topbar-actions{gap:3px}}
 /* Keep Command Center surfaces readable while allowing the global hive layer through. */
 .main-command .panel,.main-command .right-panel,.main-command .current-task,.main-command .workflow-mini{background:rgba(15,23,42,.74);backdrop-filter:blur(10px) saturate(130%);-webkit-backdrop-filter:blur(10px) saturate(130%);border-color:rgba(96,165,250,.24);box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 8px 24px rgba(2,8,23,.2)}
 .brief-line>div{display:grid;gap:2px;min-width:0}.brief-line small{color:var(--text-muted);font-size:.5rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.queue-compact{min-height:0;overflow:auto}.queue-mini-row{border-bottom:1px solid var(--subtle-border);display:grid;gap:2px;padding:5px 0}.queue-mini-row strong{color:var(--text-secondary);font-size:.57rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.queue-mini-row span{color:var(--text-muted);font-size:.51rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -72,3 +77,4 @@ html,body,#root{height:100%;min-height:0}
 .advanced-source-inventory[open] summary{margin-bottom:10px}
 .advanced-source-inventory .task-sources-table{max-height:300px;overflow:auto}
 @media(max-width:1100px){.project-intelligence-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.advanced-source-note{color:var(--text-muted);font-size:.61rem;line-height:1.4;margin:8px 0}

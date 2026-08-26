@@ -1,5 +1,6 @@
 use crate::db::DatabaseState;
 use crate::git_engine::{snapshot as git_snapshot, GitSnapshotRequest};
+use crate::project_dashboard::{self, ManifestStatus};
 use crate::projects::{fetch_project, list_projects, ProjectListQuery, ProjectRecord};
 use notify::event::{CreateKind, ModifyKind, RemoveKind, RenameMode};
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
@@ -108,6 +109,7 @@ pub struct NormalizedEvent {
 struct RawInput {
     project_id: String,
     root: PathBuf,
+    single_dashboard: bool,
     event: notify::Result<Event>,
 }
 
@@ -121,6 +123,7 @@ struct Inner {
     statuses: HashMap<String, ProjectWatcherStatus>,
     watches: HashMap<String, RecommendedWatcher>,
     watch_roots: HashMap<String, PathBuf>,
+    watch_scopes: HashMap<String, String>,
     pending_count: usize,
     running: bool,
     last_refresh_mono: HashMap<String, SystemTime>,
@@ -155,6 +158,7 @@ impl WatcherManager {
             statuses: HashMap::new(),
             watches: HashMap::new(),
             watch_roots: HashMap::new(),
+            watch_scopes: HashMap::new(),
             pending_count: 0,
             running: true,
             last_refresh_mono: HashMap::new(),
@@ -227,6 +231,7 @@ impl WatcherManager {
             if !desired.contains(&project_id) {
                 inner.watches.remove(&project_id);
                 inner.watch_roots.remove(&project_id);
+                inner.watch_scopes.remove(&project_id);
                 inner.statuses.remove(&project_id);
             }
         }
@@ -245,6 +250,16 @@ impl WatcherManager {
 
     fn configure_project(&self, project: ProjectRecord) -> Result<(), String> {
         let available = project.status == "ACTIVE" && Path::new(&project.normalized_path).is_dir();
+        let single_dashboard = available
+            && project_dashboard::resolve(&self.database, &project.id)
+                .map(|dashboard| {
+                    dashboard.tracking_mode.as_deref() == Some("single-dashboard-watch")
+                        && matches!(
+                            dashboard.manifest_status,
+                            ManifestStatus::Valid | ManifestStatus::Partial
+                        )
+                })
+                .unwrap_or(false);
         let status = ProjectWatcherStatus {
             project_id: project.id.clone(),
             state: if available { "WATCHING" } else { "MISSING" }.to_string(),
@@ -270,11 +285,13 @@ impl WatcherManager {
         if inner.watch_roots.get(&project.id) != Some(&root) {
             inner.watches.remove(&project.id);
             inner.watch_roots.remove(&project.id);
+            inner.watch_scopes.remove(&project.id);
         }
         if !available || inner.watches.contains_key(&project.id) {
             if !available {
                 inner.watches.remove(&project.id);
                 inner.watch_roots.remove(&project.id);
+                inner.watch_scopes.remove(&project.id);
             }
             return Ok(());
         }
@@ -296,6 +313,7 @@ impl WatcherManager {
                 let input = RawInput {
                     project_id: project_id.clone(),
                     root: PathBuf::from(&project_root),
+                    single_dashboard,
                     event,
                 };
                 match sender.try_send(input) {
@@ -327,13 +345,13 @@ impl WatcherManager {
                 };
             }
         };
-        if watcher
-            .watch(
-                Path::new(&project.normalized_path),
-                RecursiveMode::Recursive,
-            )
-            .is_err()
-        {
+        let root_path = Path::new(&project.normalized_path);
+        let root_mode = if single_dashboard {
+            RecursiveMode::NonRecursive
+        } else {
+            RecursiveMode::Recursive
+        };
+        if watcher.watch(root_path, root_mode).is_err() {
             if let Some(status) = inner.statuses.get_mut(&project.id) {
                 status.state = "DEGRADED".to_string();
                 status.watcher_health = "DEGRADED".to_string();
@@ -343,8 +361,29 @@ impl WatcherManager {
             }
             return Ok(());
         }
+        if single_dashboard {
+            let dashboard_dir = root_path.join(".hiveai");
+            if watcher
+                .watch(&dashboard_dir, RecursiveMode::NonRecursive)
+                .is_err()
+            {
+                if let Some(status) = inner.statuses.get_mut(&project.id) {
+                    status.state = "DEGRADED".to_string();
+                    status.watcher_health = "DEGRADED".to_string();
+                }
+                return Err("single-dashboard watcher failed to attach .hiveai".to_string());
+            }
+        }
         inner.watches.insert(project.id.clone(), watcher);
-        inner.watch_roots.insert(project.id, root);
+        inner.watch_roots.insert(project.id.clone(), root);
+        inner.watch_scopes.insert(
+            project.id,
+            if single_dashboard {
+                "SINGLE_DASHBOARD".to_string()
+            } else {
+                "LEGACY_RECURSIVE".to_string()
+            },
+        );
         Ok(())
     }
 }
@@ -355,10 +394,12 @@ impl Drop for WatcherManager {
             inner.running = false;
             inner.watches.clear();
             inner.watch_roots.clear();
+            inner.watch_scopes.clear();
         }
         let _ = self.sender.try_send(RawInput {
             project_id: String::new(),
             root: PathBuf::new(),
+            single_dashboard: false,
             event: Err(notify::Error::generic("shutdown")),
         });
         if let Ok(mut worker) = self.worker.lock() {
@@ -463,7 +504,12 @@ fn accept_input(
         return;
     }
     let normalized = match input.event {
-        Ok(event) => normalize_event(&input.project_id, &input.root, &event),
+        Ok(event) => normalize_event_with_mode(
+            &input.project_id,
+            &input.root,
+            &event,
+            input.single_dashboard,
+        ),
         Err(_) => {
             mark_rescan(inner, &input.project_id);
             return;
@@ -511,9 +557,10 @@ fn refresh_project_snapshot(
     let project = fetch_project(database, project_id)?;
     let available = project.status == "ACTIVE" && Path::new(&project.normalized_path).is_dir();
     let git_relevant = explicit
-        || events
-            .iter()
-            .any(|event| matches!(event.category_hint, EventCategory::GitMetadata));
+        || events.iter().any(|event| {
+            matches!(event.category_hint, EventCategory::GitMetadata)
+                || is_project_dashboard_path(&event.relative_path)
+        });
     let git_id = if available
         && project
             .repository
@@ -608,6 +655,15 @@ fn refresh_allowed(inner: &Arc<Mutex<Inner>>, project_id: &str) -> bool {
 }
 
 fn normalize_event(project_id: &str, root: &Path, event: &Event) -> Vec<NormalizedEvent> {
+    normalize_event_with_mode(project_id, root, event, false)
+}
+
+fn normalize_event_with_mode(
+    project_id: &str,
+    root: &Path,
+    event: &Event,
+    single_dashboard: bool,
+) -> Vec<NormalizedEvent> {
     let kind = match event.kind {
         EventKind::Create(CreateKind::Any) | EventKind::Create(_) => NormalizedEventKind::Create,
         EventKind::Remove(RemoveKind::Any) | EventKind::Remove(_) => NormalizedEventKind::Remove,
@@ -640,11 +696,16 @@ fn normalize_event(project_id: &str, root: &Path, event: &Event) -> Vec<Normaliz
         .iter()
         .filter_map(|path| relative_path(path, root))
         .filter(|path| !is_excluded(path))
+        .filter(|path| !single_dashboard || is_project_dashboard_path(path))
         .collect::<Vec<_>>();
     if paths.is_empty() {
         return Vec::new();
     }
-    let category = category_hint(&paths[0]);
+    let category = if single_dashboard {
+        EventCategory::TaskCandidate
+    } else {
+        category_hint(&paths[0])
+    };
     if kind == NormalizedEventKind::Rename && paths.len() >= 2 {
         return vec![make_event(
             project_id,
@@ -739,6 +800,11 @@ fn category_hint(path: &str) -> EventCategory {
     } else {
         EventCategory::Other
     }
+}
+
+fn is_project_dashboard_path(path: &str) -> bool {
+    path.replace('\\', "/")
+        .eq_ignore_ascii_case(project_dashboard::MANIFEST_RELATIVE_PATH)
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -865,6 +931,7 @@ fn timestamp() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::project_dashboard::MANIFEST_RELATIVE_PATH;
     use std::fs;
     use std::process::Command;
     use tempfile::tempdir;
@@ -890,6 +957,7 @@ mod tests {
         RawInput {
             project_id: project_id.to_string(),
             root: PathBuf::from("C:\\repo"),
+            single_dashboard: false,
             event: Ok(Event::new(kind).add_path(PathBuf::from(format!("C:\\repo\\{path}")))),
         }
     }
@@ -911,6 +979,7 @@ mod tests {
             )]),
             watches: HashMap::new(),
             watch_roots: HashMap::new(),
+            watch_scopes: HashMap::new(),
             pending_count: 0,
             running: true,
             last_refresh_mono: HashMap::new(),
@@ -1258,6 +1327,129 @@ mod tests {
             EventCategory::Source
         ));
     }
+
+    #[test]
+    fn single_dashboard_filter_rejects_internal_source_events_and_accepts_atomic_replace() {
+        let root = PathBuf::from("C:\\repo");
+        let task_event = Event::new(EventKind::Modify(ModifyKind::Data(
+            notify::event::DataChange::Content,
+        )))
+        .add_path(PathBuf::from("C:\\repo\\TASKS.md"));
+        let source_event = Event::new(EventKind::Modify(ModifyKind::Data(
+            notify::event::DataChange::Content,
+        )))
+        .add_path(PathBuf::from("C:\\repo\\src\\lib.rs"));
+        let dashboard_event = Event::new(EventKind::Modify(ModifyKind::Data(
+            notify::event::DataChange::Content,
+        )))
+        .add_path(PathBuf::from("C:\\repo\\.hiveai\\PROJECT_DASHBOARD.md"));
+        assert!(normalize_event_with_mode("p", &root, &task_event, true).is_empty());
+        assert!(normalize_event_with_mode("p", &root, &source_event, true).is_empty());
+        assert_eq!(
+            normalize_event_with_mode("p", &root, &dashboard_event, true)[0].relative_path,
+            ".hiveai/PROJECT_DASHBOARD.md"
+        );
+        let replace = Event::new(EventKind::Modify(ModifyKind::Name(RenameMode::Both)))
+            .add_path(PathBuf::from("C:\\repo\\.hiveai\\PROJECT_DASHBOARD.tmp"))
+            .add_path(PathBuf::from("C:\\repo\\.hiveai\\PROJECT_DASHBOARD.md"));
+        assert_eq!(
+            normalize_event_with_mode("p", &root, &replace, true)[0].relative_path,
+            ".hiveai/PROJECT_DASHBOARD.md"
+        );
+    }
+
+    #[test]
+    fn migrated_project_attaches_single_dashboard_scope_and_refreshes_only_at_dashboard_signal() {
+        let app_data = tempdir().unwrap();
+        let project_root = tempdir().unwrap();
+        fs::create_dir_all(project_root.path().join(".hiveai")).unwrap();
+        fs::write(
+            project_root.path().join("TASKS.md"),
+            "# Work\n- [ ] first task\n",
+        )
+        .unwrap();
+        fs::write(
+            project_root.path().join(MANIFEST_RELATIVE_PATH),
+            "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\nrefreshPolicy: project-agent-maintained; H!veAI watches only .hiveai/PROJECT_DASHBOARD.md\n## Source authorities\nCanonical task source: `TASKS.md`\n",
+        )
+        .unwrap();
+        let database = DatabaseState::initialize(app_data.path().to_path_buf()).unwrap();
+        let project = crate::projects::register_project(
+            &database,
+            crate::projects::RegisterProjectRequest {
+                path: project_root.path().to_string_lossy().into_owned(),
+                name: Some("Single dashboard watcher".into()),
+            },
+        )
+        .unwrap();
+        let manager = WatcherManager::initialize(database.clone()).unwrap();
+        assert_eq!(
+            manager.inner.lock().unwrap().watch_scopes[&project.id],
+            "SINGLE_DASHBOARD"
+        );
+        manager.rescan_project(&project.id).unwrap();
+        assert_eq!(
+            crate::task_intelligence::list(&database, &project.id)
+                .unwrap()
+                .tasks[0]
+                .title,
+            "first task"
+        );
+        fs::write(
+            project_root.path().join("TASKS.md"),
+            "# Work\n- [ ] changed before dashboard signal\n",
+        )
+        .unwrap();
+        manager
+            .sender
+            .try_send(RawInput {
+                project_id: project.id.clone(),
+                root: project_root.path().to_path_buf(),
+                single_dashboard: true,
+                event: Ok(Event::new(EventKind::Modify(ModifyKind::Data(
+                    notify::event::DataChange::Content,
+                )))
+                .add_path(project_root.path().join("TASKS.md"))),
+            })
+            .unwrap();
+        std::thread::sleep(Duration::from_millis(1000));
+        assert_eq!(
+            crate::task_intelligence::list(&database, &project.id)
+                .unwrap()
+                .tasks[0]
+                .title,
+            "first task"
+        );
+        fs::write(
+            project_root.path().join(MANIFEST_RELATIVE_PATH),
+            "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\nrefreshPolicy: project-agent-maintained; H!veAI watches only .hiveai/PROJECT_DASHBOARD.md\n## Source authorities\nCanonical task source: `TASKS.md`\n## H!veAI live status\n| Field | Value |\n| --- | --- |\n| Current task | changed at dashboard signal |\n",
+        )
+        .unwrap();
+        manager
+            .sender
+            .try_send(RawInput {
+                project_id: project.id.clone(),
+                root: project_root.path().to_path_buf(),
+                single_dashboard: true,
+                event: Ok(Event::new(EventKind::Modify(ModifyKind::Data(
+                    notify::event::DataChange::Content,
+                )))
+                .add_path(project_root.path().join(MANIFEST_RELATIVE_PATH))),
+            })
+            .unwrap();
+        std::thread::sleep(Duration::from_millis(1400));
+        assert_eq!(
+            crate::task_intelligence::list(&database, &project.id)
+                .unwrap()
+                .tasks[0]
+                .title,
+            "changed before dashboard signal"
+        );
+        assert_eq!(
+            crate::command_center::snapshot(&database).unwrap().projects[0].manifest_status,
+            "VALID"
+        );
+    }
     #[test]
     fn missing_status_is_degraded_without_registry_deletion() {
         let state = inner();
@@ -1276,6 +1468,7 @@ mod tests {
             RawInput {
                 project_id: String::new(),
                 root: PathBuf::new(),
+                single_dashboard: false,
                 event: Err(notify::Error::generic("shutdown")),
             },
         );

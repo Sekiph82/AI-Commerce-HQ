@@ -32,7 +32,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition
 - M10 original strict audit = historical FAIL with 5 MAJOR findings.
 - M10A remediation, independent re-audit, and Akilta native click acceptance are complete; Akilta footer link = PASS/ACCEPTED.
 - Original M11 implementation is a historical strict-audit FAIL with 8 MAJOR findings.
-- M11A strict closure remediation is ACTIVE during this run, including UX01-UX04 user-reported layout and Project Dashboard entry-contract corrections; M11 remains NOT CLOSED and user visual/native acceptance remains pending.
+- M11A REV3 consolidated strict-closure continuation is ACTIVE during this run: P0 topbar attribution/footer removal, real single-dashboard watcher scope, materialized dashboard consumption, legacy attention semantics, and actor provenance; M11 remains NOT CLOSED and user visual/native acceptance remains pending.
 - M11/M12 are the runtime consumers of the `.hiveai/PROJECT_DASHBOARD.md` authority system; only M11 scope is active in this run.
 
 ---
@@ -896,10 +896,16 @@ M10A remediation, independent re-audit, and Akilta footer native click acceptanc
 # M11 - Global Command Center
 
 ### M11.00 - User-observed UX closure scope
-- [~] UX01 one-screen Command Center composition with no outer/nested operational-panel scrollbars at accepted desktop sizes.
-- [~] UX02 remove the full-width home Recent Activity panel; retain compact selected-project activity and dedicated Activity navigation.
-- [~] UX03 Project Dashboard Contract is the normal Task Sources surface; advanced M08 inventory remains available behind explicit disclosure.
-- [~] UX04 preserve `.hiveai/PROJECT_DASHBOARD.md` as the single user-facing project entry contract without auto-rewriting project files.
+- [~] P0 remove the bottom footer and move the complete Akilta attribution into the topbar between Workspace and Search Workspace.
+- [~] P1 implement actual SINGLE_DASHBOARD watcher attachment/filtering for migrated projects, with legacy fallback.
+- [~] P2 parse and consume bounded materialized `.hiveai/PROJECT_DASHBOARD.md` status sections without weakening M10 precedence.
+- [~] P3 dogfood the extended dashboard contract on H!veAI's own `.hiveai/PROJECT_DASHBOARD.md`.
+- [~] P4 correct informational ABSENT fallback and explicit configuration-attention semantics.
+- [~] P5 omit unproved GPT Audit and CI actors from audit/test activity.
+- [x] UX01 one-screen Command Center composition with no outer/nested operational-panel scrollbars at accepted desktop sizes.
+- [x] UX02 remove the full-width home Recent Activity panel; retain compact selected-project activity and dedicated Activity navigation.
+- [x] UX03 Project Dashboard Contract is the normal Task Sources surface; advanced M08 inventory remains available behind explicit disclosure.
+- [x] UX04 preserve `.hiveai/PROJECT_DASHBOARD.md` as the single user-facing project entry contract without auto-rewriting project files.
 
 ### M11.01 - Live portfolio data model
 - [ ] Replace placeholder KPI data with Registry/task/workflow-backed data with unknown/error truth preserved.
@@ -968,7 +974,7 @@ M10A remediation, independent re-audit, and Akilta footer native click acceptanc
 - [x] Stale project-switch/race tests.
 - [ ] Manifest present/absent/malformed/stale/cross-project/directory containment tests and actual native direct execution.
 - [ ] Prove authority resolution does not double-count duplicate task sources.
-- [ ] Full regression/publication after M11A remediation.
+- [~] Full regression/publication after M11A REV3 remediation.
 - [ ] User visual acceptance if layout materially changes.
 - [ ] Independent strict audit.
 

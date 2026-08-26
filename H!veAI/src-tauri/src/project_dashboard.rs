@@ -15,6 +15,8 @@ pub const MAX_SOURCE_PATHS_PER_ROLE: usize = 32;
 pub const MAX_SOURCE_PATH_BYTES: usize = 512;
 pub const MAX_MANIFEST_WARNINGS: usize = 64;
 pub const MAX_WARNING_SCALAR_BYTES: usize = 1024;
+pub const MAX_MATERIALIZED_ITEMS: usize = 10;
+pub const MAX_MATERIALIZED_PROVENANCE: usize = 32;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -55,6 +57,46 @@ pub struct ResolvedSource {
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct MaterializedFact {
+    pub label: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct MaterializedWorkRow {
+    pub id: String,
+    pub item: String,
+    pub status: String,
+    pub owner_actor: String,
+    pub evidence_source: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct MaterializedDashboardStatus {
+    pub project_status: Option<String>,
+    pub health: Option<String>,
+    pub current_milestone: Option<String>,
+    pub current_task_title: Option<String>,
+    pub current_task_id: Option<String>,
+    pub declared_workflow_state: Option<String>,
+    pub progress_raw: Option<String>,
+    pub progress_percent: Option<u32>,
+    pub required_actor: Option<String>,
+    pub next_action: Option<String>,
+    pub waiting_on: Option<String>,
+    pub last_meaningful_update: Option<String>,
+    pub current_work: Vec<MaterializedWorkRow>,
+    pub blockers_waiting: Vec<String>,
+    pub milestone_summary: Vec<String>,
+    pub quality_verification: Vec<MaterializedFact>,
+    pub recent_meaningful_activity: Vec<String>,
+    pub provenance: Vec<MaterializedFact>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectDashboardResolution {
     pub project_id: String,
     pub manifest_status: ManifestStatus,
@@ -64,11 +106,13 @@ pub struct ProjectDashboardResolution {
     pub repository: Option<String>,
     pub branch_policy: Option<String>,
     pub dashboard_mode: Option<String>,
+    pub tracking_mode: Option<String>,
     pub refresh_policy: Option<String>,
     pub task_authority: TaskAuthorityState,
     pub canonical_task_source: Option<String>,
     pub roles: BTreeMap<String, Vec<ResolvedSource>>,
     pub provenance_mode: String,
+    pub materialized: MaterializedDashboardStatus,
     pub warnings: Vec<String>,
 }
 
@@ -79,7 +123,10 @@ struct ParsedManifest {
     repository: Option<String>,
     branch_policy: Option<String>,
     dashboard_mode: Option<String>,
+    tracking_mode: Option<String>,
     refresh_policy: Option<String>,
+    materialized: MaterializedDashboardStatus,
+    materialized_warnings: Vec<String>,
     roles: BTreeMap<String, Vec<String>>,
     warnings: Vec<String>,
 }
@@ -171,12 +218,20 @@ pub fn resolve(
         repository: parsed.repository,
         branch_policy: parsed.branch_policy,
         dashboard_mode: parsed.dashboard_mode,
+        tracking_mode: parsed.tracking_mode,
         refresh_policy: parsed.refresh_policy,
         task_authority: TaskAuthorityState::NotCanonicalized,
         canonical_task_source: None,
         roles: BTreeMap::new(),
         provenance_mode: "MANIFEST".into(),
-        warnings: parsed.warnings,
+        materialized: parsed.materialized,
+        warnings: {
+            let mut warnings = parsed.warnings;
+            for warning in parsed.materialized_warnings {
+                push_warning(&mut warnings, warning);
+            }
+            warnings
+        },
     };
     let mut extracted = 0usize;
     for (role, paths) in parsed.roles {
@@ -282,11 +337,13 @@ fn empty_resolution(project_id: &str, manifest_path: String) -> ProjectDashboard
         repository: None,
         branch_policy: None,
         dashboard_mode: None,
+        tracking_mode: None,
         refresh_policy: None,
         task_authority: TaskAuthorityState::FallbackM08M09,
         canonical_task_source: None,
         roles: BTreeMap::new(),
         provenance_mode: "FALLBACK_M08_M09".into(),
+        materialized: MaterializedDashboardStatus::default(),
         warnings: Vec::new(),
     }
 }
@@ -384,6 +441,7 @@ fn parse_manifest(text: &str) -> Result<ParsedManifest, String> {
                         | "repository"
                         | "branchPolicy"
                         | "dashboardMode"
+                        | "trackingMode"
                         | "refreshPolicy"
                 ) {
                     fields.insert(key.to_string(), clean_scalar(value));
@@ -394,7 +452,13 @@ fn parse_manifest(text: &str) -> Result<ParsedManifest, String> {
         let Some((label, value)) = trimmed.split_once(':') else {
             continue;
         };
-        let role = match label.trim().to_ascii_lowercase().as_str() {
+        let role = match label
+            .trim()
+            .trim_start_matches('-')
+            .trim()
+            .to_ascii_lowercase()
+            .as_str()
+        {
             "canonical task source" => "canonicalTask",
             "handoff source" | "handoff sources" => "handoff",
             "roadmap source" | "roadmap/plan source" | "roadmap / plan source" => "roadmap",
@@ -423,13 +487,17 @@ fn parse_manifest(text: &str) -> Result<ParsedManifest, String> {
     if fields.get("dashboardMode").map(String::as_str) != Some("source-map") {
         return Err("dashboardMode must be source-map".into());
     }
+    let (materialized, materialized_warnings) = parse_materialized_sections(text);
     Ok(ParsedManifest {
         schema,
         project_key: fields.remove("projectKey"),
         repository: fields.remove("repository"),
         branch_policy: fields.remove("branchPolicy"),
         dashboard_mode: fields.remove("dashboardMode"),
+        tracking_mode: fields.remove("trackingMode"),
         refresh_policy: fields.remove("refreshPolicy"),
+        materialized,
+        materialized_warnings,
         roles,
         warnings,
     })
@@ -456,6 +524,224 @@ fn extract_paths(value: &str) -> Result<Vec<String>, String> {
         }
     }
     Ok(result)
+}
+
+fn parse_materialized_sections(text: &str) -> (MaterializedDashboardStatus, Vec<String>) {
+    let mut sections: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut current: Option<String> = None;
+    for line in text.lines() {
+        if let Some(heading) = line.trim().strip_prefix("## ") {
+            let name = heading.trim().to_ascii_lowercase();
+            current = Some(name.clone());
+            sections.entry(name).or_default();
+        } else if let Some(name) = current.as_ref() {
+            sections
+                .entry(name.clone())
+                .or_default()
+                .push(line.to_string());
+        }
+    }
+    let mut status = MaterializedDashboardStatus::default();
+    let mut warnings = Vec::new();
+    let live = sections
+        .get("h!veai live status")
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    for (label, value) in table_or_colon_facts(live) {
+        match label.to_ascii_lowercase().as_str() {
+            "project status" => status.project_status = Some(value),
+            "health" => status.health = Some(value),
+            "current milestone" => status.current_milestone = Some(value),
+            "current task" => status.current_task_title = Some(value),
+            "current task id" => status.current_task_id = Some(value),
+            "current workflow state" => status.declared_workflow_state = Some(value),
+            "progress" => {
+                status.progress_percent = parse_progress_percent(&value);
+                status.progress_raw = Some(value);
+            }
+            "required actor" => status.required_actor = Some(value),
+            "next action" => status.next_action = Some(value),
+            "waiting on" => status.waiting_on = Some(value),
+            "last meaningful update" => status.last_meaningful_update = Some(value),
+            _ => {}
+        }
+    }
+    if let Some(lines) = sections.get("current work") {
+        status.current_work = parse_work_rows(lines, &mut warnings);
+    }
+    if let Some(lines) = sections.get("blockers and waiting") {
+        status.blockers_waiting = parse_bounded_items(lines, MAX_MATERIALIZED_ITEMS);
+    }
+    if let Some(lines) = sections.get("milestone summary") {
+        status.milestone_summary = parse_bounded_items(lines, MAX_MATERIALIZED_ITEMS);
+    }
+    if let Some(lines) = sections.get("quality and verification") {
+        status.quality_verification = parse_bounded_facts(lines, MAX_MATERIALIZED_ITEMS);
+    }
+    if let Some(lines) = sections.get("recent meaningful activity") {
+        status.recent_meaningful_activity = parse_bounded_items(lines, MAX_MATERIALIZED_ITEMS);
+    }
+    if let Some(lines) = sections.get("provenance") {
+        status.provenance = parse_bounded_facts(lines, MAX_MATERIALIZED_PROVENANCE);
+    }
+    (status, warnings)
+}
+
+fn table_or_colon_facts(lines: &[String]) -> Vec<(String, String)> {
+    lines
+        .iter()
+        .filter_map(|line| {
+            let cells = table_cells(line);
+            if cells.len() >= 2 && !is_table_separator(&cells) {
+                return Some((cells[0].clone(), cells[1].clone()));
+            }
+            let (label, value) = line.trim().split_once(':')?;
+            let value = bounded_materialized(value);
+            (!label.trim().is_empty() && !value.is_empty())
+                .then(|| (label.trim().to_string(), value))
+        })
+        .collect()
+}
+
+fn table_cells(line: &str) -> Vec<String> {
+    let trimmed = line.trim();
+    if !trimmed.starts_with('|') {
+        return Vec::new();
+    }
+    trimmed
+        .trim_matches('|')
+        .split('|')
+        .map(bounded_materialized)
+        .collect()
+}
+
+fn is_table_separator(cells: &[String]) -> bool {
+    !cells.is_empty()
+        && cells
+            .iter()
+            .all(|cell| !cell.is_empty() && cell.chars().all(|character| character == '-'))
+}
+
+fn parse_work_rows(lines: &[String], warnings: &mut Vec<String>) -> Vec<MaterializedWorkRow> {
+    let mut rows = Vec::new();
+    for cells in lines.iter().map(|line| table_cells(line)) {
+        if cells.len() < 5 || is_table_separator(&cells) {
+            continue;
+        }
+        if cells[0].eq_ignore_ascii_case("id") {
+            continue;
+        }
+        rows.push(MaterializedWorkRow {
+            id: cells[0].clone(),
+            item: cells[1].clone(),
+            status: cells[2].clone(),
+            owner_actor: cells[3].clone(),
+            evidence_source: cells[4].clone(),
+        });
+        if rows.len() == MAX_MATERIALIZED_ITEMS {
+            break;
+        }
+    }
+    if lines.iter().any(|line| line.contains('|')) && rows.is_empty() {
+        push_warning(
+            warnings,
+            "malformed materialized Current work table ignored",
+        );
+    }
+    rows
+}
+
+fn parse_bounded_items(lines: &[String], limit: usize) -> Vec<String> {
+    let mut items = Vec::new();
+    for line in lines {
+        let value = if let Some(cells) = (!table_cells(line).is_empty()).then(|| table_cells(line))
+        {
+            if cells.len() >= 2 && !is_table_separator(&cells) {
+                format!("{}: {}", cells[0], cells[1])
+            } else {
+                String::new()
+            }
+        } else {
+            line.trim()
+                .strip_prefix('-')
+                .unwrap_or(line.trim())
+                .trim()
+                .to_string()
+        };
+        let value = bounded_materialized(&value);
+        if value.is_empty() || value.eq_ignore_ascii_case("none verified") {
+            continue;
+        }
+        items.push(value);
+        if items.len() == limit {
+            break;
+        }
+    }
+    items
+}
+
+fn parse_bounded_facts(lines: &[String], limit: usize) -> Vec<MaterializedFact> {
+    let mut facts = Vec::new();
+    for (index, line) in lines.iter().enumerate() {
+        let cells = table_cells(line);
+        let pair = if cells.len() >= 2 && !is_table_separator(&cells) {
+            Some((cells[0].clone(), cells[1].clone()))
+        } else {
+            line.trim()
+                .strip_prefix('-')
+                .unwrap_or(line.trim())
+                .split_once(':')
+                .map(|(label, value)| (bounded_materialized(label), bounded_materialized(value)))
+        };
+        let Some((label, value)) = pair else { continue };
+        if label.is_empty()
+            || value.is_empty()
+            || label.eq_ignore_ascii_case("field")
+            || label.eq_ignore_ascii_case("role")
+            || label.eq_ignore_ascii_case("source")
+            || is_table_separator(&[label.clone(), value.clone()])
+        {
+            continue;
+        }
+        facts.push(MaterializedFact {
+            label: if label.is_empty() {
+                format!("item-{index}")
+            } else {
+                label
+            },
+            value,
+        });
+        if facts.len() == limit {
+            break;
+        }
+    }
+    facts
+}
+
+fn parse_progress_percent(value: &str) -> Option<u32> {
+    let trimmed = value.trim();
+    if let Some(percent) = trimmed.strip_suffix('%') {
+        return percent
+            .trim()
+            .parse::<u32>()
+            .ok()
+            .filter(|value| *value <= 100);
+    }
+    let mut parts = trimmed.split('/').map(str::trim);
+    let numerator = parts.next()?.parse::<u32>().ok()?;
+    let denominator = parts.next()?.parse::<u32>().ok()?;
+    if denominator == 0 || parts.next().is_some() || numerator > denominator {
+        return None;
+    }
+    Some(numerator.saturating_mul(100) / denominator)
+}
+
+fn bounded_materialized(value: &str) -> String {
+    let mut bounded = value.trim().trim_matches('`').trim().to_string();
+    while bounded.len() > MAX_WARNING_SCALAR_BYTES {
+        bounded.pop();
+    }
+    bounded
 }
 
 fn clean_scalar(value: &str) -> String {
@@ -575,6 +861,49 @@ mod tests {
         assert_eq!(
             resolution.canonical_task_source.as_deref(),
             Some("TASKS.md")
+        );
+    }
+
+    #[test]
+    fn resolver_parses_tracking_mode_and_bounded_materialized_status() {
+        let (_db_dir, project_dir, db, project_id) = fixture();
+        fs::write(
+            project_dir.path().join(MANIFEST_RELATIVE_PATH),
+            "hiveaiDashboardSchema: hiveai-project-dashboard/v1\ndashboardMode: source-map\ntrackingMode: single-dashboard-watch\nrefreshPolicy: project-agent-maintained; H!veAI watches only .hiveai/PROJECT_DASHBOARD.md\n## Source authorities\n- Canonical task source: `TASKS.md`\n## H!veAI live status\n| Field | Value |\n| --- | --- |\n| Project status | ACTIVE |\n| Health | UNKNOWN |\n| Current milestone | M11A REV3 |\n| Current task | Dashboard materialization |\n| Current task ID | M11A.REV3 |\n| Current workflow state | IMPLEMENTATION_COMPLETE_PENDING_AUDIT |\n| Progress | 11/20 |\n| Required actor | CODEX |\n| Next action | Run gates |\n| Waiting on | Audit |\n| Last meaningful update | UNKNOWN |\n## Current work\n| ID | Item | Status | Owner/actor | Evidence/source |\n| --- | --- | --- | --- | --- |\n| one | One bounded item | ACTIVE | CODEX | TASKS.md |\n## Blockers and waiting\n- None verified\n## Provenance\n- Task authority: `TASKS.md`\n",
+        )
+        .unwrap();
+        let resolution = resolve(&db, &project_id).unwrap();
+        assert_eq!(
+            resolution.tracking_mode.as_deref(),
+            Some("single-dashboard-watch")
+        );
+        assert_eq!(resolution.task_authority, TaskAuthorityState::Canonical);
+        assert_eq!(
+            resolution.materialized.project_status.as_deref(),
+            Some("ACTIVE")
+        );
+        assert_eq!(resolution.materialized.progress_percent, Some(55));
+        assert_eq!(resolution.materialized.current_work.len(), 1);
+        assert_eq!(resolution.materialized.blockers_waiting.len(), 0);
+    }
+
+    #[test]
+    fn hiveai_dogfood_dashboard_is_a_single_watch_contract() {
+        let (_db_dir, project_dir, db, project_id) = fixture();
+        fs::write(
+            project_dir.path().join(MANIFEST_RELATIVE_PATH),
+            include_str!("../../.hiveai/PROJECT_DASHBOARD.md"),
+        )
+        .unwrap();
+        let resolution = resolve(&db, &project_id).unwrap();
+        assert_eq!(resolution.manifest_status, ManifestStatus::Partial);
+        assert_eq!(
+            resolution.tracking_mode.as_deref(),
+            Some("single-dashboard-watch")
+        );
+        assert_eq!(
+            resolution.materialized.current_milestone.as_deref(),
+            Some("M11A REV3")
         );
     }
 

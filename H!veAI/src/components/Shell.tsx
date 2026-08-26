@@ -170,6 +170,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="crumb">Workspace /</span>
             <strong>{title}</strong>
           </div>
+          <a
+            className="topbar-akilta"
+            href="https://www.akilta.com/"
+            onClick={openAkilta}
+            rel="noreferrer"
+            title="Developed by Akilta"
+          >
+            <img src={akiltaWordmark} alt="Akilta" />
+            <span className="topbar-akilta-copy">
+              Built with <b>♥</b> for maximum productivity by Akilta
+            </span>
+          </a>
           <div className="topbar-actions">
             <button
               className="search-trigger"
@@ -228,19 +240,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </MotionDiv>
           </AnimatePresence>
         </div>
-        <footer className="global-footer">
-          <img src={akiltaWordmark} alt="Akilta" />
-          <span>
-            Built with <b>♥</b> for maximum productivity by{" "}
-            <a
-              href="https://www.akilta.com/"
-              onClick={openAkilta}
-              rel="noreferrer"
-            >
-              Akilta
-            </a>
-          </span>
-        </footer>
       </main>
       {surface ? (
         <div

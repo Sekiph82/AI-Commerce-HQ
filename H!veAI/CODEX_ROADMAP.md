@@ -13,7 +13,7 @@ User-facing roadmap denominator remains **20**. `M00` is the historical rebuild/
 - Pre-M10 Native UX Hotfix X01/X02: PASS/CLOSED after independent source audit plus user native acceptance.
 - M10 original strict audit: historical FAIL with 5 MAJOR findings.
 - M10A remediation, independent re-audit, and Akilta native click acceptance: PASS/CLOSED.
-- M11 original implementation: historical strict-audit FAIL with 8 MAJOR findings; M11A strict closure remediation is ACTIVE during this run, including UX01-UX04 user-reported layout and Project Dashboard entry-contract corrections.
+- M11 original implementation: historical strict-audit FAIL with 8 MAJOR findings; M11A REV3 consolidated strict-closure continuation is ACTIVE during this run, covering P0-P8 and preserving prior UX01-UX04 corrections.
 - M11 remains NOT CLOSED; final builder state will remain IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT + USER VISUAL/NATIVE ACCEPTANCE.
 - M12-M20: planned/blocked; M12 remains blocked behind M11.
 - Strict completed progress is 11/20 = 55% because the pre-M10 hotfix is not a numbered roadmap milestone.

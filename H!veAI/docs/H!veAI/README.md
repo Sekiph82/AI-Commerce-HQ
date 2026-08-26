@@ -88,7 +88,7 @@ Chronological builder logs. Builder logs are claims/evidence records, not indepe
 - M10 Workflow State Machine: PASS/CLOSED.
 - Strict completed milestone count is now 11/20 = 55%.
 - M11 original implementation: historical strict-audit FAIL with 8 MAJOR findings.
-- M11A strict closure remediation: ACTIVE during this run, including UX01-UX04 user-reported layout and Project Dashboard entry-contract corrections; M11 remains NOT CLOSED and final builder state remains IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT + USER VISUAL/NATIVE ACCEPTANCE.
+- M11A REV3 consolidated strict-closure continuation: ACTIVE during this run for P0-P8 production corrections; M11 remains NOT CLOSED and final builder state remains IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT + USER VISUAL/NATIVE ACCEPTANCE.
 - M12 remains blocked behind M11. M11/M12 runtime implementation must incorporate the `.hiveai/PROJECT_DASHBOARD.md` authority manifest system, with only M11 active here.
 
 For exact current status, always defer to `H!veAI/TASKS.md`.

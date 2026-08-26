@@ -1465,6 +1465,7 @@ export function Tasks() {
           <SectionHeader title="Project Intelligence / Dashboard Contract" detail="Single project entry contract" />
           <div className="project-intelligence-grid">
             <div><span>Entry contract</span><strong>.hiveai/PROJECT_DASHBOARD.md</strong></div>
+            <div><span>Live tracking</span><strong>{commandProject?.trackingMode === "single-dashboard-watch" ? "SINGLE_DASHBOARD" : commandProject ? "LEGACY_FALLBACK" : "UNAVAILABLE"}</strong></div>
             <div><span>Manifest</span><strong>{commandProject?.manifestStatus ?? (desktop ? "UNAVAILABLE" : "BROWSER_PREVIEW")}</strong></div>
             <div><span>Task authority</span><strong>{commandProject?.taskAuthority ?? "UNAVAILABLE"}</strong></div>
             <div><span>Canonical task source</span><strong>{commandProject?.canonicalTaskSource ?? "Unknown"}</strong></div>
@@ -1477,6 +1478,7 @@ export function Tasks() {
         </div>
         <details className="advanced-source-inventory">
           <summary>Advanced source inventory ({sources.length})</summary>
+          <p className="advanced-source-note">Internal evidence / provenance. These files are not independent live-watch targets in SINGLE_DASHBOARD mode.</p>
           {loading ? <LoadingState /> : error ? <ErrorState detail="Task source inventory is unavailable for this project." /> : sources.length === 0 ? <EmptyState title="No task source files discovered" detail="Rescan the registered project to inspect bounded task and planning evidence." /> : (
             <div className="task-sources-table" role="table" aria-label="Discovered task sources">
               <div className="task-source-row task-source-head" role="row"><span>Path</span><span>Kind</span><span>Origin</span><span>Authority</span><span>Modified</span><span>Status</span></div>

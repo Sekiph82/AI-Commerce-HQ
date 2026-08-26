@@ -15,14 +15,36 @@ export type CommandCenterTask = {
 };
 
 export type CommandCenterAction = { summary: string; occurredAt: string; actor: string | null };
+export type MaterializedDashboardStatus = {
+  projectStatus: string | null;
+  health: string | null;
+  currentMilestone: string | null;
+  currentTaskTitle: string | null;
+  currentTaskId: string | null;
+  declaredWorkflowState: string | null;
+  progressRaw: string | null;
+  progressPercent: number | null;
+  requiredActor: string | null;
+  nextAction: string | null;
+  waitingOn: string | null;
+  lastMeaningfulUpdate: string | null;
+  currentWork: Array<{ id: string; item: string; status: string; ownerActor: string; evidenceSource: string }>;
+  blockersWaiting: string[];
+  milestoneSummary: string[];
+  qualityVerification: Array<{ label: string; value: string }>;
+  recentMeaningfulActivity: string[];
+  provenance: Array<{ label: string; value: string }>;
+};
 export type CommandCenterProject = {
   projectId: string;
   name: string;
   registryStatus: string;
   health: "MISSING" | "BLOCKED" | "ATTENTION" | "RUNNING" | "HEALTHY" | "UNKNOWN";
   manifestStatus: ManifestStatus;
+  trackingMode: string | null;
   taskAuthority: TaskAuthority;
   provenanceMode: string;
+  materialized: MaterializedDashboardStatus;
   canonicalTaskSource: string | null;
   currentTask: CommandCenterTask | null;
   currentState: string | null;
@@ -63,7 +85,8 @@ export const listenForCommandCenterRefresh = (handler: (event: CommandCenterRefr
 export function registryFallback(records: ProjectRecord[]): CommandCenterSnapshot {
   const projects = records.map((record) => ({
     projectId: record.id, name: record.name, registryStatus: record.status, health: "UNKNOWN" as const,
-    manifestStatus: "UNAVAILABLE" as const, taskAuthority: "FALLBACK_M08_M09" as const, provenanceMode: "REGISTRY_ONLY",
+    manifestStatus: "UNAVAILABLE" as const, trackingMode: null, taskAuthority: "FALLBACK_M08_M09" as const, provenanceMode: "REGISTRY_ONLY",
+    materialized: { projectStatus: null, health: null, currentMilestone: null, currentTaskTitle: null, currentTaskId: null, declaredWorkflowState: null, progressRaw: null, progressPercent: null, requiredActor: null, nextAction: null, waitingOn: null, lastMeaningfulUpdate: null, currentWork: [], blockersWaiting: [], milestoneSummary: [], qualityVerification: [], recentMeaningfulActivity: [], provenance: [] },
     canonicalTaskSource: null, currentTask: null, currentState: null, lastAction: null, nextAction: null, allowedActors: [],
     totalTasks: null, activeTasks: null, completedTasks: null, progressPercent: null, warnings: ["Live Command Center snapshot is unavailable; showing Registry identity only."], refreshStatus: "UNAVAILABLE", refreshAt: null, refreshError: null,
   }));
