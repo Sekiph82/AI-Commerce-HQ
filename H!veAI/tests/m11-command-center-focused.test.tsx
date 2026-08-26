@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 import { BrowserRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -74,15 +74,13 @@ describe("M11 Command Center evidence surface", () => {
     await waitFor(() => expect(window.location.pathname).toBe("/projects/project-2"));
   });
 
-  it("filters bounded activity without changing source data", async () => {
+  it("keeps home activity compact and leaves full history to the Activity route", async () => {
     renderCommandCenter();
     await screen.findAllByText("Task parsed");
-    const activity = screen.getByText("Recent Activity").closest("section");
-    expect(activity).not.toBeNull();
-    const activityScope = within(activity as HTMLElement);
-    fireEvent.change(activityScope.getByRole("textbox", { name: "Search recent activity" }), { target: { value: "missing" } });
-    expect(activityScope.getByText("No matching activity evidence.")).toBeInTheDocument();
-    expect(activityScope.queryAllByText("Task parsed")).toHaveLength(0);
+    expect(screen.getByText("Recent activity")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Search recent activity" })).not.toBeInTheDocument();
+    expect(screen.getByText("View activity")).toBeInTheDocument();
+    expect(screen.getByText("Active Work Queue")).toBeInTheDocument();
   });
 
   it("uses a neutral browser preview identity without fixture actions", async () => {
@@ -91,5 +89,17 @@ describe("M11 Command Center evidence surface", () => {
     expect(await screen.findByText("Preview / Native data unavailable")).toBeInTheDocument();
     expect(screen.queryByText(/FormuLab|Scrubbots/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Scrubbots|placeholder/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps representative desktop home layouts bounded", async () => {
+    for (const width of [1280, 1600]) {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+      const view = renderCommandCenter();
+      expect(view.container.querySelector(".command-activity-filter")).toBeNull();
+      expect(view.container.querySelector(".project-rail")).toBeInTheDocument();
+      expect(view.container.querySelector(".command-right-rail")).toBeInTheDocument();
+      expect(screen.getByText("Active Work Queue")).toBeInTheDocument();
+      view.unmount();
+    }
   });
 });

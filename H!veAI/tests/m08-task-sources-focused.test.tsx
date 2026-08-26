@@ -45,6 +45,24 @@ describe("M08 Task Sources live workspace", () => {
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("hiveai_task_sources_list", { projectId: "project-a" }));
   });
 
+  it("shows the dashboard contract first and keeps advanced inventory closed", async () => {
+    const sources = Array.from({ length: 15 }, (_, index) => source("project-a", `evidence-${index}.md`));
+    invoke.mockImplementation((command: string, args?: { projectId?: string }) => {
+      if (command === "hiveai_projects_list") return Promise.resolve(records);
+      if (command === "hiveai_task_sources_list") return Promise.resolve(sources);
+      if (command === "hiveai_task_source_custom_paths_list") return Promise.resolve([]);
+      return Promise.resolve(undefined);
+    });
+    renderTasks();
+    expect(await screen.findByText("Project Intelligence / Dashboard Contract")).toBeInTheDocument();
+    expect(screen.getByText(".hiveai/PROJECT_DASHBOARD.md")).toBeInTheDocument();
+    const details = (await screen.findByText("Advanced source inventory (15)")).closest("details");
+    expect(details).not.toBeNull();
+    expect(details).not.toHaveAttribute("open");
+    fireEvent.click(screen.getByText("Advanced source inventory (15)"));
+    expect(await screen.findByText("evidence-14.md")).toBeInTheDocument();
+  });
+
   it("shows_loading_before_source_response", async () => {
     let resolve!: (value: unknown) => void;
     invoke.mockImplementation((command: string) => command === "hiveai_projects_list" ? Promise.resolve(records) : command === "hiveai_task_sources_list" ? new Promise((done) => { resolve = done; }) : Promise.resolve([]));

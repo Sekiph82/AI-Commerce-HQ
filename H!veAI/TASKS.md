@@ -32,7 +32,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition
 - M10 original strict audit = historical FAIL with 5 MAJOR findings.
 - M10A remediation, independent re-audit, and Akilta native click acceptance are complete; Akilta footer link = PASS/ACCEPTED.
 - Original M11 implementation is a historical strict-audit FAIL with 8 MAJOR findings.
-- M11A strict closure remediation is ACTIVE during this run; M11 remains NOT CLOSED and user visual/native acceptance remains pending.
+- M11A strict closure remediation is ACTIVE during this run, including UX01-UX04 user-reported layout and Project Dashboard entry-contract corrections; M11 remains NOT CLOSED and user visual/native acceptance remains pending.
 - M11/M12 are the runtime consumers of the `.hiveai/PROJECT_DASHBOARD.md` authority system; only M11 scope is active in this run.
 
 ---
@@ -895,6 +895,12 @@ M10A remediation, independent re-audit, and Akilta footer native click acceptanc
 
 # M11 - Global Command Center
 
+### M11.00 - User-observed UX closure scope
+- [~] UX01 one-screen Command Center composition with no outer/nested operational-panel scrollbars at accepted desktop sizes.
+- [~] UX02 remove the full-width home Recent Activity panel; retain compact selected-project activity and dedicated Activity navigation.
+- [~] UX03 Project Dashboard Contract is the normal Task Sources surface; advanced M08 inventory remains available behind explicit disclosure.
+- [~] UX04 preserve `.hiveai/PROJECT_DASHBOARD.md` as the single user-facing project entry contract without auto-rewriting project files.
+
 ### M11.01 - Live portfolio data model
 - [ ] Replace placeholder KPI data with Registry/task/workflow-backed data with unknown/error truth preserved.
 - [ ] Define and verify the complete portfolio aggregation contract.
@@ -953,8 +959,8 @@ M10A remediation, independent re-audit, and Akilta footer native click acceptanc
 
 ### M11.09 - Layout/performance/accessibility
 - [x] Preserve accepted sidebar/background/glass system.
-- [x] Avoid outer-body overflow at accepted desktop viewports.
-- [x] Avoid unnecessary nested scrollbars.
+- [~] Avoid outer-body overflow at accepted desktop viewports; source/component evidence is present, native visual acceptance remains pending.
+- [~] Avoid unnecessary nested scrollbars; source/component evidence is present, native visual acceptance remains pending.
 - [x] Preserve keyboard/focus behavior.
 
 ### M11.10 - Tests/audit/closure

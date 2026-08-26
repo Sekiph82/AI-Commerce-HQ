@@ -53,6 +53,7 @@ import type { GitSnapshot } from "./gitEngine";
 import type { Project } from "./types";
 import { useProjectRegistry } from "./registryContext";
 import { CommandCenterLive } from "./command_center_view";
+import { getCommandCenterSnapshot, type CommandCenterProject } from "./commandCenter";
 import {
   addCustomSourcePath,
   discoverTaskSources,
@@ -1339,6 +1340,7 @@ export function Tasks() {
   const selected = projects.find((project) => project.id === selectedProjectId) ?? null;
   const [sources, setSources] = React.useState<DiscoveredProjectSource[]>([]);
   const [customPaths, setCustomPaths] = React.useState<CustomSourcePath[]>([]);
+  const [commandProject, setCommandProject] = React.useState<CommandCenterProject | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [path, setPath] = React.useState("");
@@ -1355,14 +1357,17 @@ export function Tasks() {
         ? await (discover ? discoverTaskSources(projectId) : listTaskSources(projectId))
         : [];
       const nextCustom = desktop ? await listCustomSourcePaths(projectId) : [];
+      const nextSnapshot = desktop ? await getCommandCenterSnapshot().catch(() => null) : null;
       if (requestId === request.current) {
         setSources(nextSources);
         setCustomPaths(nextCustom);
+        setCommandProject(nextSnapshot?.projects?.find((project) => project.projectId === projectId) ?? null);
       }
     } catch (caught) {
       if (requestId === request.current) {
         setSources([]);
         setCustomPaths([]);
+        setCommandProject(null);
         setError(caught instanceof Error ? caught.message : String(caught));
       }
     } finally {
@@ -1376,6 +1381,7 @@ export function Tasks() {
     if (!selectedProjectId) {
       setSources([]);
       setCustomPaths([]);
+      setCommandProject(null);
       setError(null);
       setLoading(false);
       return;
@@ -1432,6 +1438,8 @@ export function Tasks() {
   }
   const available = sources.filter((source) => source.status === "AVAILABLE").length;
   const warnings = sources.filter((source) => source.status !== "AVAILABLE").length;
+  const contractWarnings = commandProject?.warnings ?? [];
+  const refreshLabel = commandProject?.refreshStatus ?? (desktop ? "UNAVAILABLE" : "BROWSER_PREVIEW");
   return (
     <>
       <PageHeader title="Task Sources" description={`Bounded source inventory for ${selected.name}.`} />
@@ -1453,12 +1461,29 @@ export function Tasks() {
           <span><b>{warnings}</b> warnings</span>
           <span><b>{customPaths.length}</b> custom paths</span>
         </div>
-        {loading ? <LoadingState /> : error ? <ErrorState detail="Task source inventory is unavailable for this project." /> : sources.length === 0 ? <EmptyState title="No task source files discovered" detail="Rescan the registered project to inspect bounded task and planning evidence." /> : (
-          <div className="task-sources-table" role="table" aria-label="Discovered task sources">
-            <div className="task-source-row task-source-head" role="row"><span>Path</span><span>Kind</span><span>Origin</span><span>Authority</span><span>Modified</span><span>Status</span></div>
-            {sources.map((source) => <div className="task-source-row" role="row" key={source.id}><span title={source.absolutePath}>{source.relativePath}</span><span>{source.sourceKind}</span><span>{source.origin}</span><span>{source.authorityClass} · {source.priority}</span><span>{source.modifiedAt ? new Date(source.modifiedAt).toLocaleString() : "Unknown"}</span><span className={`source-status source-status-${source.status.toLowerCase()}`}>{source.status}</span></div>)}
+        <div className="project-intelligence-panel" aria-label="Project Intelligence and Dashboard Contract">
+          <SectionHeader title="Project Intelligence / Dashboard Contract" detail="Single project entry contract" />
+          <div className="project-intelligence-grid">
+            <div><span>Entry contract</span><strong>.hiveai/PROJECT_DASHBOARD.md</strong></div>
+            <div><span>Manifest</span><strong>{commandProject?.manifestStatus ?? (desktop ? "UNAVAILABLE" : "BROWSER_PREVIEW")}</strong></div>
+            <div><span>Task authority</span><strong>{commandProject?.taskAuthority ?? "UNAVAILABLE"}</strong></div>
+            <div><span>Canonical task source</span><strong>{commandProject?.canonicalTaskSource ?? "Unknown"}</strong></div>
+            <div><span>M09 refresh</span><strong>{refreshLabel}</strong></div>
+            <div><span>Last refresh</span><strong>{commandProject?.refreshAt ?? "Unknown"}</strong></div>
+            <div><span>Internal evidence</span><strong>{sources.length} discovered sources</strong></div>
+            <div><span>Warnings</span><strong>{contractWarnings.length + warnings}</strong></div>
           </div>
-        )}
+          {contractWarnings.length ? <div className="project-intelligence-warning">{contractWarnings.slice(0, 3).join(" | ")}</div> : null}
+        </div>
+        <details className="advanced-source-inventory">
+          <summary>Advanced source inventory ({sources.length})</summary>
+          {loading ? <LoadingState /> : error ? <ErrorState detail="Task source inventory is unavailable for this project." /> : sources.length === 0 ? <EmptyState title="No task source files discovered" detail="Rescan the registered project to inspect bounded task and planning evidence." /> : (
+            <div className="task-sources-table" role="table" aria-label="Discovered task sources">
+              <div className="task-source-row task-source-head" role="row"><span>Path</span><span>Kind</span><span>Origin</span><span>Authority</span><span>Modified</span><span>Status</span></div>
+              {sources.map((source) => <div className="task-source-row" role="row" key={source.id}><span title={source.absolutePath}>{source.relativePath}</span><span>{source.sourceKind}</span><span>{source.origin}</span><span>{source.authorityClass} · {source.priority}</span><span>{source.modifiedAt ? new Date(source.modifiedAt).toLocaleString() : "Unknown"}</span><span className={`source-status source-status-${source.status.toLowerCase()}`}>{source.status}</span></div>)}
+            </div>
+          )}
+        </details>
       </section>
       <section className="panel custom-source-panel">
         <SectionHeader title="Custom source paths" detail="Stored in H!veAI settings" />
