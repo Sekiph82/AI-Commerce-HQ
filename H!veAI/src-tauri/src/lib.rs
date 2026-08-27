@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{Emitter, Manager};
 use tauri_plugin_log::{Target, TargetKind};
 
+mod codex_adapter;
 mod command_center;
 mod db;
 mod external_browser;
@@ -16,6 +17,7 @@ mod task_sources;
 mod time;
 mod watcher;
 mod workflow;
+use codex_adapter::{CodexAdapter, CodexReadiness, CodexSession, CodexStartRequest};
 use command_center::CommandCenterSnapshot;
 use db::{DatabaseState, DatabaseStatus};
 use project_cockpit::ProjectCockpitSnapshot;
@@ -148,6 +150,47 @@ fn hiveai_project_cockpit_snapshot(
     project_id: String,
 ) -> Result<ProjectCockpitSnapshot, String> {
     project_cockpit::snapshot(&database, &project_id)
+}
+
+#[tauri::command]
+async fn hiveai_codex_readiness() -> Result<CodexReadiness, String> {
+    tauri::async_runtime::spawn_blocking(codex_adapter::readiness)
+        .await
+        .map_err(|error| format!("Codex readiness task failed: {error}"))
+}
+
+#[tauri::command]
+fn hiveai_codex_sessions_list(
+    database: tauri::State<'_, DatabaseState>,
+    project_id: String,
+) -> Result<Vec<CodexSession>, String> {
+    codex_adapter::list(&database, &project_id)
+}
+
+#[tauri::command]
+fn hiveai_codex_start(
+    adapter: tauri::State<'_, CodexAdapter>,
+    database: tauri::State<'_, DatabaseState>,
+    request: CodexStartRequest,
+) -> Result<CodexSession, String> {
+    codex_adapter::start(&adapter, &database, request)
+}
+
+#[tauri::command]
+fn hiveai_codex_stop(
+    adapter: tauri::State<'_, CodexAdapter>,
+    database: tauri::State<'_, DatabaseState>,
+    session_id: String,
+) -> Result<CodexSession, String> {
+    codex_adapter::stop(&adapter, &database, &session_id)
+}
+
+#[tauri::command]
+fn hiveai_codex_resume(
+    database: tauri::State<'_, DatabaseState>,
+    session_id: String,
+) -> Result<CodexSession, String> {
+    codex_adapter::resume(&database, &session_id)
 }
 
 #[tauri::command]
@@ -382,6 +425,11 @@ pub fn run() {
             hiveai_command_center_snapshot,
             hiveai_project_dashboard_resolve,
             hiveai_project_cockpit_snapshot,
+            hiveai_codex_readiness,
+            hiveai_codex_sessions_list,
+            hiveai_codex_start,
+            hiveai_codex_stop,
+            hiveai_codex_resume,
             hiveai_projects_list,
             hiveai_project_register,
             hiveai_project_get,
@@ -421,11 +469,14 @@ pub fn run() {
                 .map_err(|error| format!("H!veAI persistence initialization failed: {error}"))?;
             workflow::recover_stale(&database)
                 .map_err(|error| format!("H!veAI workflow recovery failed: {error}"))?;
+            codex_adapter::reconcile(&database)
+                .map_err(|error| format!("H!veAI Codex recovery failed: {error}"))?;
             let database_status = database.status();
             let watcher_manager =
                 WatcherManager::initialize_with_app_handle(database.clone(), app.handle().clone())
                     .map_err(|error| format!("H!veAI watcher initialization failed: {error}"))?;
             app.manage(database);
+            app.manage(CodexAdapter::default());
             app.manage(watcher_manager);
 
             log::info!(
@@ -477,7 +528,9 @@ mod capability_tests {
     fn main_window_allows_the_registered_project_cockpit_command() {
         let capability = include_str!("../capabilities/default.json");
         assert!(capability.contains("allow-project-cockpit"));
+        assert!(capability.contains("allow-codex-adapter"));
         let permissions = include_str!("../permissions/foundation.toml");
         assert!(permissions.contains("hiveai_project_cockpit_snapshot"));
+        assert!(permissions.contains("hiveai_codex_start"));
     }
 }

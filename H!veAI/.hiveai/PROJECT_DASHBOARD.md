@@ -20,14 +20,14 @@ branchPolicy: H!veAI
 | Project status | ACTIVE |
 | Health | UNKNOWN |
 | Current milestone | M13 |
-| Current task | Codex Adapter milestone activation and implementation-prompt preparation |
+| Current task | Codex Adapter implementation |
 | Current task ID | M13 |
-| Current workflow state | READY_ACTIVE_FOR_NEXT_IMPLEMENTATION_RUN |
+| Current workflow state | IMPLEMENTATION_COMPLETE_PENDING_AUDIT |
 | Progress | 65% |
 | Required actor | CODEX |
-| Next action | Prepare the separate authoritative M13 implementation prompt before M13 coding begins |
-| Waiting on | Separate authoritative M13 implementation prompt |
-| Last meaningful update | M12 accepted closed; M13 activated for the next implementation run without starting implementation |
+| Next action | Independent strict audit and user native/visual acceptance |
+| Waiting on | Independent strict audit and user native/visual acceptance |
+| Last meaningful update | M13 Codex adapter implementation and verification gates completed |
 
 ## Current work
 
@@ -43,12 +43,12 @@ branchPolicy: H!veAI
 | M12 | Implement project-scoped Project Cockpit with truthful authority/provenance | CLOSED | CODEX | Accepted M12 strict/audit/native evidence |
 | M12A-R26 | Order selected-project workflow history globally before the bounded cockpit cap | CLOSED | CODEX | M12A prompt / strict re-audit |
 | M12B-ROUTE-LOAD | Restore native registered-project cockpit snapshot IPC and truthful route errors | CLOSED | CODEX | M12B prompt / strict re-audit / user native acceptance |
-| M13 | Codex Adapter milestone activation and implementation-prompt preparation | READY_ACTIVE_FOR_NEXT_IMPLEMENTATION_RUN | CODEX | M12 closure prompt; no M13 implementation prompt exists yet |
+| M13 | Codex Adapter implementation | IMPLEMENTATION_COMPLETE_PENDING_AUDIT | CODEX | M13 implementation prompt; native adapter source/tests; M13 builder log |
 
 ## Blockers and waiting
 
 - M12, M12A R26, and M12B are PASS/CLOSED on accepted strict evidence and user native/visual acceptance.
-- M13 is activated for the next implementation run; no M13 implementation code has started and a separate authoritative M13 implementation prompt is not yet present.
+- M13 implementation is complete; independent strict audit and user native/visual acceptance remain pending.
 - M21 remains planned and was not started.
 
 ## Milestone summary
@@ -60,7 +60,7 @@ branchPolicy: H!veAI
 - M12: PASS/CLOSED on accepted strict evidence and user native/visual acceptance.
 - M12A: PASS/CLOSED; R26 independently re-audited.
 - M12B: PASS/CLOSED; native Open Cockpit acceptance recorded.
-- M13: READY / ACTIVE FOR NEXT IMPLEMENTATION RUN; implementation not started.
+- M13: IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
 - Strict completed roadmap count: 13/20 = 65%.
 
 ## Quality and verification
@@ -71,6 +71,9 @@ branchPolicy: H!veAI
 | M12 full regression | PASS | Full native/frontend tests, typecheck/build/audit/checks and governed publication passed |
 | M12B route-loading focused tests | PASS | Exact-ID navigation, native ACTIVE snapshot, error classification, permission capability, and M12A isolation coverage |
 | M12 closure acceptance | PASS | Accepted M12/M12A/M12B evidence and user native/visual acceptance dated 2026-08-27 |
+| M13 focused native adapter tests | PASS | Codex readiness, process boundary, bounded capture, redaction, recovery, and injection assertions |
+| M13 focused frontend tests | PASS | Readiness, registered-project scoping, prompt/task request shape, and browser-preview guard |
+| M13 full verification | PASS | Native/frontend regression, typecheck, build, audit, formatting, check, and governed publication |
 
 ## Recent meaningful activity
 
@@ -78,6 +81,7 @@ branchPolicy: H!veAI
 - M12 Project Cockpit, M12A R26 history remediation, and M12B native route-loading remediation are PASS/CLOSED on accepted evidence; M13 is now the active next implementation milestone.
 - Prior M11A R01-R08, E01-E03, and UX01-UX04 source fixes are preserved.
 - H!veAI own dashboard contract is now the dogfood single-dashboard watch target; materialized activity remains explicitly undated and REV7 publication evidence is complete.
+- M13 Codex adapter is implemented with direct owned-process execution, persisted agent evidence, bounded redacted output, and explicit unsupported resume semantics.
 
 ## Provenance
 
@@ -97,6 +101,6 @@ M12B remediation prompt: `docs/H!veAI/prompts/M12B_NATIVE_OPEN_COCKPIT_ROUTE_LOA
 
 M12 closure and M13 activation prompt: `docs/H!veAI/prompts/M12_CLOSURE_AND_M13_ACTIVATION_PROMPT.md`.
 
-No separate authoritative M13 implementation prompt exists yet; M13 coding is not started by this run.
+M13 implementation is complete; the authoritative M13 prompt, source/test evidence, and immutable builder log remain available for independent audit.
 
 H!veAI actively watches only .hiveai/PROJECT_DASHBOARD.md for project-status changes; the sources above are internal project evidence/provenance and are not independent live-watch targets.

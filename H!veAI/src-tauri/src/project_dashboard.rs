@@ -1023,7 +1023,7 @@ mod tests {
         );
         assert_eq!(
             resolution.materialized.current_milestone.as_deref(),
-            Some("M12")
+            Some("M13")
         );
     }
 

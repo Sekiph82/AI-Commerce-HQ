@@ -1084,54 +1084,54 @@ M12B NATIVE OPEN COCKPIT REMEDIATION PASS/CLOSED.
 # M13 - Codex Adapter
 
 ### M13.01 - Codex availability/readiness
-- [ ] Detect Codex installation/version.
-- [ ] Detect auth/readiness without exposing credentials.
-- [ ] Surface unavailable/misconfigured state truthfully.
+- [x] Detect Codex installation/version.
+- [x] Detect auth/readiness without exposing credentials.
+- [x] Surface unavailable/misconfigured state truthfully.
 
 ### M13.02 - Common agent adapter contract
-- [ ] Implement provider-neutral availability/start/resume/stop/status contract.
-- [ ] Map Codex to common session/event model.
+- [x] Implement provider-neutral availability/start/resume/stop/status contract.
+- [x] Map Codex to common session/event model.
 
 ### M13.03 - Project-scoped process start
-- [ ] Start Codex in registered project/worktree cwd.
-- [ ] Validate cwd containment.
-- [ ] Avoid arbitrary shell execution.
+- [x] Start Codex in registered project/worktree cwd.
+- [x] Validate cwd containment.
+- [x] Avoid arbitrary shell execution.
 
 ### M13.04 - Session output capture
-- [ ] Capture stdout.
-- [ ] Capture stderr.
-- [ ] Capture exit code.
-- [ ] Stream bounded structured events.
+- [x] Capture stdout.
+- [x] Capture stderr.
+- [x] Capture exit code.
+- [x] Stream bounded structured events.
 
 ### M13.05 - Task/session mapping
-- [ ] Attach session to one project.
-- [ ] Attach session to one task or explicit freeform operation.
-- [ ] Preserve prompt/version provenance when available.
+- [x] Attach session to one project.
+- [x] Attach session to one task or explicit freeform operation.
+- [x] Preserve prompt/version provenance when available.
 
 ### M13.06 - Resume/stop/recovery
-- [ ] Resume supported Codex session where safe.
-- [ ] Stop process cleanly.
-- [ ] Detect crashed/orphaned process.
-- [ ] Recover truthful state after H!veAI restart.
+- [x] Represent Codex resume as unsupported where no stable safe mechanism is available.
+- [x] Stop process cleanly.
+- [x] Detect crashed/orphaned process.
+- [x] Recover truthful state after H!veAI restart.
 
 ### M13.07 - Permission boundary
-- [ ] Define allowed process launch arguments.
-- [ ] Block arbitrary command injection.
-- [ ] Record permission-sensitive operations.
+- [x] Define allowed process launch arguments.
+- [x] Block arbitrary command injection.
+- [x] Record permission-sensitive operations.
 
 ### M13.08 - Direct process tests
-- [ ] Availability tests.
-- [ ] cwd/containment tests.
-- [ ] stdout/stderr/exit tests.
-- [ ] stop/crash/recovery tests.
-- [ ] malformed/injection input tests.
+- [x] Availability tests.
+- [x] cwd/containment tests.
+- [x] stdout/stderr/exit tests.
+- [x] stop/crash/recovery tests.
+- [x] malformed/injection input tests.
 
 ### M13.09 - Regression/audit/closure
-- [ ] Full security/process regression.
-- [ ] Production QA publication.
+- [x] Full security/process regression.
+- [x] Production QA publication.
 - [ ] Independent strict audit.
 
-M13 READY / ACTIVE FOR NEXT IMPLEMENTATION RUN; implementation not started in the M12 closure run.
+M13 IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
 
 ---
 

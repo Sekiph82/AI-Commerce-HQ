@@ -55,6 +55,7 @@ import { useProjectRegistry } from "./registryContext";
 import { CommandCenterLive } from "./command_center_view";
 import { getCommandCenterSnapshot, type CommandCenterProject } from "./commandCenter";
 import { getProjectCockpitSnapshot, type ProjectCockpitSnapshot } from "./projectCockpit";
+import { getCodexReadiness, listCodexSessions, resumeCodexSession, startCodexSession, stopCodexSession, type CodexReadiness, type CodexSession } from "./codexAdapter";
 import { overrideWorkflow, type WorkflowState } from "./workflow";
 import {
   addCustomSourcePath,
@@ -1754,12 +1755,73 @@ export function Tasks() {
   );
 }
 export function Agents() {
-  return (
-    <Placeholder
-      title="Agent Sessions"
-      description="A safe surface for future Codex and Claude sessions."
-    />
-  );
+  const desktop = isTauriDesktop();
+  const { records, selectedProjectId, selectProject } = useProjectRegistry();
+  const [readiness, setReadiness] = React.useState<CodexReadiness | null>(null);
+  const [sessions, setSessions] = React.useState<CodexSession[]>([]);
+  const [prompt, setPrompt] = React.useState("");
+  const [taskId, setTaskId] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const selected = records.find((record) => record.id === selectedProjectId) ?? records[0] ?? null;
+  const refresh = React.useCallback(async () => {
+    if (!desktop) return;
+    try {
+      const next = await getCodexReadiness();
+      setReadiness(next);
+      if (selected?.id) setSessions(await listCodexSessions(selected.id));
+      setError(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    }
+  }, [desktop, selected?.id]);
+  React.useEffect(() => { void refresh(); }, [refresh]);
+  const start = async () => {
+    if (!desktop || !selected || !prompt.trim()) return;
+    setBusy(true); setError(null);
+    try {
+      await startCodexSession(selected.id, prompt, taskId.trim() || null);
+      setPrompt(""); setTaskId("");
+      setSessions(await listCodexSessions(selected.id));
+    } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
+    finally { setBusy(false); }
+  };
+  const stop = async (id: string) => {
+    setBusy(true); setError(null);
+    try { await stopCodexSession(id); if (selected) setSessions(await listCodexSessions(selected.id)); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
+    finally { setBusy(false); }
+  };
+  const resume = async (id: string) => {
+    setError(null);
+    try { await resumeCodexSession(id); } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
+  };
+  return <>
+    <PageHeader title="Agents" description="Bounded Codex operations for registered projects." />
+    {!desktop ? <div className="fixture-note">Native H!veAI is required for Codex process operations.</div> : null}
+    {error ? <div className="safe-notice" role="alert">{error}</div> : null}
+    <section className="panel agent-adapter-panel">
+      <SectionHeader title="Codex adapter" detail="Direct owned-process lifecycle" />
+      <div className="agent-adapter-grid">
+        <div><span>Provider</span><strong>CODEX</strong></div>
+        <div><span>Readiness</span><strong>{readiness?.readinessState ?? (desktop ? "CHECKING" : "BROWSER_PREVIEW")}</strong></div>
+        <div><span>Version</span><strong>{readiness?.version ?? "Unknown"}</strong></div>
+        <div><span>Authentication</span><strong>{readiness?.diagnosticCode === "AUTH_READINESS_UNVERIFIED" ? "Unknown until operation" : "Unknown"}</strong></div>
+      </div>
+      {readiness?.diagnosticMessage ? <div className="safe-notice">{readiness.diagnosticMessage}</div> : null}
+    </section>
+    <section className="panel agent-operation-panel">
+      <SectionHeader title="Start operation" detail="One registered project per session" />
+      <label>Project<select aria-label="Codex project" value={selected?.id ?? ""} onChange={(event) => selectProject(event.target.value, true)} disabled={busy || !records.length}>{records.map((record) => <option key={record.id} value={record.id}>{record.name}</option>)}</select></label>
+      <label>Task ID <span className="agent-field-note">optional, must belong to project</span><input aria-label="Codex task ID" value={taskId} onChange={(event) => setTaskId(event.target.value)} disabled={busy} maxLength={256} /></label>
+      <label>Prompt<textarea aria-label="Codex prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} disabled={busy} maxLength={65536} rows={5} /></label>
+      <button className="primary-button" type="button" onClick={() => void start()} disabled={!desktop || !selected || !readiness?.available || !prompt.trim() || busy}><Terminal size={15} /> Start Codex operation</button>
+    </section>
+    <section className="panel agent-sessions-panel">
+      <SectionHeader title="Persisted Codex sessions" detail={selected ? selected.name : "No project selected"} />
+      <div className="cockpit-record-list">{sessions.map((session) => <details className="cockpit-record" key={session.id}><summary><strong>{session.operationKind}</strong><span>{session.state}</span></summary><div className="agent-session-actions"><button className="secondary-button" type="button" onClick={() => void resume(session.id)}>Resume</button>{["STARTING", "RUNNING"].includes(session.state) ? <button className="secondary-button" type="button" onClick={() => void stop(session.id)} disabled={busy}>Stop owned process</button> : null}</div><CockpitFacts facts={[["Session", session.id], ["Project", session.projectId], ["Task", session.taskId ?? "Freeform"], ["Working directory", session.cwd], ["Started", session.startedAt ?? "Unknown"], ["Ended", session.endedAt ?? "Unknown"]]} />{session.stdout ? <pre className="cockpit-code">{session.stdout}{session.stdoutTruncated ? "\n[output truncated]" : ""}</pre> : null}{session.stderr ? <pre className="cockpit-code agent-stderr">{session.stderr}{session.stderrTruncated ? "\n[error output truncated]" : ""}</pre> : null}</details>)}{!sessions.length ? <EmptyState title="No persisted Codex sessions" detail={selected ? "No Codex session evidence is available for this project." : "Register a project to use the adapter."} /> : null}</div>
+    </section>
+  </>;
 }
 export function Audits() {
   return (
