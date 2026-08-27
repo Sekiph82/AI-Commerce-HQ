@@ -10,5 +10,6 @@ export type GitSnapshot = {
   stagedFiles: GitFileChange[]; unstagedFiles: GitFileChange[]; untrackedFiles: string[]; conflictedFiles: string[];
   aheadCount: number | null; behindCount: number | null; upstream: string | null; remotes: GitRemote[]; recentCommits: GitCommit[]; worktrees: GitWorktree[]; health: GitHealth; snapshotTimestamp: string;
 };
+export type GitDiff = { projectId: string; scope: "STAGED" | "WORKING_TREE"; text: string; truncated: boolean; binaryFiles: string[]; byteLimit: number; lineLimit: number };
 
 export function getGitSnapshot(projectId: string, persist = false) { return invoke<GitSnapshot>('hiveai_git_snapshot', { request: { projectId, persist } }); }

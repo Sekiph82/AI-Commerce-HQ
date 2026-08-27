@@ -7,6 +7,7 @@ mod command_center;
 mod db;
 mod external_browser;
 mod git_engine;
+mod project_cockpit;
 mod project_dashboard;
 mod projects;
 mod runtime;
@@ -17,6 +18,7 @@ mod watcher;
 mod workflow;
 use command_center::CommandCenterSnapshot;
 use db::{DatabaseState, DatabaseStatus};
+use project_cockpit::ProjectCockpitSnapshot;
 use project_dashboard::ProjectDashboardResolution;
 use projects::{
     ProjectListQuery, ProjectRecord, RegisterProjectRequest, RepairProjectPathRequest,
@@ -138,6 +140,14 @@ fn hiveai_project_dashboard_resolve(
     project_id: String,
 ) -> Result<ProjectDashboardResolution, String> {
     command_center::resolve_project(&database, &project_id)
+}
+
+#[tauri::command]
+fn hiveai_project_cockpit_snapshot(
+    database: tauri::State<'_, DatabaseState>,
+    project_id: String,
+) -> Result<ProjectCockpitSnapshot, String> {
+    project_cockpit::snapshot(&database, &project_id)
 }
 
 #[tauri::command]
@@ -371,6 +381,7 @@ pub fn run() {
             hiveai_database_status,
             hiveai_command_center_snapshot,
             hiveai_project_dashboard_resolve,
+            hiveai_project_cockpit_snapshot,
             hiveai_projects_list,
             hiveai_project_register,
             hiveai_project_get,

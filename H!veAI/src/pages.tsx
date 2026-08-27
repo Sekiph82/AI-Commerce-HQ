@@ -54,6 +54,8 @@ import type { Project } from "./types";
 import { useProjectRegistry } from "./registryContext";
 import { CommandCenterLive } from "./command_center_view";
 import { getCommandCenterSnapshot, type CommandCenterProject } from "./commandCenter";
+import { getProjectCockpitSnapshot, type ProjectCockpitSnapshot } from "./projectCockpit";
+import { overrideWorkflow, type WorkflowState } from "./workflow";
 import {
   addCustomSourcePath,
   discoverTaskSources,
@@ -874,9 +876,7 @@ export function ProjectCockpit() {
   const { id } = useParams();
   const { selectProject } = useProjectRegistry();
   const project = projects.find((item) => item.id === id);
-  const [registered, setRegistered] = React.useState<ProjectRecord | null>(
-    null,
-  );
+  const [snapshot, setSnapshot] = React.useState<ProjectCockpitSnapshot | null>(null);
   const [routeState, setRouteState] = React.useState<
     "loading" | "ready" | "not-found" | "error"
   >(isTauriDesktop() ? "loading" : project ? "ready" : "not-found");
@@ -893,33 +893,33 @@ export function ProjectCockpit() {
     "Files",
     "Settings",
   ];
+  const requestId = React.useRef(0);
   React.useEffect(() => {
-    if (!id || !isTauriDesktop()) return;
-    let active = true;
+    const currentRequest = ++requestId.current;
+    setTab("Overview");
+    setSnapshot(null);
+    if (!id || !isTauriDesktop()) {
+      setRouteState(project ? "ready" : "not-found");
+      return;
+    }
     setRouteState("loading");
-    setRegistered(null);
     void getRegisteredProject(id)
+      .then(() => getProjectCockpitSnapshot(id))
       .then((value) => {
-        if (active) {
-          setRegistered(value);
-          selectProject(value.id);
+        if (currentRequest === requestId.current) {
+          setSnapshot(value);
+          selectProject(value.project.id);
           setRouteState("ready");
         }
       })
       .catch(() => {
-        if (active) setRouteState("error");
+        if (currentRequest === requestId.current) setRouteState("error");
       });
-    return () => {
-      active = false;
-    };
   }, [id, selectProject]);
-  if (registered)
-    return (
-      <>
-        <RegisteredProjectCockpit project={registered} />
-        <GitStatusSurface projectId={registered.id} />
-      </>
-    );
+  if (snapshot)
+    return <LiveProjectCockpit snapshot={snapshot} onRefresh={() => {
+      if (id) void getProjectCockpitSnapshot(id).then(setSnapshot).catch(() => undefined);
+    }} />;
   if (isTauriDesktop())
     return (
       <div className="cockpit-route-state">
@@ -988,6 +988,225 @@ export function ProjectCockpit() {
     </>
   );
 }
+
+function LiveProjectCockpit({
+  snapshot,
+  onRefresh,
+}: {
+  snapshot: ProjectCockpitSnapshot;
+  onRefresh: () => void;
+}) {
+  const navigate = useNavigate();
+  const [tab, setTab] = React.useState("Overview");
+  const [priority, setPriority] = React.useState(String(snapshot.project.priority));
+  const [settingsMessage, setSettingsMessage] = React.useState<string | null>(null);
+  const [settingsBusy, setSettingsBusy] = React.useState(false);
+  const tabs = ["Overview", "Tasks", "Workflow", "Agents", "Audit", "Git", "Tests", "Activity", "Files", "Settings"];
+  const summary = snapshot.projectSummary;
+  const materialized = snapshot.dashboard.materialized;
+  const savePriority = async () => {
+    const nextPriority = Number(priority);
+    if (!Number.isInteger(nextPriority) || nextPriority < 0 || nextPriority > 2) {
+      setSettingsMessage("Priority must be Normal, High, or Critical.");
+      return;
+    }
+    setSettingsBusy(true);
+    setSettingsMessage(null);
+    try {
+      await updateProjectSettings(snapshot.project.id, nextPriority);
+      setSettingsMessage("Registry settings saved.");
+      onRefresh();
+    } catch (caught) {
+      setSettingsMessage(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+  const repair = () => {
+    const path = window.prompt("Enter the moved project folder path", snapshot.project.originalPath);
+    if (!path) return;
+    setSettingsBusy(true);
+    void repairProjectPath(snapshot.project.id, path)
+      .then(() => { setSettingsMessage("Project path repaired."); onRefresh(); })
+      .catch((caught) => setSettingsMessage(caught instanceof Error ? caught.message : String(caught)))
+      .finally(() => setSettingsBusy(false));
+  };
+  const archive = () => {
+    if (!window.confirm(`Archive ${snapshot.project.name} from active registry views?`)) return;
+    setSettingsBusy(true);
+    void archiveProject(snapshot.project.id)
+      .then(() => navigate("/projects"))
+      .catch((caught) => setSettingsMessage(caught instanceof Error ? caught.message : String(caught)))
+      .finally(() => setSettingsBusy(false));
+  };
+  const remove = () => {
+    if (!window.confirm(`Remove ${snapshot.project.name} from H!veAI registry? The folder will not be deleted.`)) return;
+    setSettingsBusy(true);
+    void removeProject(snapshot.project.id)
+      .then(() => navigate("/projects"))
+      .catch((caught) => setSettingsMessage(caught instanceof Error ? caught.message : String(caught)))
+      .finally(() => setSettingsBusy(false));
+  };
+  return (
+    <div className="project-cockpit-live">
+      <Link className="back-link" to="/projects"><ArrowLeft size={15} />Back to projects</Link>
+      <div className="cockpit-header">
+        <div className="project-mark project-mark-large">{snapshot.project.name.slice(0, 2).toUpperCase()}</div>
+        <div className="cockpit-identity">
+          <p className="eyebrow">Project cockpit / live registered project</p>
+          <h1>{snapshot.project.name}</h1>
+          <p>{snapshot.project.originalPath}</p>
+        </div>
+        <div className="cockpit-actions">
+          <span className={`registry-status registry-status-${snapshot.project.status.toLowerCase()}`}>{snapshot.project.status}</span>
+          <button className="icon-button" type="button" onClick={onRefresh} aria-label="Refresh project cockpit" title="Refresh project cockpit"><RefreshCw size={16} /></button>
+        </div>
+      </div>
+      <nav className="tabs project-cockpit-tabs" aria-label="Project cockpit tabs">
+        {tabs.map((item) => <button key={item} type="button" className={tab === item ? "tab-active" : ""} onClick={() => setTab(item)}>{item}</button>)}
+      </nav>
+      {snapshot.warnings.length ? <div className="safe-notice cockpit-notice" role="status">{snapshot.warnings.slice(0, 3).join(" | ")}</div> : null}
+      {tab === "Overview" ? <CockpitLiveOverview snapshot={snapshot} /> : null}
+      {tab === "Tasks" ? <CockpitLiveTasks snapshot={snapshot} /> : null}
+      {tab === "Workflow" ? <CockpitLiveWorkflow snapshot={snapshot} onRefresh={onRefresh} /> : null}
+      {tab === "Agents" ? <CockpitLiveAgents snapshot={snapshot} /> : null}
+      {tab === "Audit" ? <CockpitLiveAudits snapshot={snapshot} /> : null}
+      {tab === "Git" ? <CockpitLiveGit snapshot={snapshot} /> : null}
+      {tab === "Tests" ? <CockpitLiveTests snapshot={snapshot} /> : null}
+      {tab === "Activity" ? <CockpitLiveActivity snapshot={snapshot} /> : null}
+      {tab === "Files" ? <CockpitLiveFiles snapshot={snapshot} /> : null}
+      {tab === "Settings" ? <CockpitLiveSettings snapshot={snapshot} priority={priority} setPriority={setPriority} busy={settingsBusy} message={settingsMessage} onSave={savePriority} onRepair={repair} onArchive={archive} onRemove={remove} /> : null}
+      <div className="cockpit-provenance-footer">Snapshot generated {snapshot.generatedAt} / Project-scoped native read model</div>
+    </div>
+  );
+}
+
+function CockpitLiveOverview({ snapshot }: { snapshot: ProjectCockpitSnapshot }) {
+  const summary = snapshot.projectSummary;
+  const materialized = snapshot.dashboard.materialized;
+  const task = summary.currentTask;
+  return (
+    <>
+      <section className="cockpit-live-hero">
+        <div>
+          <span className="eyebrow">Current task</span>
+          <h2>{task?.title ?? materialized.currentTaskTitle ?? "Current task unavailable"}</h2>
+          <p>{task ? `Where we are: ${task.parsedStatus}. Source: ${task.sourcePath}.` : "No authoritative current task evidence is available for this project."}</p>
+          {summary.currentState ? <span className="cockpit-state-chip">{formatCockpitState(summary.currentState)}</span> : null}
+        </div>
+        <div className="cockpit-live-progress">
+          <span>Milestone progress</span>
+          <strong>{summary.progressPercent == null ? "Unknown" : `${summary.progressPercent}%`}</strong>
+          {summary.progressPercent != null ? <ProgressIndicator value={summary.progressPercent} /> : <span className="unknown-value">Progress unavailable</span>}
+          <span>Health <b className={`health-${summary.health.toLowerCase()}`}>{summary.health}</b></span>
+        </div>
+      </section>
+      <div className="cockpit-live-grid">
+        <CockpitPanel title="Project identity" detail="Project Registry authority">
+          <CockpitFacts facts={[
+            ["Status", snapshot.project.status], ["Path", snapshot.project.originalPath],
+            ["Repository", snapshot.project.repository?.githubOwner && snapshot.project.repository.githubRepo ? `${snapshot.project.repository.githubOwner}/${snapshot.project.repository.githubRepo}` : "Unavailable"],
+            ["Current milestone", materialized.currentMilestone ?? "Unknown"],
+            ["Required actor", summary.allowedActors.join(", ") || materialized.requiredActor || "Unknown"],
+          ]} />
+        </CockpitPanel>
+        <CockpitPanel title="Next action" detail="Existing workflow/dashboard evidence">
+          <div className="cockpit-callout"><strong>{summary.nextAction ?? materialized.nextAction ?? "Next action unavailable"}</strong><span>{materialized.waitingOn ? `Waiting on: ${materialized.waitingOn}` : "No verified waiting fact"}</span></div>
+        </CockpitPanel>
+      </div>
+      <div className="cockpit-live-grid">
+        <CockpitPanel title="Last completed action" detail="M10 event history when available">
+          <div className="cockpit-callout"><strong>{summary.lastAction?.summary ?? "Last completed action unavailable"}</strong><span>{summary.lastAction ? `${summary.lastAction.occurredAt} / ${summary.lastAction.actor ?? "Actor unknown"}` : "No verified event"}</span></div>
+        </CockpitPanel>
+        <CockpitPanel title="Authority and provenance" detail="Resolved Project Dashboard contract">
+          <CockpitFacts facts={[["Manifest", snapshot.dashboard.manifestStatus], ["Task authority", snapshot.dashboard.taskAuthority], ["Provenance", snapshot.dashboard.provenanceMode], ["Canonical task", snapshot.dashboard.canonicalTaskSource ?? "Unavailable"]]} />
+        </CockpitPanel>
+      </div>
+      <CockpitPanel title="Project Dashboard status" detail="Materialized values are evidence, not stronger than M10">
+        <CockpitFacts facts={[["Project status", materialized.projectStatus ?? "Unknown"], ["Declared workflow", materialized.declaredWorkflowState ?? "Unknown"], ["Health", materialized.health ?? "Unknown"], ["Last meaningful update", materialized.lastMeaningfulUpdate ?? "Unknown"]]} />
+      </CockpitPanel>
+      <CockpitPanel title="Dashboard operational evidence" detail="Current work, waits, blockers, and quality remain provenance-bound">
+        <CockpitList title="Current work" values={materialized.currentWork.map((item) => `${item.item} / ${item.status} / ${item.ownerActor}`)} empty="No materialized current-work fact" />
+        <CockpitList title="Blockers and waiting" values={materialized.blockersWaiting} empty="No verified blocker or waiting fact" />
+        <CockpitList title="Quality verification" values={materialized.qualityVerification.map((item) => `${item.label}: ${item.value}`)} empty="No materialized quality fact" />
+      </CockpitPanel>
+    </>
+  );
+}
+
+function CockpitLiveTasks({ snapshot }: { snapshot: ProjectCockpitSnapshot }) {
+  const tasks = snapshot.taskIntelligence?.tasks ?? [];
+  const workflowById = new Map(snapshot.workflow.tasks.map((task) => [task.taskId, task]));
+  return <>
+    <CockpitPanel title="Canonical tasks" detail={snapshot.taskIntelligence ? `${tasks.length} persisted parsed task(s)` : "Task intelligence unavailable"}>
+      {snapshot.taskIntelligenceError ? <div className="safe-notice">Unknown: {snapshot.taskIntelligenceError}</div> : null}
+      <div className="cockpit-record-list">{tasks.map((task) => { const workflow = workflowById.get(task.id); return <details className="cockpit-record" key={task.id}><summary><strong>{task.title}</strong><span>{formatCockpitState(workflow?.currentState ?? task.parsedStatus)}</span></summary><CockpitFacts facts={[["Task ID", task.id], ["Status", task.parsedStatus], ["Workflow", workflow?.currentState ?? "Unknown"], ["Source", task.sourcePath], ["Required actor", task.requiredActor ?? "Unknown"], ["Evidence", `${task.evidence.startLine}-${task.evidence.endLine}`]]} /><CockpitList title="Dependencies" values={task.dependencyReferences} empty="No declared dependencies" /><CockpitList title="Blockers" values={task.blockers} empty="No declared blockers" /><CockpitList title="Acceptance criteria" values={task.acceptanceCriteria} empty="No acceptance criteria recorded" /></details>; })}</div>
+      {!tasks.length && !snapshot.taskIntelligenceError ? <EmptyState title="No parsed tasks" detail="The selected project's persisted task intelligence contains no tasks." /> : null}
+    </CockpitPanel>
+    <div className="cockpit-live-grid"><CockpitPanel title="Handoff" detail="M09 structured handoff evidence"><CockpitList title="Current" values={snapshot.taskIntelligence?.handoff?.current ?? []} empty="Unknown" /><CockpitList title="Next" values={snapshot.taskIntelligence?.handoff?.next ?? []} empty="Unknown" /><CockpitList title="Waiting" values={snapshot.taskIntelligence?.handoff?.waiting ?? []} empty="No verified wait" /></CockpitPanel><CockpitPanel title="Task authority" detail="Project Dashboard / M08 / M09"><CockpitFacts facts={[["Authority", snapshot.dashboard.taskAuthority], ["Canonical source", snapshot.dashboard.canonicalTaskSource ?? "Unavailable"], ["Duplicate policy", "Canonical task and workflow evidence take precedence"]]} /></CockpitPanel></div>
+  </>;
+}
+
+function CockpitLiveWorkflow({ snapshot, onRefresh }: { snapshot: ProjectCockpitSnapshot; onRefresh: () => void }) {
+  const current = snapshot.projectSummary.currentState ?? snapshot.dashboard.materialized.declaredWorkflowState;
+  const [selectedTaskId, setSelectedTaskId] = React.useState(snapshot.workflow.tasks[0]?.taskId ?? "");
+  const [targetState, setTargetState] = React.useState<WorkflowState | "">(snapshot.workflow.tasks[0]?.allowedNextStates[0] ?? "");
+  const [rationale, setRationale] = React.useState("");
+  const [evidenceReference, setEvidenceReference] = React.useState("");
+  const [correctionMessage, setCorrectionMessage] = React.useState<string | null>(null);
+  const [correctionBusy, setCorrectionBusy] = React.useState(false);
+  const selectedTask = snapshot.workflow.tasks.find((task) => task.taskId === selectedTaskId) ?? snapshot.workflow.tasks[0];
+  const submitCorrection = async () => {
+    if (!selectedTask || !targetState || !rationale.trim() || !evidenceReference.trim()) {
+      setCorrectionMessage("Select a target state, provide a correction rationale, and cite evidence.");
+      return;
+    }
+    setCorrectionBusy(true);
+    setCorrectionMessage(null);
+    try {
+      await overrideWorkflow({
+        taskId: selectedTask.taskId,
+        expectedFromState: selectedTask.currentState,
+        toState: targetState,
+        requestId: `cockpit-correction-${Date.now()}`,
+        rationale: rationale.trim(),
+        evidenceRefs: [{ kind: "EXTERNAL_REFERENCE", id: evidenceReference.trim() }],
+      });
+      setRationale("");
+      setEvidenceReference("");
+      setCorrectionMessage("Correction recorded as a workflow event.");
+      onRefresh();
+    } catch (caught) {
+      setCorrectionMessage(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setCorrectionBusy(false);
+    }
+  };
+  return <>
+    <CockpitPanel title="Workflow pipeline" detail="M10 canonical state and transition evidence"><div className="cockpit-pipeline"><span className="cockpit-pipeline-current">{current ? formatCockpitState(current) : "Workflow state unknown"}</span>{snapshot.projectSummary.allowedActors.length ? <span>Allowed actors: {snapshot.projectSummary.allowedActors.join(", ")}</span> : <span>Allowed actors unknown</span>}</div><div className="cockpit-record-list">{snapshot.workflow.tasks.map((task) => <div className="cockpit-record" key={task.taskId}><div className="cockpit-record-heading"><strong>{task.title}</strong><span>{formatCockpitState(task.currentState)}</span></div><CockpitFacts facts={[["Task ID", task.taskId], ["Required actor", task.requiredActor ?? "Unknown"], ["Next states", task.allowedNextStates.map(formatCockpitState).join(", ") || "None"], ["Workflow managed", task.workflowManaged ? "Yes" : "No"]]} /></div>)}</div></CockpitPanel>
+    <CockpitPanel title="Transition history" detail="Durable task_events; historical rows are preserved"><div className="cockpit-record-list">{snapshot.workflowHistory.map((event) => <div className="cockpit-record" key={event.id}><div className="cockpit-record-heading"><strong>{event.summary}</strong><span>{event.occurredAt}</span></div><CockpitFacts facts={[["Transition", `${event.fromState ?? "Initial"} -> ${event.toState ?? "Unknown"}`], ["Actor", event.actorType ?? "Unknown"], ["Evidence", event.evidenceRefs.map((ref) => `${ref.kind}:${ref.id}`).join(", ") || "None recorded"]]} /></div>)}{!snapshot.workflowHistory.length ? <EmptyState title="No workflow history" detail="No persisted M10 workflow events are available for this project." /> : null}</div></CockpitPanel>
+    <CockpitPanel title="Manual correction" detail="Explicit M10 override; rationale and evidence are required"><div className="cockpit-correction-form">{selectedTask ? <><label>Task<select value={selectedTaskId || selectedTask.taskId} onChange={(event) => { const next = snapshot.workflow.tasks.find((task) => task.taskId === event.target.value); setSelectedTaskId(event.target.value); setTargetState(next?.allowedNextStates[0] ?? ""); }} disabled={correctionBusy}>{snapshot.workflow.tasks.map((task) => <option key={task.taskId} value={task.taskId}>{task.title}</option>)}</select></label><label>Target state<select value={targetState} onChange={(event) => setTargetState(event.target.value as WorkflowState)} disabled={correctionBusy}><option value="">Select a state</option>{selectedTask.allowedNextStates.map((state) => <option key={state} value={state}>{formatCockpitState(state)}</option>)}</select></label><label>Rationale<textarea value={rationale} onChange={(event) => setRationale(event.target.value)} disabled={correctionBusy} rows={3} placeholder="Explain the correction." /></label><label>Evidence reference<input value={evidenceReference} onChange={(event) => setEvidenceReference(event.target.value)} disabled={correctionBusy} placeholder="Audit, test, decision, or external reference ID" /></label><button className="secondary-button" type="button" onClick={() => void submitCorrection()} disabled={correctionBusy}><ShieldCheck size={15} />Record correction</button></> : <div className="safe-notice">No workflow-managed task is available; no correction write path is offered.</div>}{correctionMessage ? <div className="safe-notice" role="status">{correctionMessage}</div> : null}</div></CockpitPanel>
+  </>;
+}
+
+function CockpitLiveAgents({ snapshot }: { snapshot: ProjectCockpitSnapshot }) { return <><CockpitPanel title="Agent sessions" detail="Persisted sessions only; M13/M14 providers are not started here"><div className="cockpit-record-list">{snapshot.agentSessions.map((session) => <div className="cockpit-record" key={session.id}><div className="cockpit-record-heading"><strong>{session.provider}</strong><span>{session.state}</span></div><CockpitFacts facts={[["Session", session.id], ["Task", session.taskId ?? "Freeform / unknown"], ["Started", session.startedAt ?? "Unknown"], ["Ended", session.endedAt ?? "Still open or unknown"]]} /></div>)}{!snapshot.agentSessions.length ? <EmptyState title="No agent sessions" detail="No persisted project-scoped agent session evidence is available." /> : null}</div></CockpitPanel><CockpitPanel title="Permission and wait state" detail="Persisted permission requests only"><div className="cockpit-record-list">{snapshot.permissions.map((permission) => <div className="cockpit-record" key={permission.id}><div className="cockpit-record-heading"><strong>{permission.permissionKind}</strong><span>{permission.state}</span></div><CockpitFacts facts={[["Request", permission.id], ["Session", permission.sessionId ?? "Unknown"], ["Resource", permission.requestedResource ?? "Unknown"], ["Decided by", permission.decidedBy ?? "Unknown"], ["Created", permission.createdAt]]} /></div>)}{!snapshot.permissions.length ? <EmptyState title="No permission or wait evidence" detail="No persisted project-scoped permission requests are available." /> : null}</div></CockpitPanel></>; }
+
+function CockpitLiveAudits({ snapshot }: { snapshot: ProjectCockpitSnapshot }) { return <CockpitPanel title="Audit history" detail="Historical results remain visible"><div className="cockpit-record-list">{snapshot.audits.map((audit) => <details className="cockpit-record" key={audit.id}><summary><strong>{audit.summary ?? `Audit ${audit.result}`}</strong><span>{audit.result}</span></summary><CockpitFacts facts={[["Audit", audit.id], ["Task", audit.taskId ?? "Unknown"], ["Created", audit.createdAt], ["Confidence", audit.confidence == null ? "Unknown" : String(audit.confidence)]]} /><div className="cockpit-finding-list">{audit.findings.map((finding) => <div key={finding.id}><strong>{finding.severity}: {finding.title}</strong><span>{finding.detail ?? "No finding detail"}{finding.filePath ? ` / ${finding.filePath}:${finding.lineNumber ?? "?"}` : ""}</span></div>)}</div></details>)}{!snapshot.audits.length ? <EmptyState title="No audit evidence" detail="No persisted project-scoped audits are available." /> : null}</div></CockpitPanel>; }
+
+function CockpitLiveGit({ snapshot }: { snapshot: ProjectCockpitSnapshot }) { const git = snapshot.git; return <><CockpitPanel title="Git visibility" detail="Read-only local Git Engine snapshot">{snapshot.gitError ? <div className="safe-notice">Unknown or unavailable: {snapshot.gitError}</div> : null}{git ? <><CockpitFacts facts={[["Health", git.health], ["Branch", git.currentBranch ?? (git.detachedHead ? "Detached HEAD" : "Unknown")], ["HEAD", git.headSha ?? "Unknown"], ["Upstream", git.upstream ?? "Unavailable"], ["Ahead / behind", git.aheadCount == null || git.behindCount == null ? "Unavailable" : `${git.aheadCount} / ${git.behindCount}`], ["Snapshot", git.snapshotTimestamp]]} /><CockpitList title="Conflicts" values={git.conflictedFiles} empty="No conflicts" /><CockpitList title="Changed files" values={[...git.stagedFiles, ...git.unstagedFiles].map((file) => `${file.kind}: ${file.path}`)} empty="No staged or unstaged files" /></> : null}</CockpitPanel><CockpitPanel title="Diff evidence" detail="Bounded read-only working-tree diff">{snapshot.gitDiffError ? <div className="safe-notice">Unknown: {snapshot.gitDiffError}</div> : snapshot.gitDiff ? <pre className="cockpit-code">{snapshot.gitDiff.text || "No textual diff"}</pre> : <EmptyState title="Diff unavailable" detail="Diff evidence is unavailable for this repository state." />}</CockpitPanel></>; }
+
+function CockpitLiveTests({ snapshot }: { snapshot: ProjectCockpitSnapshot }) { return <CockpitPanel title="Test-run history" detail="Persisted project-scoped test evidence"><div className="cockpit-record-list">{snapshot.tests.map((test) => <div className="cockpit-record" key={test.id}><div className="cockpit-record-heading"><strong>{test.command}</strong><span>{test.result}</span></div><CockpitFacts facts={[["Run", test.id], ["Task", test.taskId ?? "Unknown"], ["Started", test.startedAt], ["Finished", test.finishedAt ?? "Unknown"]]} /></div>)}{!snapshot.tests.length ? <EmptyState title="No test-run evidence" detail="No persisted tests are available for this project." /> : null}</div></CockpitPanel>; }
+
+function CockpitLiveActivity({ snapshot }: { snapshot: ProjectCockpitSnapshot }) { return <CockpitPanel title="Project activity" detail="Bounded mixed evidence timeline"><div className="cockpit-activity-list">{snapshot.activity.map((item) => <div className="cockpit-activity" key={item.id}><time>{item.occurredAt}</time><div><strong>{item.event}</strong><span>{item.kind} / {item.actor ?? "Actor unknown"} / {item.source}</span></div></div>)}{!snapshot.activity.length ? <EmptyState title="No activity evidence" detail="No persisted meaningful activity is available." /> : null}</div></CockpitPanel>; }
+
+function CockpitLiveFiles({ snapshot }: { snapshot: ProjectCockpitSnapshot }) { return <CockpitPanel title="Relevant files and project context" detail="Bounded M08 inventory plus resolved dashboard roles"><div className="cockpit-file-list">{snapshot.files.map((file) => <div key={`${file.role}:${file.path}`}><strong>{file.path}</strong><span>{file.role} / {file.status} / {file.sourceKind ?? "Project Dashboard"}</span><small>{file.evidence}</small></div>)}{!snapshot.files.length ? <EmptyState title="No file evidence" detail={snapshot.sourcesError ?? "No bounded source inventory is available."} /> : null}</div></CockpitPanel>; }
+
+function CockpitLiveSettings({ snapshot, priority, setPriority, busy, message, onSave, onRepair, onArchive, onRemove }: { snapshot: ProjectCockpitSnapshot; priority: string; setPriority: (value: string) => void; busy: boolean; message: string | null; onSave: () => void; onRepair: () => void; onArchive: () => void; onRemove: () => void }) { return <><CockpitPanel title="Registry settings" detail="Explicit H!veAI registry actions"><CockpitFacts facts={[["Preferred builder", snapshot.project.preferredBuilder ?? "Unassigned"], ["Preferred auditor", snapshot.project.preferredAuditor ?? "Unassigned"], ["Task-source policy", snapshot.project.taskSourcePolicy ?? "Unknown"]]} /><label className="cockpit-setting-field">Priority<select value={priority} onChange={(event) => setPriority(event.target.value)} disabled={busy}><option value="0">Normal</option><option value="1">High</option><option value="2">Critical</option></select></label><button className="primary-button" type="button" onClick={onSave} disabled={busy}><Check size={15} />Save priority</button>{message ? <div className="safe-notice" role="status">{message}</div> : null}</CockpitPanel><CockpitPanel title="Explicit correction and lifecycle actions" detail="No project files are rewritten"><p className="cockpit-muted">Path repair, archive, and registry removal are explicit actions. They affect H!veAI registry state only and preserve the registered folder.</p><div className="cockpit-action-row"><button className="secondary-button" type="button" onClick={onRepair} disabled={busy}><RefreshCw size={15} />Repair path</button><button className="secondary-button" type="button" onClick={onArchive} disabled={busy}><ShieldCheck size={15} />Archive</button><button className="secondary-button" type="button" onClick={onRemove} disabled={busy}><X size={15} />Remove</button></div></CockpitPanel><CockpitPanel title="Manifest and source map" detail="Read-only authority evidence"><CockpitFacts facts={[["Manifest", snapshot.dashboard.manifestPath], ["Status", snapshot.dashboard.manifestStatus], ["Tracking", snapshot.dashboard.trackingMode ?? "Unknown"], ["Refresh policy", snapshot.dashboard.refreshPolicy ?? "Unknown"]]} /><CockpitList title="Warnings" values={snapshot.dashboard.warnings} empty="No manifest warnings" /></CockpitPanel></>; }
+
+function CockpitPanel({ title, detail, children }: { title: string; detail?: string; children: React.ReactNode }) { return <section className="panel cockpit-live-panel"><SectionHeader title={title} detail={detail} />{children}</section>; }
+function CockpitFacts({ facts }: { facts: Array<[string, string]> }) { return <div className="cockpit-facts">{facts.map(([label, value]) => <div key={label}><span>{label}</span><strong title={value}>{value}</strong></div>)}</div>; }
+function CockpitList({ title, values, empty }: { title: string; values: string[]; empty: string }) { return <div className="cockpit-list"><span className="eyebrow">{title}</span>{values.length ? <ul>{values.map((value, index) => <li key={`${value}-${index}`}>{value}</li>)}</ul> : <span className="cockpit-muted">{empty}</span>}</div>; }
+function formatCockpitState(value: string) { return value.replaceAll("_", " "); }
 
 function RegisteredProjectCockpit({ project }: { project: ProjectRecord }) {
   const repository = project.repository;

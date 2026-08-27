@@ -15,7 +15,7 @@ User-facing roadmap denominator remains **20**. `M00` is the historical rebuild/
 - M10A remediation, independent re-audit, and Akilta native click acceptance: PASS/CLOSED.
 - M11 original and remediation failures remain historical evidence; accepted strict audits close M11A REV7 and the final Projects visual cleanup.
 - M11 = PASS/CLOSED.
-- M12 = READY / ACTIVE FOR NEXT IMPLEMENTATION RUN; implementation has not started. M13-M20 remain planned/blocked, and M21 is not part of this roadmap run.
+- M12 = IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT AUDIT + USER NATIVE/VISUAL ACCEPTANCE. M13-M20 remain planned/blocked, and M21 is not part of this roadmap run.
 - M21 remains planned and was not started.
 - Strict completed progress is 12/20 = 60% because the pre-M10 hotfix is not a numbered roadmap milestone.
 
@@ -325,7 +325,7 @@ Packages:
 
 Exit: complete end-to-end project operations cockpit with truthful source authority and provenance.
 
-Status: READY / ACTIVE FOR NEXT IMPLEMENTATION RUN; implementation not started. No separate authoritative M12 implementation prompt currently exists.
+Status: IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
 
 ---
 

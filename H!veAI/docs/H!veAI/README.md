@@ -89,7 +89,7 @@ Chronological builder logs. Builder logs are claims/evidence records, not indepe
 - Strict completed milestone count is now 12/20 = 60%.
 - M11 original implementation: historical strict-audit FAIL with 8 MAJOR findings.
 - M11A REV4-REV7 remediation history remains immutable and accepted; M11A REV7 = PASS/CLOSED and final Projects visual cleanup = PASS/CLOSED.
-- M11 = PASS/CLOSED. M12 = READY / ACTIVE FOR NEXT IMPLEMENTATION RUN; implementation has not started and no separate authoritative M12 implementation prompt currently exists. M11/M12 runtime implementation must incorporate the `.hiveai/PROJECT_DASHBOARD.md` authority manifest system.
+- M11 = PASS/CLOSED. M12 = IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT AUDIT + USER NATIVE/VISUAL ACCEPTANCE. M11/M12 runtime implementation incorporates the `.hiveai/PROJECT_DASHBOARD.md` authority manifest system.
 - M21 remains planned and was not started.
 
 For exact current status, always defer to `H!veAI/TASKS.md`.

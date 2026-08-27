@@ -6,6 +6,7 @@ import { StartupIntro } from "./components/StartupIntro";
 import "./styles.css";
 import "./command-center.css";
 import "./projects.css";
+import "./project-cockpit.css";
 function FrontendReady() {
   useEffect(() => {
     if ("__TAURI_INTERNALS__" in window) {

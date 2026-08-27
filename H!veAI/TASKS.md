@@ -33,7 +33,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition
 - M10A remediation, independent re-audit, and Akilta native click acceptance are complete; Akilta footer link = PASS/ACCEPTED.
 - Original M11 implementation is a historical strict-audit FAIL with 8 MAJOR findings.
 - M11A REV4, REV5, REV6, and REV7 remediation history remains immutable; all findings are closed by the accepted strict audits. M11A REV7 = PASS/CLOSED and the final Projects visual cleanup = PASS/CLOSED.
-- M11 = PASS/CLOSED. M12 is READY / ACTIVE FOR NEXT IMPLEMENTATION RUN; no M12 implementation has started in this run. No separate authoritative M12 implementation prompt currently exists.
+- M11 = PASS/CLOSED. M12 implementation is complete pending independent strict audit and user native/visual acceptance. M13 remains blocked/not started; M21 remains planned/not started.
 - M21 remains planned and was not started.
 
 ---
@@ -986,80 +986,80 @@ M11A REV7 = PASS/CLOSED. M11 final Projects visual cleanup = PASS/CLOSED. M11 = 
 # M12 - Project Cockpit
 
 ### M12.01 - Cockpit shell/data loading
-- [ ] Project-specific route loading.
-- [ ] Async loading skeleton.
-- [ ] No fallback to another project on missing/late data.
-- [ ] Truthful missing/archived state.
-- [ ] Load the selected project's resolved Project Dashboard authority map without leaking another project's manifest/source state.
+- [x] Project-specific route loading.
+- [x] Async loading skeleton.
+- [x] No fallback to another project on missing/late data.
+- [x] Truthful missing/archived state.
+- [x] Load the selected project's resolved Project Dashboard authority map without leaking another project's manifest/source state.
 
 ### M12.02 - Overview tab
-- [ ] Project identity/health.
-- [ ] Current task hero.
-- [ ] Current workflow state.
-- [ ] Last completed action.
-- [ ] Next action/required actor.
-- [ ] Show source provenance/authority where useful without overwhelming the user.
+- [x] Project identity/health.
+- [x] Current task hero.
+- [x] Current workflow state.
+- [x] Last completed action.
+- [x] Next action/required actor.
+- [x] Show source provenance/authority where useful without overwhelming the user.
 
 ### M12.03 - Tasks tab
-- [ ] Parsed tasks with status/state distinction.
-- [ ] Dependencies/blockers/acceptance criteria.
-- [ ] Evidence drawer.
-- [ ] Source locator navigation foundation.
-- [ ] Respect manifest-declared canonical task authority and avoid duplicate task rendering.
+- [x] Parsed tasks with status/state distinction.
+- [x] Dependencies/blockers/acceptance criteria.
+- [x] Evidence drawer.
+- [x] Source locator navigation foundation.
+- [x] Respect manifest-declared canonical task authority and avoid duplicate task rendering.
 
 ### M12.04 - Workflow tab
-- [ ] State pipeline.
-- [ ] Transition history.
-- [ ] Evidence requirements.
-- [ ] Human override visibility/control.
+- [x] State pipeline.
+- [x] Transition history.
+- [x] Evidence requirements.
+- [x] Human override visibility/control.
 
 ### M12.05 - Agents tab
-- [ ] Project-scoped sessions.
-- [ ] Session status/duration/provider.
-- [ ] Permission/wait state.
+- [x] Project-scoped sessions.
+- [x] Session status/duration/provider.
+- [x] Permission/wait state.
 
 ### M12.06 - Audit tab
-- [ ] Latest audit verdict.
-- [ ] Findings/severity.
-- [ ] Requirement coverage.
-- [ ] Re-audit/remediation history.
+- [x] Latest audit verdict.
+- [x] Findings/severity.
+- [x] Requirement coverage.
+- [x] Re-audit/remediation history.
 
 ### M12.07 - Git tab
-- [ ] Branch/HEAD/status.
-- [ ] Ahead/behind.
-- [ ] Changed files/diff.
-- [ ] Conflicts/worktrees.
+- [x] Branch/HEAD/status.
+- [x] Ahead/behind.
+- [x] Changed files/diff.
+- [x] Conflicts/worktrees.
 
 ### M12.08 - Tests/Activity/Files tabs
-- [ ] Test-run history.
-- [ ] Activity timeline.
-- [ ] Bounded relevant-file inventory.
-- [ ] Evidence links.
-- [ ] Surface manifest-declared roadmap/handoff/history/architecture sources as classified project context, not duplicate tasks.
+- [x] Test-run history.
+- [x] Activity timeline.
+- [x] Bounded relevant-file inventory.
+- [x] Evidence links.
+- [x] Surface manifest-declared roadmap/handoff/history/architecture sources as classified project context, not duplicate tasks.
 
 ### M12.09 - Project Settings tab
-- [ ] Registry settings.
-- [ ] Preferred builder/auditor.
-- [ ] Task-source policy/custom source entry points.
-- [ ] Show Project Dashboard manifest status, resolved authority roles, warnings, and source provenance.
-- [ ] Do not auto-rewrite project manifests or tracker files merely because H!veAI reads them.
-- [ ] Path repair/archive/remove-from-registry controls.
+- [x] Registry settings.
+- [x] Preferred builder/auditor.
+- [x] Task-source policy/custom source entry points.
+- [x] Show Project Dashboard manifest status, resolved authority roles, warnings, and source provenance.
+- [x] Do not auto-rewrite project manifests or tracker files merely because H!veAI reads them.
+- [x] Path repair/archive/remove-from-registry controls.
 
 ### M12.10 - Manual correction controls
-- [ ] Controlled human corrections.
-- [ ] Require rationale/evidence.
-- [ ] Record correction event.
-- [ ] Avoid silent state rewriting.
+- [x] Controlled human corrections.
+- [x] Require rationale/evidence.
+- [x] Record correction event.
+- [x] Avoid silent state rewriting.
 
 ### M12.11 - Tests/audit/closure
-- [ ] Mounted project-switch/race tests.
-- [ ] Evidence rendering tests.
-- [ ] Project Dashboard authority/provenance rendering tests.
-- [ ] Full regression/publication.
+- [x] Mounted project-switch/race tests.
+- [x] Evidence rendering tests.
+- [x] Project Dashboard authority/provenance rendering tests.
+- [x] Full regression/publication.
 - [ ] User visual acceptance.
 - [ ] Independent strict audit.
 
-M12 READY / ACTIVE FOR NEXT IMPLEMENTATION RUN; implementation has not started. No separate authoritative M12 implementation prompt currently exists; prepare that prompt in a separate run before implementation.
+M12 IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
 
 ---
 

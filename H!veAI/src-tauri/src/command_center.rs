@@ -707,6 +707,13 @@ fn summarize_project(
     Ok((summary, project_attention, queue, Vec::new()))
 }
 
+pub(crate) fn summarize_project_for_cockpit(
+    database: &DatabaseState,
+    project: &ProjectRecord,
+) -> Result<ProjectOperationSummary, String> {
+    summarize_project(database, project).map(|(summary, _, _, _)| summary)
+}
+
 fn authoritative_tasks<'a>(
     dashboard: &ProjectDashboardResolution,
     intelligence: Option<&'a TaskIntelligenceSnapshot>,
