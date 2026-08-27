@@ -17,7 +17,7 @@ mod task_sources;
 mod time;
 mod watcher;
 mod workflow;
-use codex_adapter::{CodexAdapter, CodexReadiness, CodexSession, CodexStartRequest};
+use codex_adapter::{AgentAdapter, CodexAdapter, CodexReadiness, CodexSession, CodexStartRequest};
 use command_center::CommandCenterSnapshot;
 use db::{DatabaseState, DatabaseStatus};
 use project_cockpit::ProjectCockpitSnapshot;
@@ -154,7 +154,7 @@ fn hiveai_project_cockpit_snapshot(
 
 #[tauri::command]
 async fn hiveai_codex_readiness() -> Result<CodexReadiness, String> {
-    tauri::async_runtime::spawn_blocking(codex_adapter::readiness)
+    tauri::async_runtime::spawn_blocking(|| CodexAdapter::default().readiness())
         .await
         .map_err(|error| format!("Codex readiness task failed: {error}"))
 }
@@ -164,7 +164,9 @@ fn hiveai_codex_sessions_list(
     database: tauri::State<'_, DatabaseState>,
     project_id: String,
 ) -> Result<Vec<CodexSession>, String> {
-    codex_adapter::list(&database, &project_id)
+    let adapter = CodexAdapter::default();
+    let _ = adapter.provider();
+    adapter.list(&database, &project_id)
 }
 
 #[tauri::command]
@@ -173,7 +175,7 @@ fn hiveai_codex_start(
     database: tauri::State<'_, DatabaseState>,
     request: CodexStartRequest,
 ) -> Result<CodexSession, String> {
-    codex_adapter::start(&adapter, &database, request)
+    adapter.start(&database, request)
 }
 
 #[tauri::command]
@@ -182,15 +184,16 @@ fn hiveai_codex_stop(
     database: tauri::State<'_, DatabaseState>,
     session_id: String,
 ) -> Result<CodexSession, String> {
-    codex_adapter::stop(&adapter, &database, &session_id)
+    adapter.stop(&database, &session_id)
 }
 
 #[tauri::command]
 fn hiveai_codex_resume(
+    adapter: tauri::State<'_, CodexAdapter>,
     database: tauri::State<'_, DatabaseState>,
     session_id: String,
 ) -> Result<CodexSession, String> {
-    codex_adapter::resume(&database, &session_id)
+    adapter.resume(&database, &session_id)
 }
 
 #[tauri::command]
@@ -469,14 +472,16 @@ pub fn run() {
                 .map_err(|error| format!("H!veAI persistence initialization failed: {error}"))?;
             workflow::recover_stale(&database)
                 .map_err(|error| format!("H!veAI workflow recovery failed: {error}"))?;
-            codex_adapter::reconcile(&database)
+            let codex_adapter = CodexAdapter::default();
+            codex_adapter
+                .reconcile(&database)
                 .map_err(|error| format!("H!veAI Codex recovery failed: {error}"))?;
             let database_status = database.status();
             let watcher_manager =
                 WatcherManager::initialize_with_app_handle(database.clone(), app.handle().clone())
                     .map_err(|error| format!("H!veAI watcher initialization failed: {error}"))?;
             app.manage(database);
-            app.manage(CodexAdapter::default());
+            app.manage(codex_adapter);
             app.manage(watcher_manager);
 
             log::info!(

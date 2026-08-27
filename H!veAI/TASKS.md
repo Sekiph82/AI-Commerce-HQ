@@ -1133,6 +1133,17 @@ M12B NATIVE OPEN COCKPIT REMEDIATION PASS/CLOSED.
 
 M13 IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
 
+## M13A - Common adapter, streaming, and stop strict remediation
+
+- [x] Close R27 with a provider-neutral native adapter contract implemented by Codex only.
+- [x] Close R28 with bounded incremental structured stdout/stderr events and pre-persistence redaction.
+- [x] Close R29 with truthful clean-stop limitation, bounded grace, and owned process-tree escalation.
+- [x] Add adversarial common, streaming, process, security, and recovery regression tests.
+- [x] Run full regression, security, and governed publication gates.
+- [ ] Independent strict re-audit and user native/visual acceptance.
+
+M13A REMEDIATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
+
 ---
 
 # M14 - Agent Session Center

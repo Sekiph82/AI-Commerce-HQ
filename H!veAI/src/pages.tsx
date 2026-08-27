@@ -1764,6 +1764,11 @@ export function Agents() {
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const selected = records.find((record) => record.id === selectedProjectId) ?? records[0] ?? null;
+  const refreshSessions = React.useCallback(async () => {
+    if (desktop && selected?.id) {
+      try { setSessions(await listCodexSessions(selected.id)); } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
+    }
+  }, [desktop, selected?.id]);
   const refresh = React.useCallback(async () => {
     if (!desktop) return;
     try {
@@ -1776,6 +1781,11 @@ export function Agents() {
     }
   }, [desktop, selected?.id]);
   React.useEffect(() => { void refresh(); }, [refresh]);
+  React.useEffect(() => {
+    if (!desktop || !selected?.id) return;
+    const timer = window.setInterval(() => { void refreshSessions(); }, 750);
+    return () => window.clearInterval(timer);
+  }, [desktop, refreshSessions, selected?.id]);
   const start = async () => {
     if (!desktop || !selected || !prompt.trim()) return;
     setBusy(true); setError(null);

@@ -45,7 +45,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is used for traceability and 
 - Strict completed roadmap progress is now 13/20 = 65%.
 - M11 original implementation: historical strict-audit FAIL with 8 MAJOR findings.
 - M11A REV4-REV7 remediation history remains immutable and accepted; M11A REV7 = PASS/CLOSED and final Projects visual cleanup = PASS/CLOSED.
-- M11 = PASS/CLOSED. M12, M12A R26, and M12B native cockpit route remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13 implementation is complete pending independent strict audit and user native/visual acceptance. M14 and M21 remain planned/not started.
+- M11 = PASS/CLOSED. M12, M12A R26, and M12B native cockpit route remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13A remediation is complete pending independent strict re-audit and user native/visual acceptance. M14 and M21 remain planned/not started.
 - M21 remains planned and was not started.
 
 For exact live status, acceptance state, and every completed/planned package from M00 through M20, use `TASKS.md` as the canonical source of truth.
