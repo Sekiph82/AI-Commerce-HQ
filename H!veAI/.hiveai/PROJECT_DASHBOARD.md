@@ -20,14 +20,14 @@ branchPolicy: H!veAI
 | Project status | ACTIVE |
 | Health | UNKNOWN |
 | Current milestone | M12 |
-| Current task | M12 Project Cockpit implementation |
-| Current task ID | M12 |
-| Current workflow state | IMPLEMENTATION_COMPLETE_PENDING_AUDIT |
+| Current task | R26 project-wide workflow history strict remediation |
+| Current task ID | M12A-R26 |
+| Current workflow state | REMEDIATION_IMPLEMENTATION_COMPLETE_PENDING_AUDIT |
 | Progress | 60% |
 | Required actor | CODEX |
-| Next action | Independent strict audit and user native/visual acceptance |
-| Waiting on | Independent strict audit and user native/visual acceptance |
-| Last meaningful update | M12 implementation complete; strict audit and user native/visual acceptance remain pending |
+| Next action | Independent strict re-audit and user native/visual acceptance |
+| Waiting on | Independent strict re-audit and user native/visual acceptance |
+| Last meaningful update | M12A R26 project-wide history remediation complete; independent re-audit and user native/visual acceptance remain pending |
 
 ## Current work
 
@@ -40,11 +40,12 @@ branchPolicy: H!veAI
 | M11A.REV6-R23 | Preserve full bounded scalar identity before hashing | CLOSED | CODEX | REV6 prompt / command_center.rs |
 | M11A.REV7-R24 | Preserve Unicode operational identity | CLOSED | CODEX | REV7 prompt / command_center.rs |
 | M11A.REV7-R25 | Preserve structured Quality identity | CLOSED | CODEX | REV7 prompt / command_center.rs |
-| M12 | Implement project-scoped Project Cockpit with truthful authority/provenance | IMPLEMENTATION_COMPLETE_PENDING_AUDIT | CODEX | M12 implementation prompt / source and test evidence |
+| M12 | Implement project-scoped Project Cockpit with truthful authority/provenance | STRICT_AUDIT_FAIL_R26_REMEDIATED_PENDING_REAUDIT | CODEX | M12 strict audit / M12A remediation |
+| M12A-R26 | Order selected-project workflow history globally before the bounded cockpit cap | REMEDIATION_IMPLEMENTATION_COMPLETE_PENDING_AUDIT | CODEX | M12A prompt / project_cockpit.rs + workflow.rs tests |
 
 ## Blockers and waiting
 
-- M12 implementation is complete; independent strict audit and user native/visual acceptance remain pending.
+- M12 strict audit remains historical FAIL for R26; M12A remediation is complete and independent strict re-audit plus user native/visual acceptance remain pending.
 - M21 remains planned and was not started.
 
 ## Milestone summary
@@ -53,20 +54,21 @@ branchPolicy: H!veAI
 - M11 original implementation: historical strict-audit FAIL.
 - M11A REV7: PASS/CLOSED; final Projects visual cleanup: PASS/CLOSED.
 - M11: PASS/CLOSED.
-- M12: IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
+- M12: STRICT AUDIT FAIL HISTORY / R26 REMEDIATED, PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
+- M12A: REMEDIATION IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
 - Strict completed roadmap count: 12/20 = 60%.
 
 ## Quality and verification
 
 | Check | Result | Evidence |
 | --- | --- | --- |
-| M12 focused tests | PASS | Project Cockpit route/race/containment/unknown/correction tests |
-| M12 full regression | PASS | 282 native tests, 92 frontend tests, typecheck/build/audit/checks and governed publication passed |
+| M12A R26 focused tests | PASS | Project-wide starvation, deterministic tie-order, project isolation, and derived-activity tests |
+| M12 full regression | PASS | Full native/frontend tests, typecheck/build/audit/checks and governed publication passed |
 
 ## Recent meaningful activity
 
 - M11 closure accepted from the REV7 strict audit and final Projects strict audit; M11 remains PASS/CLOSED.
-- M12 Project Cockpit implementation, full regression, and governed publication completed; independent strict audit and user native/visual acceptance remain pending.
+- M12 Project Cockpit implementation and M12A R26 project-wide history remediation passed full regression and governed publication; independent strict re-audit and user native/visual acceptance remain pending.
 - Prior M11A R01-R08, E01-E03, and UX01-UX04 source fixes are preserved.
 - H!veAI own dashboard contract is now the dogfood single-dashboard watch target; materialized activity remains explicitly undated and REV7 publication evidence is complete.
 

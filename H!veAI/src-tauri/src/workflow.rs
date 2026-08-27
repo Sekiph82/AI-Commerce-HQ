@@ -1168,6 +1168,40 @@ pub fn history(
     Ok(result)
 }
 
+pub(crate) fn project_history(
+    database: &DatabaseState,
+    project_id: &str,
+    limit: usize,
+) -> Result<Vec<WorkflowEvent>, String> {
+    validate_scalar("project id", project_id, MAX_SCALAR_BYTES, true)?;
+    let limit = bounded_limit(Some(limit))?;
+    let mut connection = database.open_connection()?;
+    let tx = connection
+        .transaction()
+        .map_err(|e| error("WORKFLOW_DATABASE", e.to_string()))?;
+    tx.query_row("SELECT id FROM projects WHERE id=?1", [project_id], |row| {
+        row.get::<_, String>(0)
+    })
+    .optional()
+    .map_err(|e| error("WORKFLOW_DATABASE", e.to_string()))?
+    .ok_or_else(|| error("WORKFLOW_PROJECT_NOT_FOUND", "project is not registered"))?;
+    let mut statement = tx
+        .prepare(
+            "SELECT e.id, e.task_id, e.event_type, e.from_state, e.to_state, e.actor_type, e.summary, e.evidence_json, e.occurred_at FROM task_events e JOIN tasks t ON t.id=e.task_id WHERE t.project_id=?1 AND e.event_type LIKE 'WORKFLOW_%' ORDER BY e.occurred_at DESC, e.id DESC LIMIT ?2",
+        )
+        .map_err(|e| error("WORKFLOW_DATABASE", e.to_string()))?;
+    let rows = statement
+        .query_map(params![project_id, limit as i64], event_from_row)
+        .map_err(|e| error("WORKFLOW_DATABASE", e.to_string()))?;
+    let result = rows
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| error("WORKFLOW_DATABASE", e.to_string()))?;
+    drop(statement);
+    tx.commit()
+        .map_err(|e| error("WORKFLOW_DATABASE", e.to_string()))?;
+    Ok(result)
+}
+
 fn bounded_limit(limit: Option<usize>) -> Result<usize, String> {
     let limit = limit.unwrap_or(DEFAULT_HISTORY_LIMIT);
     if limit == 0 || limit > MAX_HISTORY_LIMIT {

@@ -33,7 +33,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition
 - M10A remediation, independent re-audit, and Akilta native click acceptance are complete; Akilta footer link = PASS/ACCEPTED.
 - Original M11 implementation is a historical strict-audit FAIL with 8 MAJOR findings.
 - M11A REV4, REV5, REV6, and REV7 remediation history remains immutable; all findings are closed by the accepted strict audits. M11A REV7 = PASS/CLOSED and the final Projects visual cleanup = PASS/CLOSED.
-- M11 = PASS/CLOSED. M12 implementation is complete pending independent strict audit and user native/visual acceptance. M13 remains blocked/not started; M21 remains planned/not started.
+- M11 = PASS/CLOSED. M12 implementation exists but its strict audit is historical FAIL with R26 remediated pending independent re-audit; M12A remediation implementation is complete pending independent strict re-audit and user native/visual acceptance. M13 remains blocked/not started; M21 remains planned/not started.
 - M21 remains planned and was not started.
 
 ---
@@ -1060,6 +1060,13 @@ M11A REV7 = PASS/CLOSED. M11 final Projects visual cleanup = PASS/CLOSED. M11 = 
 - [ ] Independent strict audit.
 
 M12 IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
+
+### M12A - Project-wide workflow history strict remediation
+
+- [x] R26: query the selected project's workflow history globally before applying the bounded 200-event cockpit limit.
+- [x] Add adversarial cross-task starvation, deterministic tie-order, project-isolation, and derived-activity regression coverage.
+
+M12A REMEDIATION IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
 
 ---
 

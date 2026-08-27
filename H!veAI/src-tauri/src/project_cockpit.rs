@@ -7,7 +7,7 @@ use crate::project_dashboard::{self, ProjectDashboardResolution};
 use crate::projects::{fetch_project, ProjectRecord};
 use crate::task_intelligence::TaskIntelligenceSnapshot;
 use crate::task_sources::{self, DiscoveredProjectSource};
-use crate::workflow::{self, WorkflowEvent, WorkflowHistoryQuery, WorkflowProjectList};
+use crate::workflow::{self, WorkflowEvent, WorkflowProjectList};
 use rusqlite::Connection;
 use serde::Serialize;
 
@@ -145,29 +145,8 @@ pub fn snapshot(
             limit: Some(MAX_COCKPIT_TASKS),
         },
     )?;
-    let mut workflow_history = Vec::new();
+    let workflow_history = workflow::project_history(database, project_id, MAX_COCKPIT_HISTORY)?;
     let mut warnings = dashboard.warnings.clone();
-    for task in workflow.tasks.iter().take(MAX_COCKPIT_TASKS) {
-        match workflow::history(
-            database,
-            WorkflowHistoryQuery {
-                task_id: task.task_id.clone(),
-                limit: Some(MAX_COCKPIT_HISTORY),
-            },
-        ) {
-            Ok(events) => workflow_history.extend(events),
-            Err(error) => push_warning(&mut warnings, &error),
-        }
-        if workflow_history.len() >= MAX_COCKPIT_HISTORY {
-            workflow_history.truncate(MAX_COCKPIT_HISTORY);
-            break;
-        }
-    }
-    workflow_history.sort_by(|left, right| {
-        left.occurred_at
-            .cmp(&right.occurred_at)
-            .then(left.id.cmp(&right.id))
-    });
 
     let (git, git_error) = match git_engine::snapshot(
         database,
@@ -492,6 +471,32 @@ mod tests {
     use crate::projects::{register_project, RegisterProjectRequest};
     use tempfile::tempdir;
 
+    fn seed_workflow_task(database: &DatabaseState, project_id: &str, task_id: &str, title: &str) {
+        let connection = database.open_connection().unwrap();
+        connection
+            .execute(
+                "INSERT INTO tasks (id, project_id, title, state, metadata_json, created_at, updated_at) VALUES (?1, ?2, ?3, 'READY_FOR_IMPLEMENTATION', '{}', '2026-08-27T00:00:00Z', '2026-08-27T00:00:00Z')",
+                rusqlite::params![task_id, project_id, title],
+            )
+            .unwrap();
+    }
+
+    fn seed_workflow_event(
+        database: &DatabaseState,
+        task_id: &str,
+        event_id: &str,
+        occurred_at: &str,
+        summary: &str,
+    ) {
+        let connection = database.open_connection().unwrap();
+        connection
+            .execute(
+                "INSERT INTO task_events (id, task_id, event_type, from_state, to_state, actor_type, summary, evidence_json, occurred_at) VALUES (?1, ?2, 'WORKFLOW_TRANSITION', 'PROMPT_READY', 'READY_FOR_IMPLEMENTATION', 'CODEX', ?3, '{\"evidenceRefs\":[]}', ?4)",
+                rusqlite::params![event_id, task_id, summary, occurred_at],
+            )
+            .unwrap();
+    }
+
     #[test]
     fn m12_snapshot_is_project_scoped_and_unknowns_are_explicit() {
         let db_dir = tempdir().unwrap();
@@ -660,5 +665,146 @@ mod tests {
             .warnings
             .iter()
             .any(|warning| warning.contains(missing_path.to_string_lossy().as_ref())));
+    }
+
+    #[test]
+    fn m12_project_history_prevents_cross_task_starvation_and_orders_globally() {
+        let db_dir = tempdir().unwrap();
+        let database = DatabaseState::initialize(db_dir.path().to_path_buf()).unwrap();
+        let project_dir = tempdir().unwrap();
+        let project = register_project(
+            &database,
+            RegisterProjectRequest {
+                path: project_dir.path().to_string_lossy().into_owned(),
+                name: Some("History Project".into()),
+            },
+        )
+        .unwrap();
+        seed_workflow_task(&database, &project.id, "task-a", "Older task A");
+        seed_workflow_task(&database, &project.id, "task-b", "Newer task B");
+        for index in 0..(MAX_COCKPIT_HISTORY + 5) {
+            seed_workflow_event(
+                &database,
+                "task-a",
+                &format!("a-event-{index:03}"),
+                &format!("2026-01-01T00:{:02}:00Z", index % 60),
+                "old task A event",
+            );
+        }
+        seed_workflow_event(
+            &database,
+            "task-b",
+            "b-new-event",
+            "2026-08-27T12:00:00Z",
+            "new task B event",
+        );
+        let snapshot = snapshot(&database, &project.id).unwrap();
+        assert_eq!(snapshot.workflow_history.len(), MAX_COCKPIT_HISTORY);
+        assert!(snapshot
+            .workflow_history
+            .iter()
+            .any(|event| event.task_id == "task-b" && event.id == "b-new-event"));
+        assert!(snapshot.workflow_history.windows(2).all(|events| {
+            (events[0].occurred_at.as_str(), events[0].id.as_str())
+                >= (events[1].occurred_at.as_str(), events[1].id.as_str())
+        }));
+        assert!(snapshot
+            .activity
+            .iter()
+            .any(|event| event.id == "workflow:b-new-event"));
+    }
+
+    #[test]
+    fn m12_project_history_tie_order_is_deterministic() {
+        let db_dir = tempdir().unwrap();
+        let database = DatabaseState::initialize(db_dir.path().to_path_buf()).unwrap();
+        let project_dir = tempdir().unwrap();
+        let project = register_project(
+            &database,
+            RegisterProjectRequest {
+                path: project_dir.path().to_string_lossy().into_owned(),
+                name: Some("Tie Project".into()),
+            },
+        )
+        .unwrap();
+        seed_workflow_task(&database, &project.id, "task-a", "Task A");
+        seed_workflow_task(&database, &project.id, "task-b", "Task B");
+        seed_workflow_event(
+            &database,
+            "task-a",
+            "tie-a",
+            "2026-08-27T12:00:00Z",
+            "tie A",
+        );
+        seed_workflow_event(
+            &database,
+            "task-b",
+            "tie-b",
+            "2026-08-27T12:00:00Z",
+            "tie B",
+        );
+        let first = snapshot(&database, &project.id).unwrap();
+        let second = snapshot(&database, &project.id).unwrap();
+        let first_ids: Vec<_> = first
+            .workflow_history
+            .iter()
+            .map(|event| event.id.as_str())
+            .collect();
+        let second_ids: Vec<_> = second
+            .workflow_history
+            .iter()
+            .map(|event| event.id.as_str())
+            .collect();
+        assert_eq!(first_ids, second_ids);
+        assert_eq!(first_ids[0], "tie-b");
+    }
+
+    #[test]
+    fn m12_project_history_and_activity_exclude_other_project_events() {
+        let db_dir = tempdir().unwrap();
+        let database = DatabaseState::initialize(db_dir.path().to_path_buf()).unwrap();
+        let project_a_dir = tempdir().unwrap();
+        let project_b_dir = tempdir().unwrap();
+        let project_a = register_project(
+            &database,
+            RegisterProjectRequest {
+                path: project_a_dir.path().to_string_lossy().into_owned(),
+                name: Some("Project A".into()),
+            },
+        )
+        .unwrap();
+        let project_b = register_project(
+            &database,
+            RegisterProjectRequest {
+                path: project_b_dir.path().to_string_lossy().into_owned(),
+                name: Some("Project B".into()),
+            },
+        )
+        .unwrap();
+        seed_workflow_task(&database, &project_a.id, "task-a", "A task");
+        seed_workflow_task(&database, &project_b.id, "task-b", "B task");
+        seed_workflow_event(
+            &database,
+            "task-a",
+            "a-event",
+            "2026-08-27T10:00:00Z",
+            "A event",
+        );
+        seed_workflow_event(
+            &database,
+            "task-b",
+            "b-newer-event",
+            "2026-08-27T12:00:00Z",
+            "B event",
+        );
+        let snapshot = snapshot(&database, &project_a.id).unwrap();
+        assert!(snapshot
+            .workflow_history
+            .iter()
+            .all(|event| event.task_id != "task-b" && event.id != "b-newer-event"));
+        assert!(snapshot
+            .activity
+            .iter()
+            .all(|event| !event.event.contains("B event") && event.id != "workflow:b-newer-event"));
     }
 }

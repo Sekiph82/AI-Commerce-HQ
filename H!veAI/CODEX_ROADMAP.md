@@ -325,7 +325,13 @@ Packages:
 
 Exit: complete end-to-end project operations cockpit with truthful source authority and provenance.
 
-Status: IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
+Status: IMPLEMENTATION COMPLETE; M12 strict audit remains FAIL history with R26 remediated / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
+
+### M12A - Project-wide workflow history strict remediation
+
+Bounded remediation for the M12 strict-audit R26 finding: selected-project workflow history is globally ordered with deterministic ties before the 200-event cap, with direct adversarial regression coverage.
+
+Status: REMEDIATION IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
 
 ---
 
