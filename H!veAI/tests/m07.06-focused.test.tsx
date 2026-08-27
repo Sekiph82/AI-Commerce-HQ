@@ -332,6 +332,11 @@ describe("M07.07 live-Registry / route-race boundary", () => {
     );
     expect(screen.queryByRole("heading", { name: "fmcg-erp-system" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Add project" }));
+    expect(screen.getByText("Registry Boundary")).toBeInTheDocument();
+    expect(screen.getByText("Read-only by design")).toBeInTheDocument();
+    expect(screen.getByText("Explicit user action required")).toBeInTheDocument();
+    expect(screen.getByText("No branch, file, or remote mutation")).toBeInTheDocument();
+    expect(screen.getByText("Live Git metadata and status available")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Folder path"), { target: { value: "C:\\Projects\\fmcg-erp-system" } });
     fireEvent.change(screen.getByLabelText(/Display name/), { target: { value: "fmcg-erp-system" } });
     fireEvent.click(screen.getByRole("button", { name: /Register folder/ }));
@@ -595,7 +600,14 @@ describe("M07.07 live-Registry / route-race boundary", () => {
 
   it("projects_uses_live_git_metadata_copy", async () => {
     renderLive("/projects");
-    expect(await screen.findByText("Live Git metadata and status available")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Add project" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Search registered projects" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Filter project status")).toBeInTheDocument();
+    expect(screen.getByLabelText("Sort projects")).toBeInTheDocument();
+    expect(screen.getAllByRole("article").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Registry Boundary")).not.toBeInTheDocument();
+    expect(screen.queryByText("Current view")).not.toBeInTheDocument();
+    expect(document.querySelector(".registry-aside")).toBeNull();
     expect(screen.queryByText("Live Git engine arrives in M06")).not.toBeInTheDocument();
   });
 });

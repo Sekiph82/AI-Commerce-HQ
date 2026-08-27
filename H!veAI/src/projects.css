@@ -1,0 +1,61 @@
+.registry-layout {
+  display: block;
+}
+
+.registry-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.registry-dialog-boundary {
+  margin: 16px 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #0f151f;
+}
+
+.registry-dialog-boundary-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.registry-dialog-boundary-head strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-strong);
+  font-size: 13px;
+}
+
+.registry-dialog-boundary p {
+  margin: 10px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.registry-dialog-rule {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.registry-dialog-rule svg {
+  flex: 0 0 auto;
+  color: var(--success);
+}
+
+@media (max-width: 1050px) {
+  .registry-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .registry-grid {
+    grid-template-columns: 1fr;
+  }
+}

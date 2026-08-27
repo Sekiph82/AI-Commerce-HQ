@@ -705,45 +705,6 @@ export function Projects() {
             />
           )}
         </section>
-        <aside className="registry-aside">
-          <section className="registry-side-panel">
-            <div className="registry-side-heading">
-              <span className="side-icon">
-                <FolderKanban size={16} />
-              </span>
-              <div>
-                <span className="eyebrow">Registry boundary</span>
-                <h2>Read-only by design</h2>
-              </div>
-            </div>
-            <p>
-              H!veAI records identity and cached Git metadata without changing
-              the selected folder.
-            </p>
-            <div className="registry-rule">
-              <Check size={14} />
-              <span>Explicit user action required</span>
-            </div>
-            <div className="registry-rule">
-              <ShieldCheck size={14} />
-              <span>No branch, file, or remote mutation</span>
-            </div>
-            <div className="registry-rule">
-              <GitBranch size={14} />
-              <span>Live Git metadata and status available</span>
-            </div>
-          </section>
-          <section className="registry-side-panel registry-side-accent">
-            <span className="eyebrow">Current view</span>
-            <strong>
-              {records.length} registered project
-              {records.length === 1 ? "" : "s"}
-            </strong>
-            <span>
-              Search, sort, and status filters use persisted registry data.
-            </span>
-          </section>
-        </aside>
       </div>
       {dialog ? (
         <ProjectRegistryDialog
@@ -824,6 +785,38 @@ function ProjectRegistryDialog({
             ? "Choose a folder. H!veAI will read metadata only and will not create or modify files there."
             : "Choose the moved folder. H!veAI validates identity before updating the registry path."}
         </p>
+        {mode === "register" ? (
+          <section
+            className="registry-dialog-boundary"
+            aria-labelledby="registry-boundary-title"
+          >
+            <div className="registry-dialog-boundary-head">
+              <span className="side-icon">
+                <FolderKanban size={16} />
+              </span>
+              <div>
+                <span className="eyebrow">Registry Boundary</span>
+                <strong id="registry-boundary-title">Read-only by design</strong>
+              </div>
+            </div>
+            <p>
+              H!veAI records project identity and cached Git metadata without
+              changing the selected folder.
+            </p>
+            <div className="registry-dialog-rule">
+              <Check size={14} />
+              <span>Explicit user action required</span>
+            </div>
+            <div className="registry-dialog-rule">
+              <ShieldCheck size={14} />
+              <span>No branch, file, or remote mutation</span>
+            </div>
+            <div className="registry-dialog-rule">
+              <GitBranch size={14} />
+              <span>Live Git metadata and status available</span>
+            </div>
+          </section>
+        ) : null}
         <form onSubmit={submit}>
           <label className="field-label">
             Folder path
