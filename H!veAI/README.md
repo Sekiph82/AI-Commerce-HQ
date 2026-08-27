@@ -30,7 +30,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is used for traceability and 
 
 ## Current development status
 
-- M00-M11: PASS/CLOSED.
+- M00-M12: PASS/CLOSED.
 - M09 Task Intelligence Parser: PASS/CLOSED after independent M09D final strict audit.
 - M09 original implementation: historical strict-audit FAIL.
 - M09A remediation: historical strict re-audit FAIL after two residual findings remained.
@@ -42,10 +42,10 @@ Package numbering such as `M08.01`, `M08.02`, etc. is used for traceability and 
 - M10A strict-closure remediation: independent re-audit closed all production MAJOR findings.
 - Akilta footer link: PASS/ACCEPTED after native user verification that Chrome opens, H!veAI remains open, and no terminal window appears.
 - M10 Workflow State Machine: PASS/CLOSED.
-- Strict completed roadmap progress is now 12/20 = 60%.
+- Strict completed roadmap progress is now 13/20 = 65%.
 - M11 original implementation: historical strict-audit FAIL with 8 MAJOR findings.
 - M11A REV4-REV7 remediation history remains immutable and accepted; M11A REV7 = PASS/CLOSED and final Projects visual cleanup = PASS/CLOSED.
-- M11 = PASS/CLOSED. M12 implementation exists; M12A R26 and M12B native cockpit route remediation are complete pending independent strict audit and repeat user native/visual acceptance.
+- M11 = PASS/CLOSED. M12, M12A R26, and M12B native cockpit route remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13 is READY / ACTIVE FOR NEXT IMPLEMENTATION RUN; implementation has not started. M21 remains planned/not started.
 - M21 remains planned and was not started.
 
 For exact live status, acceptance state, and every completed/planned package from M00 through M20, use `TASKS.md` as the canonical source of truth.

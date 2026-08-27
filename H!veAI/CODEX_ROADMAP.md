@@ -8,16 +8,16 @@ User-facing roadmap denominator remains **20**. `M00` is the historical rebuild/
 
 ## Current status
 
-- M00-M11: PASS/CLOSED.
+- M00-M12: PASS/CLOSED.
 - M09 Task Intelligence Parser: PASS/CLOSED after the independent M09D final strict audit.
 - Pre-M10 Native UX Hotfix X01/X02: PASS/CLOSED after independent source audit plus user native acceptance.
 - M10 original strict audit: historical FAIL with 5 MAJOR findings.
 - M10A remediation, independent re-audit, and Akilta native click acceptance: PASS/CLOSED.
 - M11 original and remediation failures remain historical evidence; accepted strict audits close M11A REV7 and the final Projects visual cleanup.
 - M11 = PASS/CLOSED.
-- M12 = IMPLEMENTATION COMPLETE / M12A R26 and M12B route remediation complete, pending independent strict audit + user native/visual acceptance. M13-M20 remain planned/blocked, and M21 is not part of this roadmap run.
+- M12 = PASS/CLOSED, including M12A R26 and M12B route remediation, on accepted strict evidence and user native/visual acceptance. M13 = READY / ACTIVE FOR NEXT IMPLEMENTATION RUN; implementation has not started. M14-M20 remain planned/blocked, and M21 is not part of this roadmap run.
 - M21 remains planned and was not started.
-- Strict completed progress is 12/20 = 60% because the pre-M10 hotfix is not a numbered roadmap milestone.
+- Strict completed progress is 13/20 = 65% because the pre-M10 hotfix is not a numbered roadmap milestone.
 
 ---
 
@@ -325,13 +325,21 @@ Packages:
 
 Exit: complete end-to-end project operations cockpit with truthful source authority and provenance.
 
-Status: IMPLEMENTATION COMPLETE; M12 strict audit remains FAIL history with R26 remediated / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
+Status: PASS/CLOSED.
 
 ### M12A - Project-wide workflow history strict remediation
 
 Bounded remediation for the M12 strict-audit R26 finding: selected-project workflow history is globally ordered with deterministic ties before the 200-event cap, with direct adversarial regression coverage.
 
-Status: REMEDIATION IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
+Status: PASS/CLOSED; R26 independently re-audited.
+
+### M12B - Native Open Cockpit route-loading remediation
+
+Bounded remediation for the native registered-project cockpit route and Tauri
+capability boundary. The exact project ID is preserved and native failures are
+classified truthfully.
+
+Status: PASS/CLOSED; accepted strict re-audit and user native/visual acceptance.
 
 ---
 
@@ -352,7 +360,7 @@ Packages:
 
 Exit: Codex can be safely started/stopped/observed from H!veAI as a real agent session.
 
-Status: PLANNED/BLOCKED.
+Status: READY / ACTIVE FOR NEXT IMPLEMENTATION RUN; implementation not started.
 
 ---
 

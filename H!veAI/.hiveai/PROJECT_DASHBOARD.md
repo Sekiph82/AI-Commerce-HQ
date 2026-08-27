@@ -19,15 +19,15 @@ branchPolicy: H!veAI
 | --- | --- |
 | Project status | ACTIVE |
 | Health | UNKNOWN |
-| Current milestone | M12 |
-| Current task | Native Open Cockpit route-loading remediation |
-| Current task ID | M12B-ROUTE-LOAD |
-| Current workflow state | REMEDIATION_IMPLEMENTATION_COMPLETE_PENDING_AUDIT |
-| Progress | 60% |
+| Current milestone | M13 |
+| Current task | Codex Adapter milestone activation and implementation-prompt preparation |
+| Current task ID | M13 |
+| Current workflow state | READY_ACTIVE_FOR_NEXT_IMPLEMENTATION_RUN |
+| Progress | 65% |
 | Required actor | CODEX |
-| Next action | Independent strict re-audit and repeat user native/visual acceptance |
-| Waiting on | Independent strict re-audit and repeat user native/visual acceptance |
-| Last meaningful update | M12B native Open Cockpit route-loading remediation complete; independent re-audit and repeat user native/visual acceptance remain pending |
+| Next action | Prepare the separate authoritative M13 implementation prompt before M13 coding begins |
+| Waiting on | Separate authoritative M13 implementation prompt |
+| Last meaningful update | M12 accepted closed; M13 activated for the next implementation run without starting implementation |
 
 ## Current work
 
@@ -40,13 +40,15 @@ branchPolicy: H!veAI
 | M11A.REV6-R23 | Preserve full bounded scalar identity before hashing | CLOSED | CODEX | REV6 prompt / command_center.rs |
 | M11A.REV7-R24 | Preserve Unicode operational identity | CLOSED | CODEX | REV7 prompt / command_center.rs |
 | M11A.REV7-R25 | Preserve structured Quality identity | CLOSED | CODEX | REV7 prompt / command_center.rs |
-| M12 | Implement project-scoped Project Cockpit with truthful authority/provenance | STRICT_AUDIT_FAIL_R26_REMEDIATED_PENDING_REAUDIT | CODEX | M12 strict audit / M12A remediation |
-| M12A-R26 | Order selected-project workflow history globally before the bounded cockpit cap | REMEDIATION_IMPLEMENTATION_COMPLETE_PENDING_AUDIT | CODEX | M12A prompt / project_cockpit.rs + workflow.rs tests |
-| M12B-ROUTE-LOAD | Restore native registered-project cockpit snapshot IPC and truthful route errors | REMEDIATION_IMPLEMENTATION_COMPLETE_PENDING_AUDIT | CODEX | M12B prompt / capability + pages.tsx tests |
+| M12 | Implement project-scoped Project Cockpit with truthful authority/provenance | CLOSED | CODEX | Accepted M12 strict/audit/native evidence |
+| M12A-R26 | Order selected-project workflow history globally before the bounded cockpit cap | CLOSED | CODEX | M12A prompt / strict re-audit |
+| M12B-ROUTE-LOAD | Restore native registered-project cockpit snapshot IPC and truthful route errors | CLOSED | CODEX | M12B prompt / strict re-audit / user native acceptance |
+| M13 | Codex Adapter milestone activation and implementation-prompt preparation | READY_ACTIVE_FOR_NEXT_IMPLEMENTATION_RUN | CODEX | M12 closure prompt; no M13 implementation prompt exists yet |
 
 ## Blockers and waiting
 
-- M12A R26 is independently source-audited PASS; M12B route remediation is complete and independent strict re-audit plus repeat user native/visual acceptance remain pending.
+- M12, M12A R26, and M12B are PASS/CLOSED on accepted strict evidence and user native/visual acceptance.
+- M13 is activated for the next implementation run; no M13 implementation code has started and a separate authoritative M13 implementation prompt is not yet present.
 - M21 remains planned and was not started.
 
 ## Milestone summary
@@ -55,10 +57,11 @@ branchPolicy: H!veAI
 - M11 original implementation: historical strict-audit FAIL.
 - M11A REV7: PASS/CLOSED; final Projects visual cleanup: PASS/CLOSED.
 - M11: PASS/CLOSED.
-- M12: R26 and native route-loading remediation complete, PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
-- M12A: REMEDIATION IMPLEMENTATION COMPLETE / INDEPENDENT R26 RE-AUDIT PASS; M12 native acceptance remains pending.
-- M12B: REMEDIATION IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + REPEAT USER NATIVE/VISUAL ACCEPTANCE.
-- Strict completed roadmap count: 12/20 = 60%.
+- M12: PASS/CLOSED on accepted strict evidence and user native/visual acceptance.
+- M12A: PASS/CLOSED; R26 independently re-audited.
+- M12B: PASS/CLOSED; native Open Cockpit acceptance recorded.
+- M13: READY / ACTIVE FOR NEXT IMPLEMENTATION RUN; implementation not started.
+- Strict completed roadmap count: 13/20 = 65%.
 
 ## Quality and verification
 
@@ -67,11 +70,12 @@ branchPolicy: H!veAI
 | M12A R26 focused tests | PASS | Project-wide starvation, deterministic tie-order, project isolation, and derived-activity tests |
 | M12 full regression | PASS | Full native/frontend tests, typecheck/build/audit/checks and governed publication passed |
 | M12B route-loading focused tests | PASS | Exact-ID navigation, native ACTIVE snapshot, error classification, permission capability, and M12A isolation coverage |
+| M12 closure acceptance | PASS | Accepted M12/M12A/M12B evidence and user native/visual acceptance dated 2026-08-27 |
 
 ## Recent meaningful activity
 
 - M11 closure accepted from the REV7 strict audit and final Projects strict audit; M11 remains PASS/CLOSED.
-- M12 Project Cockpit implementation, M12A R26 history remediation, and M12B native route-loading remediation passed focused verification; independent strict re-audit and repeat user native/visual acceptance remain pending.
+- M12 Project Cockpit, M12A R26 history remediation, and M12B native route-loading remediation are PASS/CLOSED on accepted evidence; M13 is now the active next implementation milestone.
 - Prior M11A R01-R08, E01-E03, and UX01-UX04 source fixes are preserved.
 - H!veAI own dashboard contract is now the dogfood single-dashboard watch target; materialized activity remains explicitly undated and REV7 publication evidence is complete.
 
@@ -90,5 +94,9 @@ branchPolicy: H!veAI
 M12 implementation prompt: `docs/H!veAI/prompts/M12_PROJECT_COCKPIT_IMPLEMENTATION_PROMPT.md`.
 
 M12B remediation prompt: `docs/H!veAI/prompts/M12B_NATIVE_OPEN_COCKPIT_ROUTE_LOADING_REMEDIATION_PROMPT.md`.
+
+M12 closure and M13 activation prompt: `docs/H!veAI/prompts/M12_CLOSURE_AND_M13_ACTIVATION_PROMPT.md`.
+
+No separate authoritative M13 implementation prompt exists yet; M13 coding is not started by this run.
 
 H!veAI actively watches only .hiveai/PROJECT_DASHBOARD.md for project-status changes; the sources above are internal project evidence/provenance and are not independent live-watch targets.

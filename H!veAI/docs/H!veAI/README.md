@@ -74,7 +74,7 @@ Chronological builder logs. Builder logs are claims/evidence records, not indepe
 
 ## Current roadmap truth
 
-- M00-M11: PASS/CLOSED.
+- M00-M12: PASS/CLOSED.
 - M09 Task Intelligence Parser: PASS/CLOSED after independent M09D final strict audit.
 - Original M09 strict audit: historical FAIL.
 - M09A strict re-audit: historical FAIL after residual R01/R02 findings.
@@ -86,10 +86,10 @@ Chronological builder logs. Builder logs are claims/evidence records, not indepe
 - M10A strict-closure remediation: independent re-audit closed all production MAJOR findings.
 - Akilta footer link: PASS/ACCEPTED after native user verification that Chrome opens, H!veAI remains open, and no terminal window appears.
 - M10 Workflow State Machine: PASS/CLOSED.
-- Strict completed milestone count is now 12/20 = 60%.
+- Strict completed milestone count is now 13/20 = 65%.
 - M11 original implementation: historical strict-audit FAIL with 8 MAJOR findings.
 - M11A REV4-REV7 remediation history remains immutable and accepted; M11A REV7 = PASS/CLOSED and final Projects visual cleanup = PASS/CLOSED.
-- M11 = PASS/CLOSED. M12 implementation exists; M12A R26 and M12B native cockpit route remediation are complete pending independent strict audit and repeat user native/visual acceptance. M11/M12 runtime implementation incorporates the `.hiveai/PROJECT_DASHBOARD.md` authority manifest system.
+- M11 = PASS/CLOSED. M12, M12A R26, and M12B native cockpit route remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13 is READY / ACTIVE FOR NEXT IMPLEMENTATION RUN; implementation has not started. M11/M12 runtime implementation incorporates the `.hiveai/PROJECT_DASHBOARD.md` authority manifest system.
 - M21 remains planned and was not started.
 
 For exact current status, always defer to `H!veAI/TASKS.md`.
