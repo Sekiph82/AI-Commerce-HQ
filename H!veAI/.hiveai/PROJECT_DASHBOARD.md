@@ -20,14 +20,14 @@ branchPolicy: H!veAI
 | Project status | ACTIVE |
 | Health | UNKNOWN |
 | Current milestone | M12 |
-| Current task | R26 project-wide workflow history strict remediation |
-| Current task ID | M12A-R26 |
+| Current task | Native Open Cockpit route-loading remediation |
+| Current task ID | M12B-ROUTE-LOAD |
 | Current workflow state | REMEDIATION_IMPLEMENTATION_COMPLETE_PENDING_AUDIT |
 | Progress | 60% |
 | Required actor | CODEX |
-| Next action | Independent strict re-audit and user native/visual acceptance |
-| Waiting on | Independent strict re-audit and user native/visual acceptance |
-| Last meaningful update | M12A R26 project-wide history remediation complete; independent re-audit and user native/visual acceptance remain pending |
+| Next action | Independent strict re-audit and repeat user native/visual acceptance |
+| Waiting on | Independent strict re-audit and repeat user native/visual acceptance |
+| Last meaningful update | M12B native Open Cockpit route-loading remediation complete; independent re-audit and repeat user native/visual acceptance remain pending |
 
 ## Current work
 
@@ -42,10 +42,11 @@ branchPolicy: H!veAI
 | M11A.REV7-R25 | Preserve structured Quality identity | CLOSED | CODEX | REV7 prompt / command_center.rs |
 | M12 | Implement project-scoped Project Cockpit with truthful authority/provenance | STRICT_AUDIT_FAIL_R26_REMEDIATED_PENDING_REAUDIT | CODEX | M12 strict audit / M12A remediation |
 | M12A-R26 | Order selected-project workflow history globally before the bounded cockpit cap | REMEDIATION_IMPLEMENTATION_COMPLETE_PENDING_AUDIT | CODEX | M12A prompt / project_cockpit.rs + workflow.rs tests |
+| M12B-ROUTE-LOAD | Restore native registered-project cockpit snapshot IPC and truthful route errors | REMEDIATION_IMPLEMENTATION_COMPLETE_PENDING_AUDIT | CODEX | M12B prompt / capability + pages.tsx tests |
 
 ## Blockers and waiting
 
-- M12 strict audit remains historical FAIL for R26; M12A remediation is complete and independent strict re-audit plus user native/visual acceptance remain pending.
+- M12A R26 is independently source-audited PASS; M12B route remediation is complete and independent strict re-audit plus repeat user native/visual acceptance remain pending.
 - M21 remains planned and was not started.
 
 ## Milestone summary
@@ -54,8 +55,9 @@ branchPolicy: H!veAI
 - M11 original implementation: historical strict-audit FAIL.
 - M11A REV7: PASS/CLOSED; final Projects visual cleanup: PASS/CLOSED.
 - M11: PASS/CLOSED.
-- M12: STRICT AUDIT FAIL HISTORY / R26 REMEDIATED, PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
-- M12A: REMEDIATION IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
+- M12: R26 and native route-loading remediation complete, PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
+- M12A: REMEDIATION IMPLEMENTATION COMPLETE / INDEPENDENT R26 RE-AUDIT PASS; M12 native acceptance remains pending.
+- M12B: REMEDIATION IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + REPEAT USER NATIVE/VISUAL ACCEPTANCE.
 - Strict completed roadmap count: 12/20 = 60%.
 
 ## Quality and verification
@@ -64,11 +66,12 @@ branchPolicy: H!veAI
 | --- | --- | --- |
 | M12A R26 focused tests | PASS | Project-wide starvation, deterministic tie-order, project isolation, and derived-activity tests |
 | M12 full regression | PASS | Full native/frontend tests, typecheck/build/audit/checks and governed publication passed |
+| M12B route-loading focused tests | PASS | Exact-ID navigation, native ACTIVE snapshot, error classification, permission capability, and M12A isolation coverage |
 
 ## Recent meaningful activity
 
 - M11 closure accepted from the REV7 strict audit and final Projects strict audit; M11 remains PASS/CLOSED.
-- M12 Project Cockpit implementation and M12A R26 project-wide history remediation passed full regression and governed publication; independent strict re-audit and user native/visual acceptance remain pending.
+- M12 Project Cockpit implementation, M12A R26 history remediation, and M12B native route-loading remediation passed focused verification; independent strict re-audit and repeat user native/visual acceptance remain pending.
 - Prior M11A R01-R08, E01-E03, and UX01-UX04 source fixes are preserved.
 - H!veAI own dashboard contract is now the dogfood single-dashboard watch target; materialized activity remains explicitly undated and REV7 publication evidence is complete.
 
@@ -85,5 +88,7 @@ branchPolicy: H!veAI
 - Build/test evidence: `docs/H!veAI/codex-logs/M11A_REV7_UNICODE_AND_STRUCTURED_IDENTITY_FINAL_CLOSURE_LOG.md`
 
 M12 implementation prompt: `docs/H!veAI/prompts/M12_PROJECT_COCKPIT_IMPLEMENTATION_PROMPT.md`.
+
+M12B remediation prompt: `docs/H!veAI/prompts/M12B_NATIVE_OPEN_COCKPIT_ROUTE_LOADING_REMEDIATION_PROMPT.md`.
 
 H!veAI actively watches only .hiveai/PROJECT_DASHBOARD.md for project-status changes; the sources above are internal project evidence/provenance and are not independent live-watch targets.

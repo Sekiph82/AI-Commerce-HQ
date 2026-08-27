@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../src/App";
 import type { ProjectCockpitSnapshot } from "../src/projectCockpit";
+import type { CommandCenterSnapshot } from "../src/commandCenter";
 
 const invoke = vi.hoisted(() => vi.fn());
 
@@ -131,6 +132,44 @@ function snapshotFor(id: string): ProjectCockpitSnapshot {
   };
 }
 
+function commandCenterSnapshotFor(id: string): CommandCenterSnapshot {
+  const cockpit = snapshotFor(id);
+  return {
+    generatedAt: "2026-08-27T10:00:00Z",
+    projects: [{
+      projectId: id,
+      name: cockpit.project.name,
+      registryStatus: cockpit.project.status,
+      health: "HEALTHY",
+      manifestStatus: "VALID",
+      trackingMode: "REGISTERED_PROJECT",
+      taskAuthority: "CANONICAL",
+      provenanceMode: "PROJECT_DASHBOARD",
+      materialized: cockpit.dashboard.materialized,
+      canonicalTaskSource: cockpit.projectSummary.currentTask?.sourcePath ?? null,
+      currentTask: cockpit.projectSummary.currentTask,
+      currentState: cockpit.projectSummary.currentState,
+      lastAction: cockpit.projectSummary.lastAction,
+      nextAction: cockpit.projectSummary.nextAction,
+      allowedActors: cockpit.projectSummary.allowedActors,
+      totalTasks: cockpit.projectSummary.totalTasks,
+      activeTasks: cockpit.projectSummary.activeTasks,
+      completedTasks: cockpit.projectSummary.completedTasks,
+      progressPercent: cockpit.projectSummary.progressPercent,
+      warnings: [],
+      refreshStatus: "CURRENT",
+      refreshAt: "2026-08-27T10:00:00Z",
+      refreshError: null,
+    }],
+    kpis: { projects: 1, activeTasks: 1, needsAttention: 0, running: 1, completedTasks: 0, healthy: 1, healthDetail: "1 healthy", authorityDetail: "Canonical" },
+    attention: [],
+    workQueue: [],
+    recentActivity: [],
+    engineeringBrief: { facts: [], recommendation: null },
+    warnings: [],
+  };
+}
+
 function defaultInvoke(command: string, args?: { projectId?: string; request?: { projectId?: string; priority?: number } }) {
   if (command === "hiveai_projects_list") return Promise.resolve(records);
   if (command === "hiveai_project_get") {
@@ -166,6 +205,29 @@ beforeEach(() => {
 });
 
 describe("M12 project cockpit", () => {
+  it("keeps the Command Center project ID unchanged through Open cockpit navigation", async () => {
+    invoke.mockImplementation((command: string, args?: { projectId?: string }) => {
+      if (command === "hiveai_command_center_snapshot") return Promise.resolve(commandCenterSnapshotFor("beta"));
+      return defaultInvoke(command, args);
+    });
+    renderLive("/");
+    await screen.findByRole("heading", { name: "Global Overview" });
+    fireEvent.click(await screen.findByRole("button", { name: "Open cockpit" }));
+    expect(await screen.findByRole("heading", { name: "Project Beta" })).toBeInTheDocument();
+    expect(invoke).toHaveBeenCalledWith("hiveai_project_get", { projectId: "beta" });
+    expect(invoke).toHaveBeenCalledWith("hiveai_project_cockpit_snapshot", { projectId: "beta" });
+    expect(invoke.mock.calls.some(([command, args]) => command === "hiveai_project_cockpit_snapshot" && args?.projectId === "alpha")).toBe(false);
+  });
+
+  it("keeps the Projects page project ID unchanged through Open cockpit navigation", async () => {
+    renderLive("/projects");
+    const betaCard = await screen.findByRole("heading", { name: "Project Beta" });
+    fireEvent.click(within(betaCard.closest("article") as HTMLElement).getByRole("button", { name: "Open cockpit" }));
+    expect(await screen.findByRole("heading", { name: "Project Beta" })).toBeInTheDocument();
+    expect(invoke).toHaveBeenCalledWith("hiveai_project_get", { projectId: "beta" });
+    expect(invoke).toHaveBeenCalledWith("hiveai_project_cockpit_snapshot", { projectId: "beta" });
+  });
+
   it("renders the selected project's live native read model and keeps evidence scoped", async () => {
     renderLive("/projects/alpha");
     expect(await screen.findByRole("heading", { name: "Project Alpha" })).toBeInTheDocument();
@@ -206,6 +268,31 @@ describe("M12 project cockpit", () => {
     expect(screen.getAllByText("ARCHIVED").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Unknown|unavailable/i).length).toBeGreaterThan(0);
     expect(screen.queryByText("0 tasks")).not.toBeInTheDocument();
+    records.pop();
+  });
+
+  it("distinguishes unknown identity, registered unavailable state, and snapshot failure", async () => {
+    renderLive("/projects/unknown");
+    expect(await screen.findByText("This project ID is not registered.")).toBeInTheDocument();
+
+    const archived = project("archived-error", "Archived Error Project", "ARCHIVED");
+    records.push(archived);
+    invoke.mockImplementation((command: string, args?: { projectId?: string }) => {
+      if (command === "hiveai_project_cockpit_snapshot" && args?.projectId === archived.id) return Promise.reject(new Error("path unavailable"));
+      return defaultInvoke(command, args);
+    });
+    window.history.pushState({}, "", `/projects/${archived.id}`);
+    fireEvent(window, new PopStateEvent("popstate"));
+    expect(await screen.findByText(/Archived Error Project is ARCHIVED/)).toBeInTheDocument();
+    expect(screen.queryByText(/not registered/)).not.toBeInTheDocument();
+
+    invoke.mockImplementation((command: string, args?: { projectId?: string }) => {
+      if (command === "hiveai_project_cockpit_snapshot" && args?.projectId === "alpha") return Promise.reject(new Error("native snapshot failure"));
+      return defaultInvoke(command, args);
+    });
+    window.history.pushState({}, "", "/projects/alpha");
+    fireEvent(window, new PopStateEvent("popstate"));
+    expect(await screen.findByText("The registered project was found, but its native cockpit snapshot failed to load.")).toBeInTheDocument();
     records.pop();
   });
 

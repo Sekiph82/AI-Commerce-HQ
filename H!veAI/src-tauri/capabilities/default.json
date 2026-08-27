@@ -16,6 +16,7 @@
     "allow-database-status",
     "allow-command-center-read",
     "allow-project-registry",
+    "allow-project-cockpit",
     "allow-git-engine-read",
     "allow-filesystem-watcher",
     "allow-task-source-discovery",

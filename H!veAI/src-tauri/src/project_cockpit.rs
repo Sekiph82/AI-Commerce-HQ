@@ -536,6 +536,26 @@ mod tests {
     }
 
     #[test]
+    fn m12b_registered_active_project_loads_snapshot_for_exact_registry_id() {
+        let db_dir = tempdir().unwrap();
+        let database = DatabaseState::initialize(db_dir.path().to_path_buf()).unwrap();
+        let project_dir = tempdir().unwrap();
+        let project = register_project(
+            &database,
+            RegisterProjectRequest {
+                path: project_dir.path().to_string_lossy().into_owned(),
+                name: Some("Native Route Project".into()),
+            },
+        )
+        .unwrap();
+        let registered = crate::projects::fetch_project(&database, &project.id).unwrap();
+        let cockpit = snapshot(&database, &registered.id).unwrap();
+        assert_eq!(registered.status, "ACTIVE");
+        assert_eq!(cockpit.project.id, registered.id);
+        assert_eq!(cockpit.project_summary.project_id, registered.id);
+    }
+
+    #[test]
     fn m12_git_loading_does_not_persist_a_snapshot() {
         let db_dir = tempdir().unwrap();
         let database = DatabaseState::initialize(db_dir.path().to_path_buf()).unwrap();

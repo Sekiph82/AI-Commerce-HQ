@@ -470,3 +470,14 @@ mod startup_intro_tests {
         assert!(!claim_startup_intro(&state));
     }
 }
+
+#[cfg(test)]
+mod capability_tests {
+    #[test]
+    fn main_window_allows_the_registered_project_cockpit_command() {
+        let capability = include_str!("../capabilities/default.json");
+        assert!(capability.contains("allow-project-cockpit"));
+        let permissions = include_str!("../permissions/foundation.toml");
+        assert!(permissions.contains("hiveai_project_cockpit_snapshot"));
+    }
+}

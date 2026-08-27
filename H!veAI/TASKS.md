@@ -1068,6 +1068,17 @@ M12 IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT AUDIT + USER NATIVE/VIS
 
 M12A REMEDIATION IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
 
+### M12B - Native Open Cockpit route-loading remediation
+
+- [x] Reproduce the native route failure against governed registered-project data and isolate the failing IPC permission boundary.
+- [x] Allow the registered Project Cockpit snapshot command through the main-window capability with least privilege.
+- [x] Preserve exact project IDs across Command Center and Projects navigation.
+- [x] Distinguish unknown, registered unavailable, and native cockpit snapshot failures in the route error state.
+- [x] Add direct frontend/native regression coverage and preserve M12A R26 coverage.
+- [x] Run full regression and governed publication; repeat user native/visual acceptance remains pending.
+
+M12B REMEDIATION IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
+
 ---
 
 # M13 - Codex Adapter

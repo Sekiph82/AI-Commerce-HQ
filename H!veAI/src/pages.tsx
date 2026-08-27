@@ -872,11 +872,40 @@ function ProjectRegistryDialog({
   );
 }
 
+export type CockpitLoadFailureKind =
+  | "UNKNOWN_PROJECT"
+  | "REGISTERED_PROJECT_UNAVAILABLE"
+  | "COCKPIT_SNAPSHOT_FAILED";
+
+export function classifyCockpitLoadFailure(
+  stage: "registry" | "snapshot",
+  project: ProjectRecord | null,
+): CockpitLoadFailureKind {
+  if (stage === "registry") return "UNKNOWN_PROJECT";
+  if (project && project.status !== "ACTIVE") {
+    return "REGISTERED_PROJECT_UNAVAILABLE";
+  }
+  return "COCKPIT_SNAPSHOT_FAILED";
+}
+
+function cockpitRouteErrorDetail(
+  kind: CockpitLoadFailureKind,
+  project: ProjectRecord | null,
+) {
+  if (kind === "UNKNOWN_PROJECT") return "This project ID is not registered.";
+  if (kind === "REGISTERED_PROJECT_UNAVAILABLE") {
+    return `Registered project ${project?.name ?? "identity"} is ${project?.status ?? "unavailable"} and its cockpit cannot be loaded.`;
+  }
+  return "The registered project was found, but its native cockpit snapshot failed to load.";
+}
+
 export function ProjectCockpit() {
   const { id } = useParams();
   const { selectProject } = useProjectRegistry();
   const project = projects.find((item) => item.id === id);
   const [snapshot, setSnapshot] = React.useState<ProjectCockpitSnapshot | null>(null);
+  const [registeredProject, setRegisteredProject] = React.useState<ProjectRecord | null>(null);
+  const [routeError, setRouteError] = React.useState<CockpitLoadFailureKind | null>(null);
   const [routeState, setRouteState] = React.useState<
     "loading" | "ready" | "not-found" | "error"
   >(isTauriDesktop() ? "loading" : project ? "ready" : "not-found");
@@ -898,13 +927,22 @@ export function ProjectCockpit() {
     const currentRequest = ++requestId.current;
     setTab("Overview");
     setSnapshot(null);
+    setRegisteredProject(null);
+    setRouteError(null);
     if (!id || !isTauriDesktop()) {
       setRouteState(project ? "ready" : "not-found");
       return;
     }
     setRouteState("loading");
+    let stage: "registry" | "snapshot" = "registry";
+    let registeredForRequest: ProjectRecord | null = null;
     void getRegisteredProject(id)
-      .then(() => getProjectCockpitSnapshot(id))
+      .then((registered) => {
+        registeredForRequest = registered;
+        if (currentRequest === requestId.current) setRegisteredProject(registered);
+        stage = "snapshot";
+        return getProjectCockpitSnapshot(id);
+      })
       .then((value) => {
         if (currentRequest === requestId.current) {
           setSnapshot(value);
@@ -913,9 +951,12 @@ export function ProjectCockpit() {
         }
       })
       .catch(() => {
-        if (currentRequest === requestId.current) setRouteState("error");
+        if (currentRequest === requestId.current) {
+          setRouteError(classifyCockpitLoadFailure(stage, registeredForRequest));
+          setRouteState("error");
+        }
       });
-  }, [id, selectProject]);
+  }, [id, project, selectProject]);
   if (snapshot)
     return <LiveProjectCockpit snapshot={snapshot} onRefresh={() => {
       if (id) void getProjectCockpitSnapshot(id).then(setSnapshot).catch(() => undefined);
@@ -924,7 +965,12 @@ export function ProjectCockpit() {
     return (
       <div className="cockpit-route-state">
         {routeState === "error" ? (
-          <ErrorState detail="Registered project was not found or could not be loaded." />
+          <ErrorState
+            detail={cockpitRouteErrorDetail(
+              routeError ?? "COCKPIT_SNAPSHOT_FAILED",
+              registeredProject,
+            )}
+          />
         ) : (
           <>
             <LoadingState />
