@@ -30,7 +30,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is used for traceability and 
 
 ## Current development status
 
-- M00-M10: PASS/CLOSED.
+- M00-M11: PASS/CLOSED.
 - M09 Task Intelligence Parser: PASS/CLOSED after independent M09D final strict audit.
 - M09 original implementation: historical strict-audit FAIL.
 - M09A remediation: historical strict re-audit FAIL after two residual findings remained.
@@ -42,9 +42,10 @@ Package numbering such as `M08.01`, `M08.02`, etc. is used for traceability and 
 - M10A strict-closure remediation: independent re-audit closed all production MAJOR findings.
 - Akilta footer link: PASS/ACCEPTED after native user verification that Chrome opens, H!veAI remains open, and no terminal window appears.
 - M10 Workflow State Machine: PASS/CLOSED.
-- Strict completed roadmap progress is now 11/20 = 55%.
+- Strict completed roadmap progress is now 12/20 = 60%.
 - M11 original implementation: historical strict-audit FAIL with 8 MAJOR findings.
-- M11A REV4 implementation is complete, the independent REV4 strict audit is FAIL with R19-R22 open, M11A REV5 implementation is complete but its independent strict audit is FAIL with R23 open and E11 evidence defects, and M11A REV6 implementation is complete with historical source-audit PASS superseded by the deeper REV6 strict audit FAIL with R24-R25 open; M11A REV7 Unicode and structured identity final closure is IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT. M11 remains NOT CLOSED and final builder state remains IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT + USER VISUAL/NATIVE ACCEPTANCE.
-- M12 remains blocked behind M11; Project Dashboard manifest ingestion is part of the M11/M12 runtime plan, with only M11 active here.
+- M11A REV4-REV7 remediation history remains immutable and accepted; M11A REV7 = PASS/CLOSED and final Projects visual cleanup = PASS/CLOSED.
+- M11 = PASS/CLOSED. M12 = READY / ACTIVE FOR NEXT IMPLEMENTATION RUN; implementation has not started and no separate authoritative M12 implementation prompt currently exists.
+- M21 remains planned and was not started.
 
 For exact live status, acceptance state, and every completed/planned package from M00 through M20, use `TASKS.md` as the canonical source of truth.

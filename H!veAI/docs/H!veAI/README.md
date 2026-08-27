@@ -74,7 +74,7 @@ Chronological builder logs. Builder logs are claims/evidence records, not indepe
 
 ## Current roadmap truth
 
-- M00-M10: PASS/CLOSED.
+- M00-M11: PASS/CLOSED.
 - M09 Task Intelligence Parser: PASS/CLOSED after independent M09D final strict audit.
 - Original M09 strict audit: historical FAIL.
 - M09A strict re-audit: historical FAIL after residual R01/R02 findings.
@@ -86,10 +86,11 @@ Chronological builder logs. Builder logs are claims/evidence records, not indepe
 - M10A strict-closure remediation: independent re-audit closed all production MAJOR findings.
 - Akilta footer link: PASS/ACCEPTED after native user verification that Chrome opens, H!veAI remains open, and no terminal window appears.
 - M10 Workflow State Machine: PASS/CLOSED.
-- Strict completed milestone count is now 11/20 = 55%.
+- Strict completed milestone count is now 12/20 = 60%.
 - M11 original implementation: historical strict-audit FAIL with 8 MAJOR findings.
-- M11A REV4 implementation is complete, the independent REV4 strict audit is FAIL with R19-R22 open, M11A REV5 implementation is complete but its independent strict audit is FAIL with R23 open and E11 evidence defects, and M11A REV6 implementation is complete with historical source-audit PASS superseded by the deeper REV6 strict audit FAIL with R24-R25 open; M11A REV7 Unicode and structured identity final closure is IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT. M11 remains NOT CLOSED and final builder state remains IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT + USER VISUAL/NATIVE ACCEPTANCE.
-- M12 remains blocked behind M11. M11/M12 runtime implementation must incorporate the `.hiveai/PROJECT_DASHBOARD.md` authority manifest system, with only M11 active here.
+- M11A REV4-REV7 remediation history remains immutable and accepted; M11A REV7 = PASS/CLOSED and final Projects visual cleanup = PASS/CLOSED.
+- M11 = PASS/CLOSED. M12 = READY / ACTIVE FOR NEXT IMPLEMENTATION RUN; implementation has not started and no separate authoritative M12 implementation prompt currently exists. M11/M12 runtime implementation must incorporate the `.hiveai/PROJECT_DASHBOARD.md` authority manifest system.
+- M21 remains planned and was not started.
 
 For exact current status, always defer to `H!veAI/TASKS.md`.
 
