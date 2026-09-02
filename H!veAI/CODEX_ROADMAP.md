@@ -15,7 +15,7 @@ User-facing roadmap denominator remains **20**. `M00` is the historical rebuild/
 - M10A remediation, independent re-audit, and Akilta native click acceptance: PASS/CLOSED.
 - M11 original and remediation failures remain historical evidence; accepted strict audits close M11A REV7 and the final Projects visual cleanup.
 - M11 = PASS/CLOSED.
-- M12 = PASS/CLOSED, including M12A R26 and M12B route remediation, on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B accepted boundaries are preserved; M13C R32 remediation is complete and pending independent strict re-audit plus user native/visual acceptance. M14-M20 remain planned/blocked, and M21 is not part of this roadmap run.
+- M12 = PASS/CLOSED, including M12A R26 and M12B route remediation, on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B/M13C accepted boundaries are preserved; M13D R33/R34 remediation is complete and pending independent strict re-audit plus user native/visual acceptance. M14-M20 remain planned/blocked, and M21 is not part of this roadmap run.
 - M21 remains planned and was not started.
 - Strict completed progress is 13/20 = 65% because the pre-M10 hotfix is not a numbered roadmap milestone.
 
@@ -360,7 +360,7 @@ Packages:
 
 Exit: Codex can be safely started/stopped/observed from H!veAI as a real agent session.
 
-Status: M13C REMEDIATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
+Status: M13D REMEDIATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE. R33/R34 CLOSED.
 
 ---
 

@@ -33,7 +33,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition
 - M10A remediation, independent re-audit, and Akilta native click acceptance are complete; Akilta footer link = PASS/ACCEPTED.
 - Original M11 implementation is a historical strict-audit FAIL with 8 MAJOR findings.
 - M11A REV4, REV5, REV6, and REV7 remediation history remains immutable; all findings are closed by the accepted strict audits. M11A REV7 = PASS/CLOSED and the final Projects visual cleanup = PASS/CLOSED.
-- M11 = PASS/CLOSED. M12, M12A R26, and M12B native Open Cockpit remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B accepted boundaries are preserved; M13C R32 remediation is complete and pending independent strict re-audit plus user native/visual acceptance. M21 remains planned/not started.
+- M11 = PASS/CLOSED. M12, M12A R26, and M12B native Open Cockpit remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B/M13C accepted boundaries are preserved; M13D closes R33/R34 and is pending independent strict re-audit plus user native/visual acceptance. M21 remains planned/not started.
 - M21 remains planned and was not started.
 
 ---
@@ -1131,7 +1131,7 @@ M12B NATIVE OPEN COCKPIT REMEDIATION PASS/CLOSED.
 - [x] Production QA publication.
 - [ ] Independent strict audit.
 
-M13 IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT AUDIT + USER NATIVE/VISUAL ACCEPTANCE. M13C R32 remediation is complete; M13 remains open.
+M13D REMEDIATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE. R33 and R34 are closed; M13 remains open.
 
 ## M13A - Common adapter, streaming, and stop strict remediation
 
@@ -1153,6 +1153,16 @@ M13A REMEDIATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VI
 - [ ] Independent strict re-audit and user native/visual acceptance.
 
 M13B REMEDIATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
+
+## M13D - Post-startup console flash and real Codex operation failure remediation
+
+- [x] Close R33 with one Windows no-visible-console policy for Codex, owned-process escalation, and production Git helper children.
+- [x] Close R34 with a fixed compatible Codex invocation and truthful persisted failed-session evidence.
+- [x] Surface bounded diagnostic code, message, exit code, and redacted stderr in Agents session details.
+- [x] Run focused/full regression, security, and governed publication gates.
+- [ ] Independent strict re-audit and user native/visual acceptance.
+
+M13D REMEDIATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
 
 ## M13C - Windows Codex executable resolution native remediation
 

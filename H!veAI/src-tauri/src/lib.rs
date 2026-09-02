@@ -8,6 +8,7 @@ mod command_center;
 mod db;
 mod external_browser;
 mod git_engine;
+mod process_policy;
 mod project_cockpit;
 mod project_dashboard;
 mod projects;

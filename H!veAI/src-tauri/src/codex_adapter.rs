@@ -1,4 +1,5 @@
 use crate::db::DatabaseState;
+use crate::process_policy::background_command;
 use crate::projects::{fetch_project, ProjectRecord};
 use crate::time::utc_timestamp;
 use rusqlite::params;
@@ -7,7 +8,7 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Output, Stdio};
+use std::process::{Child, Output, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::{Arc, Mutex};
@@ -634,9 +635,9 @@ pub fn start(
         &connection,
         &session_id,
         "PROCESS_POLICY",
-        serde_json::json!({"executable":"codex.exe","argumentPolicy":"FIXED_ADAPTER_ARGS","cwd":cwd.to_string_lossy(),"shell":false,"promptTransport":"STDIN_BOUNDED"}),
+        serde_json::json!({"executable":"codex.exe","argumentPolicy":"FIXED_ADAPTER_ARGS","model":"gpt-5.5","ignoreUserConfig":true,"cwd":cwd.to_string_lossy(),"shell":false,"promptTransport":"STDIN_BOUNDED"}),
     )?;
-    let mut command = Command::new(executable);
+    let mut command = background_command(executable);
     command
         .args(fixed_exec_args(&cwd))
         .current_dir(&cwd)
@@ -826,6 +827,20 @@ fn monitor_process(
             stderr_state,
             persistence,
         );
+        if state == "FAILED" {
+            finish_payload["diagnosticCode"] =
+                serde_json::Value::String("CODEX_PROCESS_FAILED".into());
+            finish_payload["diagnosticMessage"] = serde_json::Value::String(
+                exit_code
+                    .map(|code| format!("Codex exited with code {code}"))
+                    .unwrap_or_else(|| "Codex exited without an exit code".into()),
+            );
+        } else if state == "CRASHED" {
+            finish_payload["diagnosticCode"] =
+                serde_json::Value::String("CODEX_PROCESS_CRASHED".into());
+            finish_payload["diagnosticMessage"] =
+                serde_json::Value::String("Codex process ended without a status".into());
+        }
         if let Err(error) = lifecycle_result {
             finish_payload["lifecyclePersistenceError"] =
                 serde_json::Value::String(bounded_error(&error.to_string()));
@@ -937,11 +952,14 @@ fn fixed_exec_args(cwd: &Path) -> Vec<String> {
     vec![
         "exec".into(),
         "--json".into(),
+        "--model".into(),
+        "gpt-5.5".into(),
         "--sandbox".into(),
         "workspace-write".into(),
         "--cd".into(),
         cwd.to_string_lossy().into_owned(),
         "--ephemeral".into(),
+        "--ignore-user-config".into(),
         "--skip-git-repo-check".into(),
     ]
 }
@@ -1069,7 +1087,7 @@ enum ProbeError {
 }
 
 fn probe_version(path: &Path, timeout: Duration) -> Result<String, ProbeError> {
-    let mut child = Command::new(path)
+    let mut child = background_command(path)
         .arg("--version")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -1422,7 +1440,7 @@ fn process_has_exited(adapter: &CodexAdapter, session_id: &str) -> bool {
 }
 
 fn escalate_owned_process(process: &OwnedProcess) -> Result<(), String> {
-    let output = Command::new("taskkill.exe")
+    let output = background_command("taskkill.exe")
         .args(owned_tree_escalation_args(process.pid))
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -1480,6 +1498,7 @@ pub fn reconcile(database: &DatabaseState) -> Result<(), String> {
 mod tests {
     use super::*;
     use std::io;
+    use std::process::Command;
     use tempfile::tempdir;
 
     struct TinyChunkReader {
@@ -1689,6 +1708,25 @@ mod tests {
     #[test]
     fn prompt_metacharacters_and_flags_are_one_data_argument() {
         let args = fixed_exec_args(Path::new("C:\\registered"));
+        assert_eq!(
+            args,
+            vec![
+                "exec",
+                "--json",
+                "--model",
+                "gpt-5.5",
+                "--sandbox",
+                "workspace-write",
+                "--cd",
+                "C:\\registered",
+                "--ephemeral",
+                "--ignore-user-config",
+                "--skip-git-repo-check",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect::<Vec<_>>()
+        );
         assert!(!args
             .iter()
             .any(|arg| arg.contains("danger") || arg.contains("&") || arg.contains("|")));

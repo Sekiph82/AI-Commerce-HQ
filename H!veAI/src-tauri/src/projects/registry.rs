@@ -340,7 +340,7 @@ fn insert_repository(
 }
 
 fn is_ancestor(repository: &Path, old: &str, new: &str) -> bool {
-    std::process::Command::new("git")
+    crate::process_policy::background_command("git")
         .args([
             "-C",
             &repository.to_string_lossy(),

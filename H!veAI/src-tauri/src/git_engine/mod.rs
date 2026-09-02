@@ -2,8 +2,6 @@ mod mutation;
 
 use crate::db::DatabaseState;
 use serde::{Deserialize, Serialize};
-#[cfg(windows)]
-use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::thread;
@@ -541,10 +539,7 @@ fn git_optional(path: &Path, args: &[&str]) -> Result<Option<String>, String> {
 }
 
 fn production_git_command() -> Command {
-    let mut command = Command::new("git");
-    #[cfg(windows)]
-    command.creation_flags(0x08000000);
-    command
+    crate::process_policy::background_command("git")
 }
 
 pub(crate) fn run_git(path: &Path, args: &[&str]) -> Result<Output, String> {

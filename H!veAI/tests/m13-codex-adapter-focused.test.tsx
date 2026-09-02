@@ -45,4 +45,66 @@ describe("M13 Codex adapter", () => {
     expect(await screen.findByText("Native H!veAI is required for Codex process operations.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start Codex operation" })).toBeDisabled();
   });
+
+  it("renders bounded failed-session evidence without protected markers", async () => {
+    invoke.mockImplementation((command: string) => {
+      if (command === "hiveai_projects_list") return Promise.resolve(records);
+      if (command === "hiveai_codex_readiness") return Promise.resolve(readiness);
+      if (command === "hiveai_codex_sessions_list") return Promise.resolve([{
+        id: "failed-session",
+        provider: "CODEX",
+        projectId: "alpha",
+        taskId: null,
+        operationKind: "CODEX_EXEC",
+        state: "FAILED",
+        cwd: "C:\\Projects\\alpha",
+        startedAt: "2026-08-27T10:01:00Z",
+        endedAt: "2026-08-27T10:01:01Z",
+        exitCode: 1,
+        stdout: "",
+        stderr: "[REDACTED SENSITIVE OUTPUT]\\nmodel requires a newer Codex version",
+        stdoutTruncated: false,
+        stderrTruncated: false,
+        diagnosticCode: "CODEX_PROCESS_FAILED",
+        diagnosticMessage: "Codex exited with code 1",
+      }]);
+      return Promise.resolve({});
+    });
+    render(<App />);
+    expect(await screen.findByText("FAILED")).toBeInTheDocument();
+    expect(screen.getByText("CODEX_PROCESS_FAILED")).toBeInTheDocument();
+    expect(screen.getByText("Codex exited with code 1")).toBeInTheDocument();
+    expect(screen.getByText("1")).toBeInTheDocument();
+    expect(screen.getByText(/model requires a newer Codex version/)).toBeInTheDocument();
+    expect(screen.queryByText(/password=/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps completed-session output evidence visible", async () => {
+    invoke.mockImplementation((command: string) => {
+      if (command === "hiveai_projects_list") return Promise.resolve(records);
+      if (command === "hiveai_codex_readiness") return Promise.resolve(readiness);
+      if (command === "hiveai_codex_sessions_list") return Promise.resolve([{
+        id: "completed-session",
+        provider: "CODEX",
+        projectId: "alpha",
+        taskId: "alpha-task",
+        operationKind: "CODEX_EXEC",
+        state: "COMPLETED",
+        cwd: "C:\\Projects\\alpha",
+        startedAt: "2026-08-27T10:01:00Z",
+        endedAt: "2026-08-27T10:01:02Z",
+        exitCode: 0,
+        stdout: "status: clean",
+        stderr: "",
+        stdoutTruncated: false,
+        stderrTruncated: false,
+        diagnosticCode: null,
+        diagnosticMessage: null,
+      }]);
+      return Promise.resolve({});
+    });
+    render(<App />);
+    expect(await screen.findByText("COMPLETED")).toBeInTheDocument();
+    expect(screen.getByText("status: clean")).toBeInTheDocument();
+  });
 });
