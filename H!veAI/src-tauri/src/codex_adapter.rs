@@ -5,7 +5,7 @@ use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::io::{Read, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -509,22 +509,71 @@ impl AgentAdapter for CodexAdapter {
 
 pub fn readiness() -> CodexReadiness {
     let checked_at = utc_timestamp();
-    let Some(executable) = discover_codex_executable() else {
+    let resolution = resolve_codex_executable();
+    let Some(executable) = resolution.selected.as_deref() else {
+        let (code, message) = if resolution.skipped_candidates > 0 {
+            (
+                "CODEX_NATIVE_EXECUTABLE_NOT_FOUND",
+                format!(
+                    "No native codex.exe was available; skipped {} invalid candidate(s)",
+                    resolution.skipped_candidates
+                ),
+            )
+        } else {
+            (
+                "CODEX_EXECUTABLE_NOT_FOUND",
+                "No codex.exe was found on PATH or the bounded native install fallback".into(),
+            )
+        };
         return AdapterReadiness {
             provider: PROVIDER.into(),
             available: false,
             version: None,
             readiness_state: "UNAVAILABLE".into(),
-            diagnostic_code: Some("CODEX_EXECUTABLE_NOT_FOUND".into()),
-            diagnostic_message: Some("codex.exe was not found on PATH".into()),
+            diagnostic_code: Some(code.into()),
+            diagnostic_message: Some(message),
             checked_at,
         };
     };
     match probe_version(&executable, READINESS_TIMEOUT) {
-        Ok(version) => AdapterReadiness { provider: PROVIDER.into(), available: true, version: Some(version), readiness_state: "VERSION_VERIFIED_AUTH_UNKNOWN".into(), diagnostic_code: Some("AUTH_READINESS_UNVERIFIED".into()), diagnostic_message: Some("Codex executable is available; account authentication is determined when a bounded operation starts".into()), checked_at },
-        Err(ProbeError::Timeout) => unavailable_readiness("PROBE_TIMEOUT", "CODEX_VERSION_PROBE_TIMEOUT", "Codex version probe exceeded its bounded timeout", checked_at),
-        Err(ProbeError::Malformed(message)) => unavailable_readiness("MALFORMED_VERSION", "CODEX_VERSION_MALFORMED", &message, checked_at),
-        Err(ProbeError::Failed(message)) => unavailable_readiness("PROBE_FAILED", "CODEX_VERSION_PROBE_FAILED", &message, checked_at),
+        Ok(version) => AdapterReadiness {
+            provider: PROVIDER.into(),
+            available: true,
+            version: Some(version),
+            readiness_state: "VERSION_VERIFIED_AUTH_UNKNOWN".into(),
+            diagnostic_code: Some("AUTH_READINESS_UNVERIFIED".into()),
+            diagnostic_message: Some(selected_executable_message(resolution.skipped_candidates)),
+            checked_at,
+        },
+        Err(ProbeError::Timeout) => unavailable_readiness(
+            "PROBE_TIMEOUT",
+            "CODEX_VERSION_PROBE_TIMEOUT",
+            "Codex version probe exceeded its bounded timeout",
+            checked_at,
+        ),
+        Err(ProbeError::Malformed) => unavailable_readiness(
+            "MALFORMED_VERSION",
+            "CODEX_VERSION_MALFORMED",
+            "The selected native codex.exe returned malformed bounded version output",
+            checked_at,
+        ),
+        Err(ProbeError::Failed) => unavailable_readiness(
+            "PROBE_FAILED",
+            "CODEX_VERSION_PROBE_FAILED",
+            "The selected native codex.exe failed its bounded version probe",
+            checked_at,
+        ),
+    }
+}
+
+fn selected_executable_message(skipped_candidates: usize) -> String {
+    if skipped_candidates == 0 {
+        "Native codex.exe selected; account authentication is determined when a bounded operation starts".into()
+    } else {
+        format!(
+            "Native codex.exe selected after skipping {} invalid candidate(s); account authentication is determined when a bounded operation starts",
+            skipped_candidates
+        )
     }
 }
 
@@ -555,8 +604,17 @@ pub fn start(
     let project = fetch_project(database, &request.project_id)?;
     let cwd = validate_operation_project(&project)?;
     validate_task(database, &request.project_id, request.task_id.as_deref())?;
-    let executable = discover_codex_executable()
-        .ok_or_else(|| "CODEX_EXECUTABLE_NOT_FOUND: codex.exe was not found on PATH".to_string())?;
+    let resolution = resolve_codex_executable();
+    let executable = resolution.selected.as_deref().ok_or_else(|| {
+        if resolution.skipped_candidates > 0 {
+            format!(
+                "CODEX_NATIVE_EXECUTABLE_NOT_FOUND: no valid native codex.exe candidate (skipped {} invalid candidate(s))",
+                resolution.skipped_candidates
+            )
+        } else {
+            "CODEX_EXECUTABLE_NOT_FOUND: no codex.exe was found on PATH or the bounded native install fallback".to_string()
+        }
+    })?;
     let session_id = Uuid::new_v4().to_string();
     let started_at = utc_timestamp();
     let operation_kind = if request.task_id.is_some() {
@@ -888,24 +946,126 @@ fn fixed_exec_args(cwd: &Path) -> Vec<String> {
     ]
 }
 
-fn discover_codex_executable() -> Option<PathBuf> {
-    let path = std::env::var_os("PATH")?;
-    for entry in std::env::split_paths(&path) {
-        for name in ["codex.exe", "codex"] {
+const MAX_NATIVE_HEADER_OFFSET: u64 = 1024 * 1024;
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct CodexExecutableResolution {
+    selected: Option<PathBuf>,
+    skipped_candidates: usize,
+}
+
+fn resolve_codex_executable() -> CodexExecutableResolution {
+    let mut entries = std::env::var_os("PATH")
+        .map(|path| std::env::split_paths(&path).collect::<Vec<_>>())
+        .unwrap_or_default();
+    entries.extend(known_codex_install_candidates());
+    resolve_codex_executable_from_entries(entries)
+}
+
+fn resolve_codex_executable_from_entries<I>(entries: I) -> CodexExecutableResolution
+where
+    I: IntoIterator<Item = PathBuf>,
+{
+    let mut resolution = CodexExecutableResolution::default();
+    let mut seen = std::collections::HashSet::new();
+    for entry in entries {
+        for name in codex_executable_names() {
             let candidate = entry.join(name);
-            if candidate.is_file() {
-                return Some(candidate);
+            if !candidate.is_file() || !seen.insert(candidate.clone()) {
+                continue;
             }
+            if !is_direct_candidate_name(name) {
+                resolution.skipped_candidates = resolution.skipped_candidates.saturating_add(1);
+                continue;
+            }
+            if is_native_codex_candidate(&candidate) {
+                resolution.selected = Some(candidate);
+                return resolution;
+            }
+            resolution.skipped_candidates = resolution.skipped_candidates.saturating_add(1);
         }
     }
-    None
+    resolution
+}
+
+#[cfg(windows)]
+fn codex_executable_names() -> &'static [&'static str] {
+    &["codex.exe", "codex"]
+}
+
+#[cfg(not(windows))]
+fn codex_executable_names() -> &'static [&'static str] {
+    &["codex", "codex.exe"]
+}
+
+#[cfg(windows)]
+fn is_direct_candidate_name(name: &str) -> bool {
+    name.eq_ignore_ascii_case("codex.exe")
+}
+
+#[cfg(not(windows))]
+fn is_direct_candidate_name(_name: &str) -> bool {
+    true
+}
+
+#[cfg(windows)]
+fn known_codex_install_candidates() -> Vec<PathBuf> {
+    std::env::var_os("LOCALAPPDATA")
+        .map(|root| vec![PathBuf::from(root).join(r"OpenAI\Codex\bin")])
+        .unwrap_or_default()
+}
+
+#[cfg(not(windows))]
+fn known_codex_install_candidates() -> Vec<PathBuf> {
+    Vec::new()
+}
+
+#[cfg(windows)]
+fn is_native_codex_candidate(path: &Path) -> bool {
+    let Ok(metadata) = std::fs::metadata(path) else {
+        return false;
+    };
+    if !metadata.is_file() || metadata.len() < 64 {
+        return false;
+    }
+    let Ok(mut file) = std::fs::File::open(path) else {
+        return false;
+    };
+    let mut dos_header = [0u8; 64];
+    if file.read_exact(&mut dos_header).is_err() || &dos_header[..2] != b"MZ" {
+        return false;
+    }
+    let pe_offset = u32::from_le_bytes([
+        dos_header[0x3c],
+        dos_header[0x3d],
+        dos_header[0x3e],
+        dos_header[0x3f],
+    ]) as u64;
+    if pe_offset > MAX_NATIVE_HEADER_OFFSET || pe_offset.saturating_add(26) > metadata.len() {
+        return false;
+    }
+    if file.seek(SeekFrom::Start(pe_offset)).is_err() {
+        return false;
+    }
+    let mut pe_header = [0u8; 26];
+    if file.read_exact(&mut pe_header).is_err() || &pe_header[..4] != b"PE\0\0" {
+        return false;
+    }
+    let machine = u16::from_le_bytes([pe_header[4], pe_header[5]]);
+    let optional_magic = u16::from_le_bytes([pe_header[24], pe_header[25]]);
+    matches!(machine, 0x014c | 0x8664 | 0xaa64) && matches!(optional_magic, 0x010b | 0x020b)
+}
+
+#[cfg(not(windows))]
+fn is_native_codex_candidate(path: &Path) -> bool {
+    path.is_file()
 }
 
 #[derive(Debug)]
 enum ProbeError {
     Timeout,
-    Malformed(String),
-    Failed(String),
+    Malformed,
+    Failed,
 }
 
 fn probe_version(path: &Path, timeout: Duration) -> Result<String, ProbeError> {
@@ -915,18 +1075,14 @@ fn probe_version(path: &Path, timeout: Duration) -> Result<String, ProbeError> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|error| ProbeError::Failed(error.to_string()))?;
+        .map_err(|_| ProbeError::Failed)?;
     let deadline = Instant::now() + timeout;
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
-                let output = child
-                    .wait_with_output()
-                    .map_err(|error| ProbeError::Failed(error.to_string()))?;
+                let output = child.wait_with_output().map_err(|_| ProbeError::Failed)?;
                 if !status.success() {
-                    return Err(ProbeError::Failed(
-                        String::from_utf8_lossy(&output.stderr).trim().to_string(),
-                    ));
+                    return Err(ProbeError::Failed);
                 }
                 return parse_version(&output);
             }
@@ -936,7 +1092,7 @@ fn probe_version(path: &Path, timeout: Duration) -> Result<String, ProbeError> {
                 let _ = child.wait();
                 return Err(ProbeError::Timeout);
             }
-            Err(error) => return Err(ProbeError::Failed(error.to_string())),
+            Err(_) => return Err(ProbeError::Failed),
         }
     }
 }
@@ -945,9 +1101,7 @@ fn parse_version(output: &Output) -> Result<String, ProbeError> {
     let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let first = text.lines().next().unwrap_or_default().trim();
     if first.len() > 256 || !first.to_ascii_lowercase().contains("codex") {
-        return Err(ProbeError::Malformed(
-            "Codex version output did not contain a bounded Codex version".into(),
-        ));
+        return Err(ProbeError::Malformed);
     }
     Ok(first.to_string())
 }
@@ -1424,6 +1578,111 @@ mod tests {
         assert_eq!(
             provider_dispatch("CLAUDE"),
             Err("ADAPTER_PROVIDER_UNSUPPORTED")
+        );
+    }
+
+    #[cfg(windows)]
+    fn write_native_pe_fixture(path: &Path) {
+        let mut bytes = vec![0u8; 0x80];
+        bytes[..2].copy_from_slice(b"MZ");
+        bytes[0x3c..0x40].copy_from_slice(&0x40u32.to_le_bytes());
+        bytes[0x40..0x44].copy_from_slice(b"PE\0\0");
+        bytes[0x44..0x46].copy_from_slice(&0x8664u16.to_le_bytes());
+        bytes[0x56..0x58].copy_from_slice(&0x0002u16.to_le_bytes());
+        bytes[0x58..0x5a].copy_from_slice(&0x020bu16.to_le_bytes());
+        std::fs::write(path, bytes).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn resolver_skips_earlier_extensionless_shim_and_selects_later_exe() {
+        let directory = tempdir().unwrap();
+        let earlier = directory.path().join("earlier");
+        let later = directory.path().join("later");
+        std::fs::create_dir_all(&earlier).unwrap();
+        std::fs::create_dir_all(&later).unwrap();
+        std::fs::write(earlier.join("codex"), b"@echo off\necho shim").unwrap();
+        let expected = later.join("codex.exe");
+        write_native_pe_fixture(&expected);
+
+        let resolution = resolve_codex_executable_from_entries(vec![earlier, later]);
+
+        assert_eq!(resolution.selected, Some(expected));
+        assert_eq!(resolution.skipped_candidates, 1);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn resolver_skips_invalid_exe_candidate_and_continues() {
+        let directory = tempdir().unwrap();
+        let earlier = directory.path().join("invalid");
+        let later = directory.path().join("valid");
+        std::fs::create_dir_all(&earlier).unwrap();
+        std::fs::create_dir_all(&later).unwrap();
+        std::fs::write(earlier.join("codex.exe"), b"not a PE executable").unwrap();
+        let expected = later.join("codex.exe");
+        write_native_pe_fixture(&expected);
+
+        let resolution = resolve_codex_executable_from_entries(vec![earlier, later]);
+
+        assert_eq!(resolution.selected, Some(expected));
+        assert_eq!(resolution.skipped_candidates, 1);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn resolver_preserves_first_valid_exe_order_deterministically() {
+        let directory = tempdir().unwrap();
+        let first = directory.path().join("first");
+        let second = directory.path().join("second");
+        std::fs::create_dir_all(&first).unwrap();
+        std::fs::create_dir_all(&second).unwrap();
+        let expected = first.join("codex.exe");
+        write_native_pe_fixture(&expected);
+        write_native_pe_fixture(&second.join("codex.exe"));
+
+        let resolution = resolve_codex_executable_from_entries(vec![first, second]);
+
+        assert_eq!(resolution.selected, Some(expected));
+        assert_eq!(resolution.skipped_candidates, 0);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn resolver_reports_unavailable_when_no_valid_native_exe_exists() {
+        let directory = tempdir().unwrap();
+        let shim_dir = directory.path().join("shim");
+        let invalid_dir = directory.path().join("invalid");
+        std::fs::create_dir_all(&shim_dir).unwrap();
+        std::fs::create_dir_all(&invalid_dir).unwrap();
+        std::fs::write(shim_dir.join("codex"), b"shim").unwrap();
+        std::fs::write(invalid_dir.join("codex.exe"), b"not a PE executable").unwrap();
+
+        let resolution = resolve_codex_executable_from_entries(vec![shim_dir, invalid_dir]);
+
+        assert_eq!(resolution.selected, None);
+        assert_eq!(resolution.skipped_candidates, 2);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn readiness_and_start_share_the_same_resolver_policy() {
+        let directory = tempdir().unwrap();
+        let earlier = directory.path().join("shim");
+        let later = directory.path().join("native");
+        std::fs::create_dir_all(&earlier).unwrap();
+        std::fs::create_dir_all(&later).unwrap();
+        std::fs::write(earlier.join("codex"), b"shim").unwrap();
+        write_native_pe_fixture(&later.join("codex.exe"));
+        let entries = vec![earlier, later];
+
+        let readiness_resolution = resolve_codex_executable_from_entries(entries.clone());
+        let start_resolution = resolve_codex_executable_from_entries(entries);
+
+        assert_eq!(readiness_resolution, start_resolution);
+        assert_eq!(
+            readiness_resolution.selected.unwrap().file_name().unwrap(),
+            "codex.exe"
         );
     }
 

@@ -33,7 +33,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition
 - M10A remediation, independent re-audit, and Akilta native click acceptance are complete; Akilta footer link = PASS/ACCEPTED.
 - Original M11 implementation is a historical strict-audit FAIL with 8 MAJOR findings.
 - M11A REV4, REV5, REV6, and REV7 remediation history remains immutable; all findings are closed by the accepted strict audits. M11A REV7 = PASS/CLOSED and the final Projects visual cleanup = PASS/CLOSED.
-- M11 = PASS/CLOSED. M12, M12A R26, and M12B native Open Cockpit remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B implementation remediation is complete and pending independent strict re-audit plus user native/visual acceptance. M21 remains planned/not started.
+- M11 = PASS/CLOSED. M12, M12A R26, and M12B native Open Cockpit remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B accepted boundaries are preserved; M13C R32 remediation is complete and pending independent strict re-audit plus user native/visual acceptance. M21 remains planned/not started.
 - M21 remains planned and was not started.
 
 ---
@@ -1131,7 +1131,7 @@ M12B NATIVE OPEN COCKPIT REMEDIATION PASS/CLOSED.
 - [x] Production QA publication.
 - [ ] Independent strict audit.
 
-M13 IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
+M13 IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT AUDIT + USER NATIVE/VISUAL ACCEPTANCE. M13C R32 remediation is complete; M13 remains open.
 
 ## M13A - Common adapter, streaming, and stop strict remediation
 
@@ -1153,6 +1153,16 @@ M13A REMEDIATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VI
 - [ ] Independent strict re-audit and user native/visual acceptance.
 
 M13B REMEDIATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
+
+## M13C - Windows Codex executable resolution native remediation
+
+- [x] Reproduce the earlier PATH extensionless shim selection and native Windows error 193.
+- [x] Close R32 with deterministic native `codex.exe` resolution shared by readiness and start.
+- [x] Add disposable adversarial resolver coverage for shim ordering, invalid candidates, first-valid ordering, unavailable state, and shared policy.
+- [x] Run full regression, security, and governed publication gates.
+- [ ] Independent strict re-audit and user native/visual acceptance.
+
+M13C REMEDIATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
 
 ---
 
@@ -1553,7 +1563,7 @@ M20 PLANNED/BLOCKED until M19 and final hardening gates.
 - M00-M09 are PASS/CLOSED.
 - Pre-M10 Native UX Hotfix X01/X02 is PASS/CLOSED after independent audit and user native acceptance.
 - M10 original strict audit is historical FAIL; M10A remediation is IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT.
-- M13B remediation is complete; M13 remains open pending independent strict re-audit and user native/visual acceptance. M14-M20 remain planned/blocked.
+- M13C R32 remediation is complete; M13 remains open pending independent strict re-audit and user native/visual acceptance. M14-M20 remain planned/blocked.
 - M11/M12 must implement the Project Dashboard manifest authority resolver before treating `.hiveai/PROJECT_DASHBOARD.md` as live runtime truth.
 - Each future milestone should be executed as one bounded milestone unless an actual independent audit requires a remediation prompt.
 - Subpackage numbering is for traceability, source/evidence mapping, and progress visibility, not an instruction to generate many tiny prompts.
