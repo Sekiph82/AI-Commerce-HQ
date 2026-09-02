@@ -33,7 +33,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition
 - M10A remediation, independent re-audit, and Akilta native click acceptance are complete; Akilta footer link = PASS/ACCEPTED.
 - Original M11 implementation is a historical strict-audit FAIL with 8 MAJOR findings.
 - M11A REV4, REV5, REV6, and REV7 remediation history remains immutable; all findings are closed by the accepted strict audits. M11A REV7 = PASS/CLOSED and the final Projects visual cleanup = PASS/CLOSED.
-- M11 = PASS/CLOSED. M12, M12A R26, and M12B native Open Cockpit remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B/M13C accepted boundaries are preserved; M13D closes R33/R34 and is pending independent strict re-audit plus user native/visual acceptance. M21 remains planned/not started.
+- M11 = PASS/CLOSED. M12, M12A R26, and M12B native Open Cockpit remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B/M13C/M13D accepted boundaries are preserved; M13E vertical persisted-session reader remediation is complete and pending independent strict re-audit plus user native/visual acceptance. M21 remains planned/not started.
 - M21 remains planned and was not started.
 
 ---
@@ -1173,6 +1173,17 @@ M13D REMEDIATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VI
 - [ ] Independent strict re-audit and user native/visual acceptance.
 
 M13C REMEDIATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
+
+## M13E - Agent session output vertical reader native UX remediation
+
+- [x] Replace the horizontal persisted-session output presentation with a full-width vertical reader.
+- [x] Wrap long JSON, paths, and unrecognized lines without changing persisted output truth.
+- [x] Preserve completed/failed metadata, diagnostics, stderr, truncation markers, and redaction visibility.
+- [x] Add focused frontend evidence for long output, completed output, failed diagnostics, and redaction markers.
+- [x] Run full frontend/native regression, security, formatting, build, and governed publication gates.
+- [ ] Independent strict re-audit and user native/visual acceptance.
+
+M13E REMEDIATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
 
 ---
 

@@ -1754,6 +1754,31 @@ export function Tasks() {
     </>
   );
 }
+
+type CodexOutputRow = { label: string; content: string };
+
+function codexOutputRows(text: string): CodexOutputRow[] {
+  return text.split(/\r?\n/).map((line) => {
+    if (!line) return { label: "Output", content: "" };
+    try {
+      const parsed: unknown = JSON.parse(line);
+      const label = parsed && typeof parsed === "object" && "type" in parsed && typeof parsed.type === "string" ? parsed.type : "JSON event";
+      return { label, content: JSON.stringify(parsed, null, 2) ?? line };
+    } catch {
+      return { label: "Output", content: line };
+    }
+  });
+}
+
+function CodexSessionOutput({ label, text, truncated }: { label: "stdout" | "stderr"; text: string; truncated: boolean }) {
+  const rows = codexOutputRows(text);
+  return <section className={`agent-output-reader ${label === "stderr" ? "agent-output-reader-error" : ""}`} aria-label={`${label} output`} data-testid={`agent-${label}-reader`}>
+    <div className="agent-output-reader-heading">{label === "stderr" ? "Error output" : "Session output"}</div>
+    <div className="agent-output-events">{rows.map((row, index) => <div className="agent-output-event" key={`${label}-${index}`}><div className="agent-output-event-label">{index + 1}. {row.label}</div><code className="agent-output-event-content">{row.content}</code></div>)}</div>
+    {truncated ? <div className="agent-output-truncated">[{label === "stderr" ? "error output" : "output"} truncated]</div> : null}
+  </section>;
+}
+
 export function Agents() {
   const desktop = isTauriDesktop();
   const { records, selectedProjectId, selectProject } = useProjectRegistry();
@@ -1829,7 +1854,7 @@ export function Agents() {
     </section>
     <section className="panel agent-sessions-panel">
       <SectionHeader title="Persisted Codex sessions" detail={selected ? selected.name : "No project selected"} />
-      <div className="cockpit-record-list">{sessions.map((session) => <details className="cockpit-record" key={session.id}><summary><strong>{session.operationKind}</strong><span>{session.state}</span></summary><div className="agent-session-actions"><button className="secondary-button" type="button" onClick={() => void resume(session.id)}>Resume</button>{["STARTING", "RUNNING"].includes(session.state) ? <button className="secondary-button" type="button" onClick={() => void stop(session.id)} disabled={busy}>Stop owned process</button> : null}</div><CockpitFacts facts={[["Session", session.id], ["Project", session.projectId], ["Task", session.taskId ?? "Freeform"], ["Working directory", session.cwd], ["Started", session.startedAt ?? "Unknown"], ["Ended", session.endedAt ?? "Unknown"], ["Exit code", session.exitCode === null ? "Unknown" : String(session.exitCode)], ["Diagnostic code", session.diagnosticCode ?? "None"], ["Diagnostic message", session.diagnosticMessage ?? "None"]]} />{session.stdout ? <pre className="cockpit-code">{session.stdout}{session.stdoutTruncated ? "\n[output truncated]" : ""}</pre> : null}{session.stderr ? <pre className="cockpit-code agent-stderr">{session.stderr}{session.stderrTruncated ? "\n[error output truncated]" : ""}</pre> : null}</details>)}{!sessions.length ? <EmptyState title="No persisted Codex sessions" detail={selected ? "No Codex session evidence is available for this project." : "Register a project to use the adapter."} /> : null}</div>
+      <div className="cockpit-record-list">{sessions.map((session) => <details className="cockpit-record" key={session.id}><summary><strong>{session.operationKind}</strong><span>{session.state}</span></summary><div className="agent-session-actions"><button className="secondary-button" type="button" onClick={() => void resume(session.id)}>Resume</button>{["STARTING", "RUNNING"].includes(session.state) ? <button className="secondary-button" type="button" onClick={() => void stop(session.id)} disabled={busy}>Stop owned process</button> : null}</div><CockpitFacts facts={[["Session", session.id], ["Project", session.projectId], ["Task", session.taskId ?? "Freeform"], ["Working directory", session.cwd], ["Started", session.startedAt ?? "Unknown"], ["Ended", session.endedAt ?? "Unknown"], ["Exit code", session.exitCode === null ? "Unknown" : String(session.exitCode)], ["Diagnostic code", session.diagnosticCode ?? "None"], ["Diagnostic message", session.diagnosticMessage ?? "None"]]} />{session.stdout ? <CodexSessionOutput label="stdout" text={session.stdout} truncated={session.stdoutTruncated} /> : null}{session.stderr ? <CodexSessionOutput label="stderr" text={session.stderr} truncated={session.stderrTruncated} /> : null}</details>)}{!sessions.length ? <EmptyState title="No persisted Codex sessions" detail={selected ? "No Codex session evidence is available for this project." : "Register a project to use the adapter."} /> : null}</div>
     </section>
   </>;
 }

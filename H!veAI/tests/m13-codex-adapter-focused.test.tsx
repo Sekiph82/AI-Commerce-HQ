@@ -76,6 +76,7 @@ describe("M13 Codex adapter", () => {
     expect(screen.getByText("Codex exited with code 1")).toBeInTheDocument();
     expect(screen.getByText("1")).toBeInTheDocument();
     expect(screen.getByText(/model requires a newer Codex version/)).toBeInTheDocument();
+    expect(screen.getByText(/\[REDACTED SENSITIVE OUTPUT\]/)).toBeInTheDocument();
     expect(screen.queryByText(/password=/i)).not.toBeInTheDocument();
   });
 
@@ -106,5 +107,43 @@ describe("M13 Codex adapter", () => {
     render(<App />);
     expect(await screen.findByText("COMPLETED")).toBeInTheDocument();
     expect(screen.getByText("status: clean")).toBeInTheDocument();
+  });
+
+  it("renders long persisted JSON output as a wrapped vertical reader", async () => {
+    const longPath = `C:\\Projects\\alpha\\${"nested\\".repeat(40)}result.json`;
+    const output = JSON.stringify({ type: "command.completed", command: longPath, status: "clean" });
+    const longUnrecognizedLine = `unrecognized-path=${"x".repeat(400)}`;
+    invoke.mockImplementation((command: string) => {
+      if (command === "hiveai_projects_list") return Promise.resolve(records);
+      if (command === "hiveai_codex_readiness") return Promise.resolve(readiness);
+      if (command === "hiveai_codex_sessions_list") return Promise.resolve([{
+        id: "long-session",
+        provider: "CODEX",
+        projectId: "alpha",
+        taskId: "alpha-task",
+        operationKind: "CODEX_EXEC",
+        state: "COMPLETED",
+        cwd: "C:\\Projects\\alpha",
+        startedAt: "2026-08-27T10:01:00Z",
+        endedAt: "2026-08-27T10:01:02Z",
+        exitCode: 0,
+        stdout: `${output}\n${longUnrecognizedLine}`,
+        stderr: "",
+        stdoutTruncated: false,
+        stderrTruncated: false,
+        diagnosticCode: null,
+        diagnosticMessage: null,
+      }]);
+      return Promise.resolve({});
+    });
+    const { container } = render(<App />);
+    const reader = await screen.findByTestId("agent-stdout-reader");
+    expect(reader).toHaveClass("agent-output-reader");
+    expect(reader).toHaveTextContent("command.completed");
+    expect(reader).toHaveTextContent("result.json");
+    expect(reader).toHaveTextContent(longUnrecognizedLine);
+    expect(reader.querySelector("pre")).toBeNull();
+    expect(reader.querySelector(".agent-output-event-content")).toBeTruthy();
+    expect(container.querySelector(".agent-sessions-panel")?.textContent).toContain("COMPLETED");
   });
 });
