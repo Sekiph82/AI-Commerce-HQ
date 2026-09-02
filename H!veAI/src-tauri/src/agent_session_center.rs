@@ -234,8 +234,13 @@ fn validate_prompt(prompt: &str) -> Result<(), String> {
 }
 
 fn validate_operation_project(project: &ProjectRecord) -> Result<PathBuf, String> {
-    if project.status == "ARCHIVED" {
-        return Err("AGENT_PROJECT_ARCHIVED".into());
+    if project.status != "ACTIVE" {
+        return Err(match project.status.as_str() {
+            "MISSING" => "AGENT_PROJECT_MISSING",
+            "ARCHIVED" => "AGENT_PROJECT_ARCHIVED",
+            _ => "AGENT_PROJECT_NOT_ACTIVE",
+        }
+        .into());
     }
     let path = PathBuf::from(&project.normalized_path);
     if !path.is_dir() {
@@ -1234,6 +1239,139 @@ mod tests {
         assert!(validate_pty_dimensions(24, 80).is_ok());
     }
 
+    fn project_record(status: &str, path: &Path) -> ProjectRecord {
+        ProjectRecord {
+            id: "project-fixture".into(),
+            name: "Project fixture".into(),
+            original_path: path.to_string_lossy().into(),
+            normalized_path: path.to_string_lossy().into(),
+            status: status.into(),
+            priority: 0,
+            preferred_builder: None,
+            preferred_auditor: None,
+            task_source_policy: None,
+            preferred_agent_provider: None,
+            registered_at: "2026-01-01T00:00:00.000Z".into(),
+            last_validated_at: None,
+            repository: None,
+        }
+    }
+
+    #[test]
+    fn operation_project_requires_active_available_registered_root() {
+        let directory = tempdir().unwrap();
+        assert!(validate_operation_project(&project_record("ACTIVE", directory.path())).is_ok());
+        for (status, error) in [
+            ("MISSING", "AGENT_PROJECT_MISSING"),
+            ("ARCHIVED", "AGENT_PROJECT_ARCHIVED"),
+            ("UNKNOWN", "AGENT_PROJECT_NOT_ACTIVE"),
+        ] {
+            assert_eq!(
+                validate_operation_project(&project_record(status, directory.path())).unwrap_err(),
+                error
+            );
+        }
+        assert_eq!(
+            validate_operation_project(&project_record(
+                "ACTIVE",
+                &directory.path().join("unavailable")
+            ))
+            .unwrap_err(),
+            "AGENT_PROJECT_PATH_UNAVAILABLE"
+        );
+    }
+
+    #[test]
+    fn task_and_session_operations_reject_cross_project_identity() {
+        let db_directory = tempdir().unwrap();
+        let project_a_directory = tempdir().unwrap();
+        let project_b_directory = tempdir().unwrap();
+        fs::write(
+            project_a_directory.path().join("TASKS.md"),
+            "# Work\n- [ ] A task\n",
+        )
+        .unwrap();
+        fs::write(
+            project_b_directory.path().join("TASKS.md"),
+            "# Work\n- [ ] B task\n",
+        )
+        .unwrap();
+        let database =
+            crate::db::DatabaseState::initialize(db_directory.path().to_path_buf()).unwrap();
+        let project_a = crate::projects::register_project(
+            &database,
+            crate::projects::RegisterProjectRequest {
+                path: project_a_directory.path().to_string_lossy().into(),
+                name: Some("Project A".into()),
+            },
+        )
+        .unwrap();
+        let project_b = crate::projects::register_project(
+            &database,
+            crate::projects::RegisterProjectRequest {
+                path: project_b_directory.path().to_string_lossy().into(),
+                name: Some("Project B".into()),
+            },
+        )
+        .unwrap();
+        let task_a = crate::task_intelligence::parse(&database, &project_a.id)
+            .unwrap()
+            .tasks[0]
+            .id
+            .clone();
+        assert_eq!(
+            validate_task(&database, &project_b.id, Some(&task_a)).unwrap_err(),
+            "AGENT_TASK_PROJECT_MISMATCH_OR_MISSING"
+        );
+        let session_id = "session-project-a";
+        database
+            .open_connection()
+            .unwrap()
+            .execute(
+                "INSERT INTO agent_sessions (id, project_id, task_id, provider, state, created_at) VALUES (?1, ?2, ?3, 'CLAUDE', 'FAILED', ?4)",
+                params![session_id, project_a.id, task_a, utc_timestamp()],
+            )
+            .unwrap();
+        assert_eq!(
+            load_session_for_project(&database, &project_b.id, session_id).unwrap_err(),
+            "AGENT_SESSION_PROJECT_MISMATCH"
+        );
+        let center = AgentSessionCenter::default();
+        let codex = CodexAdapter::default();
+        assert_eq!(
+            session_events(&database, &project_b.id, session_id).unwrap_err(),
+            "AGENT_SESSION_PROJECT_MISMATCH"
+        );
+        assert_eq!(
+            stop(&center, &codex, &database, &project_b.id, session_id).unwrap_err(),
+            "AGENT_SESSION_PROJECT_MISMATCH"
+        );
+        assert_eq!(
+            resume(&database, &project_b.id, session_id).unwrap_err(),
+            "AGENT_SESSION_PROJECT_MISMATCH"
+        );
+        assert_eq!(
+            resize(&database, &project_b.id, session_id, 24, 80).unwrap_err(),
+            "AGENT_SESSION_PROJECT_MISMATCH"
+        );
+        assert_eq!(
+            retry(
+                &center,
+                &codex,
+                &database,
+                AgentRetryRequest {
+                    source_session_id: session_id.into(),
+                    provider: "CLAUDE".into(),
+                    project_id: project_b.id.clone(),
+                    task_id: Some(task_a),
+                    prompt: "cross-project retry must fail".into(),
+                },
+            )
+            .unwrap_err(),
+            "AGENT_RETRY_PROVENANCE_MISMATCH"
+        );
+    }
+
     #[test]
     fn claude_invocation_is_fixed_and_prompt_is_not_an_argument() {
         assert_eq!(
@@ -1267,10 +1405,11 @@ mod tests {
         command.args(["/C", "echo", "m14-pty-fixture"]);
         let mut child = pair.slave.spawn_command(command).unwrap();
         drop(pair.slave);
+        let status = child.wait().unwrap();
         let mut reader = pair.master.try_clone_reader().unwrap();
+        drop(pair.master);
         let mut output = Vec::new();
         reader.read_to_end(&mut output).unwrap();
-        let status = child.wait().unwrap();
         assert!(status.success());
         assert!(String::from_utf8_lossy(&output).contains("m14-pty-fixture"));
         assert!(output.len() < MAX_OUTPUT_BYTES);

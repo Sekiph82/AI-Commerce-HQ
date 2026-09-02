@@ -12,7 +12,10 @@ use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TryRecvError, TrySendE
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, SystemTime};
+#[cfg(not(test))]
 use tauri::{AppHandle, Emitter};
+#[cfg(test)]
+type AppHandle = ();
 use uuid::Uuid;
 
 #[cfg(test)]
@@ -142,6 +145,7 @@ impl WatcherManager {
         Self::initialize_internal(database, None)
     }
 
+    #[cfg(not(test))]
     pub fn initialize_with_app_handle(
         database: DatabaseState,
         app_handle: AppHandle,
@@ -902,6 +906,7 @@ fn emit_task_refresh_event(
     explicit: bool,
     success: bool,
 ) {
+    #[cfg(not(test))]
     if let Some(app) = app_handle {
         let event = IntelligenceRefreshEvent {
             project_id: project_id.to_string(),

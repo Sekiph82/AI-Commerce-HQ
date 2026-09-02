@@ -579,7 +579,8 @@ mod tests {
                 (4, "project_snapshot_fields".to_string()),
                 (5, "timestamp_standardization".to_string()),
                 (6, "residual_timestamp_standardization".to_string()),
-                (7, "project_snapshot_created_timestamp".to_string())
+                (7, "project_snapshot_created_timestamp".to_string()),
+                (8, "project_preferred_agent_provider".to_string())
             ]
         );
     }

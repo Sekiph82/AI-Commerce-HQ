@@ -136,7 +136,7 @@ fn create_migration_backup(connection: &Connection, database_path: &PathBuf) -> 
         let backup_handle = rusqlite::backup::Backup::new(connection, &mut destination)
             .map_err(|error| format!("backup H!veAI database before migration: {error}"))?;
         backup_handle
-            .run_to_completion(5, Duration::from_millis(25), None)
+            .run_to_completion(1024, Duration::from_millis(1), None)
             .map_err(|error| format!("backup H!veAI database before migration: {error}"))
     };
     destination

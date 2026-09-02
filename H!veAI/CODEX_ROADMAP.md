@@ -15,7 +15,7 @@ User-facing roadmap denominator remains **20**. `M00` is the historical rebuild/
 - M10A remediation, independent re-audit, and Akilta native click acceptance: PASS/CLOSED.
 - M11 original and remediation failures remain historical evidence; accepted strict audits close M11A REV7 and the final Projects visual cleanup.
 - M11 = PASS/CLOSED.
-- M12 = PASS/CLOSED, including M12A R26 and M12B route remediation, on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B/M13C/M13D/M13E are PASS/CLOSED on accepted strict re-audits and user native/visual evidence. M14 is ACTIVE/IMPLEMENTING; M15-M20 remain planned/blocked, and M21 is not part of this roadmap run.
+- M12 = PASS/CLOSED, including M12A R26 and M12B route remediation, on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B/M13C/M13D/M13E are PASS/CLOSED on accepted strict re-audits and user native/visual evidence. M14A closes M14-R35, M14-R36, and M14-R37; M14 remains implementation complete pending independent strict audit and user native/visual acceptance. M15-M20 remain planned/blocked, and M21 is not part of this roadmap run.
 - M21 remains planned and was not started.
 - Strict completed progress is 14/20 = 70% because the pre-M10 hotfix is not a numbered roadmap milestone.
 
@@ -381,6 +381,8 @@ Packages:
 Exit: H!veAI can supervise active builder sessions transparently and recoverably.
 
 Status: IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
+
+M14A remediation: R35 native test loader, R36 governed publication readiness, and R37 ACTIVE project confinement are CLOSED on remediation evidence. Independent strict re-audit and user native/visual acceptance remain pending.
 
 ---
 
