@@ -6,6 +6,10 @@ authors = ["H!veAI"]
 edition = "2021"
 rust-version = "1.77.2"
 
+[features]
+default = []
+pty-support = ["dep:portable-pty"]
+
 [lib]
 name = "hiveai_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
@@ -29,6 +33,10 @@ uuid = { version = "1", features = ["v4"] }
 notify = "8.2"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 sha2 = "0.10"
+
+[dependencies.portable-pty]
+version = "0.8.1"
+optional = true
 
 [dev-dependencies]
 tempfile = "3"

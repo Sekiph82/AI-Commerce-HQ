@@ -13,3 +13,4 @@ export type GitSnapshot = {
 export type GitDiff = { projectId: string; scope: "STAGED" | "WORKING_TREE"; text: string; truncated: boolean; binaryFiles: string[]; byteLimit: number; lineLimit: number };
 
 export function getGitSnapshot(projectId: string, persist = false) { return invoke<GitSnapshot>('hiveai_git_snapshot', { request: { projectId, persist } }); }
+export function getGitDiff(projectId: string, scope: 'STAGED' | 'WORKING_TREE' = 'WORKING_TREE') { return invoke<GitDiff>('hiveai_git_diff', { request: { projectId, scope } }); }

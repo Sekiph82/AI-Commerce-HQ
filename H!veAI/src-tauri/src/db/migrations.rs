@@ -368,6 +368,11 @@ pub fn migrations() -> &'static [Migration] {
             name: "project_snapshot_created_timestamp",
             sql: "UPDATE project_snapshots SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', CAST(created_at AS INTEGER), 'unixepoch') WHERE created_at GLOB '[0-9]*' AND created_at NOT GLOB '*[^0-9]*';",
         },
+        Migration {
+            version: 8,
+            name: "project_preferred_agent_provider",
+            sql: "ALTER TABLE projects ADD COLUMN preferred_agent_provider TEXT;",
+        },
     ]
 }
 
@@ -466,8 +471,8 @@ mod tests {
     fn fresh_database_reaches_latest_version() {
         let (_directory, mut connection) = temp_connection();
         let report = apply_migrations(&mut connection, migrations()).expect("migrations apply");
-        assert_eq!(report.schema_version, 7);
-        assert_eq!(report.migration_count, 7);
+        assert_eq!(report.schema_version, 8);
+        assert_eq!(report.migration_count, 8);
         assert_eq!(report.last_migration_status, "APPLIED");
     }
 
@@ -477,7 +482,7 @@ mod tests {
         apply_migrations(&mut connection, migrations()).expect("first apply");
         let report = apply_migrations(&mut connection, migrations()).expect("second apply");
         assert_eq!(report.last_migration_status, "ALREADY_CURRENT");
-        assert_eq!(report.migration_count, 7);
+        assert_eq!(report.migration_count, 8);
     }
 
     #[test]
@@ -544,7 +549,7 @@ mod tests {
         let (_directory, mut connection) = temp_connection();
         let first = apply_migrations(&mut connection, migrations()).expect("first apply");
         let second = apply_migrations(&mut connection, migrations()).expect("rerun");
-        assert_eq!(first.schema_version, 7);
+        assert_eq!(first.schema_version, 8);
         assert_eq!(second.last_migration_status, "ALREADY_CURRENT");
         let mismatch = [Migration {
             version: 1,

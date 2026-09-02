@@ -15,6 +15,9 @@ import {
   X,
 } from "lucide-react";
 import React from "react";
+import "@xterm/xterm/css/xterm.css";
+import type { FitAddon as FitAddonType } from "@xterm/addon-fit";
+import type { Terminal as XTermType } from "@xterm/xterm";
 import { invoke } from "@tauri-apps/api/core";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { activity, attention, projects, queue } from "./fixtures";
@@ -48,14 +51,14 @@ import {
   updateProjectSettings,
 } from "./projectRegistry";
 import type { ProjectRecord } from "./projectRegistry";
-import { getGitSnapshot } from "./gitEngine";
-import type { GitSnapshot } from "./gitEngine";
+import { getGitDiff, getGitSnapshot } from "./gitEngine";
+import type { GitDiff, GitSnapshot } from "./gitEngine";
 import type { Project } from "./types";
 import { useProjectRegistry } from "./registryContext";
 import { CommandCenterLive } from "./command_center_view";
 import { getCommandCenterSnapshot, type CommandCenterProject } from "./commandCenter";
 import { getProjectCockpitSnapshot, type ProjectCockpitSnapshot } from "./projectCockpit";
-import { getCodexReadiness, listCodexSessions, resumeCodexSession, startCodexSession, stopCodexSession, type CodexReadiness, type CodexSession } from "./codexAdapter";
+import { getAgentReadiness, listAgentSessions, resizeAgentTerminal, retryAgentSession, startAgentSession, stopAgentSession, type AgentSession, type ProviderReadiness, type SessionProvider } from "./agentSessionCenter";
 import { overrideWorkflow, type WorkflowState } from "./workflow";
 import {
   addCustomSourcePath,
@@ -1755,23 +1758,51 @@ export function Tasks() {
   );
 }
 
-type CodexOutputRow = { label: string; content: string };
+function AgentTerminal({ session, onResize }: { session: AgentSession; onResize: (columns: number, rows: number) => void }) {
+  const host = React.useRef<HTMLDivElement>(null);
+  const terminal = React.useRef<XTermType | null>(null);
+  const fitAddon = React.useRef<FitAddonType | null>(null);
+  const output = `${session.stdout}${session.stderr ? `\r\n${session.stderr}` : ""}`;
+  const outputRef = React.useRef(output);
+  outputRef.current = output;
+  React.useEffect(() => {
+    if (!host.current || typeof window.matchMedia !== "function") return;
+    let disposed = false;
+    let observer: ResizeObserver | null = null;
+    void Promise.all([import("@xterm/addon-fit"), import("@xterm/xterm")]).then(([fitModule, terminalModule]) => {
+      if (disposed || !host.current) return;
+      const instance = new terminalModule.Terminal({ convertEol: true, disableStdin: true, scrollback: 600, theme: { background: "#0b0e13", foreground: "#d8e2f0", cursor: "#7dd3fc" } });
+      const fit = new fitModule.FitAddon();
+      instance.loadAddon(fit);
+      instance.open(host.current);
+      fit.fit();
+      instance.write(outputRef.current);
+      terminal.current = instance;
+      fitAddon.current = fit;
+      observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => { fit.fit(); onResize(instance.cols, instance.rows); });
+      observer?.observe(host.current);
+    });
+    return () => { disposed = true; observer?.disconnect(); terminal.current?.dispose(); terminal.current = null; fitAddon.current = null; };
+  }, [onResize]);
+  React.useEffect(() => {
+    if (!terminal.current) return;
+    terminal.current.clear();
+    terminal.current.write(output);
+  }, [output]);
+  return <div className="agent-terminal" ref={host} aria-label={`${session.provider} live terminal`} data-testid="agent-live-terminal" />;
+}
 
-function codexOutputRows(text: string): CodexOutputRow[] {
-  return text.split(/\r?\n/).map((line) => {
+function AgentSessionOutput({ label, text, truncated }: { label: "stdout" | "stderr"; text: string; truncated: boolean }) {
+  const rows = text.split(/\r?\n/).map((line) => {
     if (!line) return { label: "Output", content: "" };
     try {
       const parsed: unknown = JSON.parse(line);
-      const label = parsed && typeof parsed === "object" && "type" in parsed && typeof parsed.type === "string" ? parsed.type : "JSON event";
-      return { label, content: JSON.stringify(parsed, null, 2) ?? line };
+      const eventLabel = parsed && typeof parsed === "object" && "type" in parsed && typeof parsed.type === "string" ? parsed.type : "JSON event";
+      return { label: eventLabel, content: JSON.stringify(parsed, null, 2) ?? line };
     } catch {
       return { label: "Output", content: line };
     }
   });
-}
-
-function CodexSessionOutput({ label, text, truncated }: { label: "stdout" | "stderr"; text: string; truncated: boolean }) {
-  const rows = codexOutputRows(text);
   return <section className={`agent-output-reader ${label === "stderr" ? "agent-output-reader-error" : ""}`} aria-label={`${label} output`} data-testid={`agent-${label}-reader`}>
     <div className="agent-output-reader-heading">{label === "stderr" ? "Error output" : "Session output"}</div>
     <div className="agent-output-events">{rows.map((row, index) => <div className="agent-output-event" key={`${label}-${index}`}><div className="agent-output-event-label">{index + 1}. {row.label}</div><code className="agent-output-event-content">{row.content}</code></div>)}</div>
@@ -1779,85 +1810,80 @@ function CodexSessionOutput({ label, text, truncated }: { label: "stdout" | "std
   </section>;
 }
 
+function ProviderBadge({ provider }: { provider: SessionProvider }) {
+  return <span className={`agent-provider-badge agent-provider-${provider.toLowerCase()}`}>{provider}</span>;
+}
+
+function AgentReadinessCard({ item }: { item: ProviderReadiness }) {
+  return <div className="agent-readiness-card"><div><ProviderBadge provider={item.provider} /><strong>{item.readinessState}</strong></div><span>{item.version ?? "Version unavailable"}</span><small>{item.diagnosticMessage ?? "No diagnostic"}</small></div>;
+}
+
+function elapsedLabel(session: AgentSession, now: number) {
+  if (!session.startedAt) return "Unknown";
+  const started = Date.parse(session.startedAt);
+  if (!Number.isFinite(started)) return "Unknown";
+  const ended = session.endedAt ? Date.parse(session.endedAt) : now;
+  const elapsed = Math.max(0, (Number.isFinite(ended) ? ended : now) - started);
+  return `${Math.floor(elapsed / 1000)}s`;
+}
+
 export function Agents() {
   const desktop = isTauriDesktop();
   const { records, selectedProjectId, selectProject } = useProjectRegistry();
-  const [readiness, setReadiness] = React.useState<CodexReadiness | null>(null);
-  const [sessions, setSessions] = React.useState<CodexSession[]>([]);
+  const selected = records.find((record) => record.id === selectedProjectId) ?? records[0] ?? null;
+  const [readiness, setReadiness] = React.useState<ProviderReadiness[]>([]);
+  const [sessions, setSessions] = React.useState<AgentSession[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = React.useState<string | null>(null);
+  const [provider, setProvider] = React.useState<SessionProvider>(selected?.preferredAgentProvider ?? "CODEX");
   const [prompt, setPrompt] = React.useState("");
   const [taskId, setTaskId] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
-  const selected = records.find((record) => record.id === selectedProjectId) ?? records[0] ?? null;
+  const [git, setGit] = React.useState<GitSnapshot | null>(null);
+  const [gitDiff, setGitDiff] = React.useState<GitDiff | null>(null);
+  const [now, setNow] = React.useState(() => Date.now());
+  const selectedSession = sessions.find((session) => session.id === selectedSessionId) ?? sessions[0] ?? null;
+  const selectedReadiness = readiness.find((item) => item.provider === provider);
   const refreshSessions = React.useCallback(async () => {
-    if (desktop && selected?.id) {
-      try { setSessions(await listCodexSessions(selected.id)); } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
-    }
+    if (!desktop || !selected?.id) return;
+    try { setSessions(await listAgentSessions(selected.id)); setError(null); } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
   }, [desktop, selected?.id]);
   const refresh = React.useCallback(async () => {
     if (!desktop) return;
-    try {
-      const next = await getCodexReadiness();
-      setReadiness(next);
-      if (selected?.id) setSessions(await listCodexSessions(selected.id));
-      setError(null);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
-    }
-  }, [desktop, selected?.id]);
+    try { setReadiness(await getAgentReadiness()); await refreshSessions(); } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
+  }, [desktop, refreshSessions]);
+  React.useEffect(() => { setProvider(selected?.preferredAgentProvider ?? "CODEX"); }, [selected?.id, selected?.preferredAgentProvider]);
   React.useEffect(() => { void refresh(); }, [refresh]);
+  React.useEffect(() => { if (!desktop || !selected?.id) return; const timer = window.setInterval(() => { void refreshSessions(); }, 750); return () => window.clearInterval(timer); }, [desktop, refreshSessions, selected?.id]);
   React.useEffect(() => {
-    if (!desktop || !selected?.id) return;
-    const timer = window.setInterval(() => { void refreshSessions(); }, 750);
+    if (!selectedSession) { setGit(null); setGitDiff(null); return; }
+    void Promise.all([getGitSnapshot(selectedSession.projectId), getGitDiff(selectedSession.projectId)]).then(([snapshot, diff]) => { setGit(Array.isArray(snapshot?.stagedFiles) ? snapshot : null); setGitDiff(typeof diff?.text === "string" ? diff : null); }).catch(() => { setGit(null); setGitDiff(null); });
+  }, [selectedSession?.id, selectedSession?.projectId]);
+  React.useEffect(() => {
+    if (!selectedSession || !["STARTING", "RUNNING", "WAITING_PERMISSION", "STOPPING"].includes(selectedSession.state)) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [desktop, refreshSessions, selected?.id]);
+  }, [selectedSession?.id, selectedSession?.state]);
   const start = async () => {
-    if (!desktop || !selected || !prompt.trim()) return;
+    if (!desktop || !selected || !prompt.trim() || !selectedReadiness?.available) return;
     setBusy(true); setError(null);
-    try {
-      await startCodexSession(selected.id, prompt, taskId.trim() || null);
-      setPrompt(""); setTaskId("");
-      setSessions(await listCodexSessions(selected.id));
-    } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
-    finally { setBusy(false); }
+    try { const session = await startAgentSession(selected.id, provider, prompt, taskId.trim() || null); setPrompt(""); setTaskId(""); setSelectedSessionId(session.id); await refreshSessions(); } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); } finally { setBusy(false); }
   };
-  const stop = async (id: string) => {
-    setBusy(true); setError(null);
-    try { await stopCodexSession(id); if (selected) setSessions(await listCodexSessions(selected.id)); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
-    finally { setBusy(false); }
-  };
-  const resume = async (id: string) => {
-    setError(null);
-    try { await resumeCodexSession(id); } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
-  };
+  const stop = async () => { if (!selectedSession) return; setBusy(true); setError(null); try { await stopAgentSession(selectedSession.projectId, selectedSession.id); await refreshSessions(); } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); } finally { setBusy(false); } };
+  const retry = async () => { if (!selectedSession || !prompt.trim()) return; setBusy(true); setError(null); try { const session = await retryAgentSession(selectedSession, prompt); setPrompt(""); setSelectedSessionId(session.id); await refreshSessions(); } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); } finally { setBusy(false); } };
+  const chooseProvider = async (value: SessionProvider) => { setProvider(value); if (selected) { try { await updateProjectSettings(selected.id, selected.priority, value); } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); } } };
+  const resize = React.useCallback((columns: number, rows: number) => { if (selectedSession?.supportsPty) void resizeAgentTerminal(selectedSession.projectId, selectedSession.id, rows, columns).catch(() => undefined); }, [selectedSession?.id, selectedSession?.projectId, selectedSession?.supportsPty]);
   return <>
-    <PageHeader title="Agents" description="Bounded Codex operations for registered projects." />
-    {!desktop ? <div className="fixture-note">Native H!veAI is required for Codex process operations.</div> : null}
+    <PageHeader title="Agent Session Center" description="Observe owned Codex and Claude sessions for registered projects." />
+    {!desktop ? <div className="fixture-note">Native H!veAI is required for provider sessions.</div> : null}
     {error ? <div className="safe-notice" role="alert">{error}</div> : null}
-    <section className="panel agent-adapter-panel">
-      <SectionHeader title="Codex adapter" detail="Direct owned-process lifecycle" />
-      <div className="agent-adapter-grid">
-        <div><span>Provider</span><strong>CODEX</strong></div>
-        <div><span>Readiness</span><strong>{readiness?.readinessState ?? (desktop ? "CHECKING" : "BROWSER_PREVIEW")}</strong></div>
-        <div><span>Version</span><strong>{readiness?.version ?? "Unknown"}</strong></div>
-        <div><span>Authentication</span><strong>{readiness?.diagnosticCode === "AUTH_READINESS_UNVERIFIED" ? "Unknown until operation" : "Unknown"}</strong></div>
-      </div>
-      {readiness?.diagnosticMessage ? <div className="safe-notice">{readiness.diagnosticMessage}</div> : null}
-    </section>
-    <section className="panel agent-operation-panel">
-      <SectionHeader title="Start operation" detail="One registered project per session" />
-      <label>Project<select aria-label="Codex project" value={selected?.id ?? ""} onChange={(event) => selectProject(event.target.value, true)} disabled={busy || !records.length}>{records.map((record) => <option key={record.id} value={record.id}>{record.name}</option>)}</select></label>
-      <label>Task ID <span className="agent-field-note">optional, must belong to project</span><input aria-label="Codex task ID" value={taskId} onChange={(event) => setTaskId(event.target.value)} disabled={busy} maxLength={256} /></label>
-      <label>Prompt<textarea aria-label="Codex prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} disabled={busy} maxLength={65536} rows={5} /></label>
-      <button className="primary-button" type="button" onClick={() => void start()} disabled={!desktop || !selected || !readiness?.available || !prompt.trim() || busy}><Terminal size={15} /> Start Codex operation</button>
-    </section>
-    <section className="panel agent-sessions-panel">
-      <SectionHeader title="Persisted Codex sessions" detail={selected ? selected.name : "No project selected"} />
-      <div className="cockpit-record-list">{sessions.map((session) => <details className="cockpit-record" key={session.id}><summary><strong>{session.operationKind}</strong><span>{session.state}</span></summary><div className="agent-session-actions"><button className="secondary-button" type="button" onClick={() => void resume(session.id)}>Resume</button>{["STARTING", "RUNNING"].includes(session.state) ? <button className="secondary-button" type="button" onClick={() => void stop(session.id)} disabled={busy}>Stop owned process</button> : null}</div><CockpitFacts facts={[["Session", session.id], ["Project", session.projectId], ["Task", session.taskId ?? "Freeform"], ["Working directory", session.cwd], ["Started", session.startedAt ?? "Unknown"], ["Ended", session.endedAt ?? "Unknown"], ["Exit code", session.exitCode === null ? "Unknown" : String(session.exitCode)], ["Diagnostic code", session.diagnosticCode ?? "None"], ["Diagnostic message", session.diagnosticMessage ?? "None"]]} />{session.stdout ? <CodexSessionOutput label="stdout" text={session.stdout} truncated={session.stdoutTruncated} /> : null}{session.stderr ? <CodexSessionOutput label="stderr" text={session.stderr} truncated={session.stderrTruncated} /> : null}</details>)}{!sessions.length ? <EmptyState title="No persisted Codex sessions" detail={selected ? "No Codex session evidence is available for this project." : "Register a project to use the adapter."} /> : null}</div>
-    </section>
+    <section className="panel agent-center-readiness"><SectionHeader title="Provider readiness" detail="Bounded native adapters" /><div className="agent-readiness-grid">{readiness.map((item) => <AgentReadinessCard key={item.provider} item={item} />)}{!readiness.length ? <div className="fixture-note">Provider readiness is checked in native H!veAI.</div> : null}</div></section>
+    <section className="panel agent-operation-panel"><SectionHeader title="Start owned session" detail="Registered project, fixed provider policy" /><label>Project<select aria-label="Agent project" value={selected?.id ?? ""} onChange={(event) => selectProject(event.target.value, true)} disabled={busy || !records.length}>{records.map((record) => <option key={record.id} value={record.id}>{record.name}</option>)}</select></label><label>Provider<select aria-label="Agent provider" value={provider} onChange={(event) => void chooseProvider(event.target.value as SessionProvider)} disabled={busy}><option value="CODEX">Codex</option><option value="CLAUDE">Claude</option></select></label><label>Task ID <span className="agent-field-note">optional, must belong to project</span><input aria-label="Agent task ID" value={taskId} onChange={(event) => setTaskId(event.target.value)} disabled={busy} maxLength={256} /></label><label>Prompt<textarea aria-label="Agent prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} disabled={busy} maxLength={65536} rows={5} /></label><div className="agent-action-row"><button className="primary-button" type="button" onClick={() => void start()} disabled={!desktop || !selected || !selectedReadiness?.available || !prompt.trim() || busy}><Terminal size={15} /> Start {provider} session</button>{selectedSession && ["FAILED", "STOPPED", "CRASHED"].includes(selectedSession.state) ? <button className="secondary-button" type="button" onClick={() => void retry()} disabled={!prompt.trim() || busy}><RefreshCw size={15} /> Retry as new session</button> : null}</div></section>
+    <section className="panel agent-sessions-panel"><SectionHeader title="Active and persisted sessions" detail={selected ? selected.name : "No project selected"} /><div className="agent-session-list">{sessions.map((session) => <button className={`agent-session-row ${session.id === selectedSession?.id ? "agent-session-row-selected" : ""}`} type="button" key={session.id} onClick={() => setSelectedSessionId(session.id)}><span><ProviderBadge provider={session.provider} /><strong>{session.operationKind}</strong></span><span>{session.state}</span><small>{session.startedAt ?? "Unknown"}</small></button>)}{!sessions.length ? <EmptyState title="No agent sessions" detail={selected ? "No persisted Codex or Claude session evidence is available." : "Register a project to use the session center."} /> : null}</div></section>
+     {selectedSession ? <section className="panel agent-session-detail"><SectionHeader title="Selected session" detail={`${selectedSession.provider} / ${selectedSession.state}`} /><div className="agent-session-title"><ProviderBadge provider={selectedSession.provider} /><strong>{selectedSession.id}</strong><span>{selectedSession.state}</span></div><div className="agent-session-actions"><button className="secondary-button" type="button" onClick={() => void stop()} disabled={busy || !["STARTING", "RUNNING"].includes(selectedSession.state)}>Stop owned session</button><button className="secondary-button" type="button" onClick={() => setError(`${selectedSession.provider} resume is not supported by the verified provider capability`)} disabled={!selectedSession.supportsResume}>Resume</button></div><CockpitFacts facts={[["Project", selectedSession.projectId], ["Task", selectedSession.taskId ?? "Freeform"], ["Working directory", selectedSession.cwd], ["Started", selectedSession.startedAt ?? "Unknown"], ["Elapsed", selectedSession.elapsedMs == null ? elapsedLabel(selectedSession, now) : `${selectedSession.elapsedMs} ms`], ["Ended", selectedSession.endedAt ?? "Active"], ["Exit code", selectedSession.exitCode == null ? "Active / unknown" : String(selectedSession.exitCode)], ["Diagnostic code", selectedSession.diagnosticCode ?? "None"], ["Diagnostic message", selectedSession.diagnosticMessage ?? "None"], ["Prompt reference", selectedSession.promptReference ?? "Unavailable"], ["Provider version", selectedSession.providerVersion ?? "Unavailable"]]} /><div className="agent-detail-grid"><div><div className="agent-detail-heading">Live output</div><AgentTerminal session={selectedSession} onResize={resize} />{selectedSession.stdout ? <AgentSessionOutput label="stdout" text={selectedSession.stdout} truncated={selectedSession.stdoutTruncated} /> : null}{selectedSession.stderr ? <AgentSessionOutput label="stderr" text={selectedSession.stderr} truncated={selectedSession.stderrTruncated} /> : null}</div><div><div className="agent-detail-heading">Session timeline</div><div className="agent-timeline">{(selectedSession.events ?? []).map((event) => <div className="agent-timeline-row" key={event.id}><time>{event.occurredAt}</time><strong>{event.eventType}</strong><code>{JSON.stringify(event.payload ?? {})}</code></div>)}{!(selectedSession.events ?? []).length ? <span className="cockpit-muted">No durable event evidence available.</span> : null}</div><div className="agent-detail-heading">Changed files / Git authority</div><div className="agent-changed-files">{git?.stagedFiles.map((file) => <span key={`staged-${file.path}`}>STAGED: {file.path}</span>)}{git?.unstagedFiles.map((file) => <span key={`unstaged-${file.path}`}>UNSTAGED: {file.path}</span>)}{git?.untrackedFiles.map((file) => <span key={`untracked-${file}`}>UNTRACKED: {file}</span>)}{git?.conflictedFiles.map((file) => <span key={`conflict-${file}`}>CONFLICT: {file}</span>)}{git && !git.stagedFiles.length && !git.unstagedFiles.length && !git.untrackedFiles.length && !git.conflictedFiles.length ? <span className="cockpit-muted">No Git changes detected by the Git Engine.</span> : null}{!git ? <span className="cockpit-muted">Git evidence unavailable.</span> : null}</div>{gitDiff ? <details className="agent-diff"><summary>View bounded Git diff</summary><pre className="cockpit-code">{gitDiff.text || "No diff content"}</pre>{gitDiff.truncated ? <span className="agent-output-truncated">[Git diff truncated]</span> : null}</details> : null}</div></div><div className="agent-permission-note">Permission model: provider-managed. Claude runs in restricted plan mode; Codex keeps its accepted M13 policy. No generic approval or shell control surface is exposed.</div></section> : null}
   </>;
 }
+
 export function Audits() {
   return (
     <Placeholder

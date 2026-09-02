@@ -22,6 +22,7 @@
     "allow-task-source-discovery",
     "allow-task-intelligence",
     "allow-workflow-state-machine",
-    "allow-codex-adapter"
+    "allow-codex-adapter",
+    "allow-agent-session-center"
   ]
 }

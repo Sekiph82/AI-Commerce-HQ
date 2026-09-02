@@ -19,15 +19,15 @@ branchPolicy: H!veAI
 | --- | --- |
 | Project status | ACTIVE |
 | Health | UNKNOWN |
-| Current milestone | M13 |
-| Current task | M13E Agent session output vertical reader native UX remediation |
-| Current task ID | M13 |
-| Current workflow state | REMEDIATION_COMPLETE_PENDING_AUDIT |
-| Progress | 65% |
+| Current milestone | M14 |
+| Current task | M14 Agent Session Center Codex + Claude implementation |
+| Current task ID | M14 |
+| Current workflow state | ACTIVE_IMPLEMENTING |
+| Progress | 70% |
 | Required actor | CODEX |
-| Next action | Independent strict re-audit and user native/visual acceptance |
-| Waiting on | Independent strict re-audit and user native/visual acceptance |
-| Last meaningful update | M13E vertical reader remediation and verification gates completed |
+| Next action | Implement provider-neutral Codex + Claude live session center |
+| Waiting on | Independent M14 strict audit and user native/visual acceptance |
+| Last meaningful update | M14 implementation complete; independent audit and user acceptance remain pending |
 
 ## Current work
 
@@ -43,16 +43,17 @@ branchPolicy: H!veAI
 | M12 | Implement project-scoped Project Cockpit with truthful authority/provenance | CLOSED | CODEX | Accepted M12 strict/audit/native evidence |
 | M12A-R26 | Order selected-project workflow history globally before the bounded cockpit cap | CLOSED | CODEX | M12A prompt / strict re-audit |
 | M12B-ROUTE-LOAD | Restore native registered-project cockpit snapshot IPC and truthful route errors | CLOSED | CODEX | M12B prompt / strict re-audit / user native acceptance |
-| M13 | Codex Adapter implementation | REMEDIATION_COMPLETE_PENDING_AUDIT | CODEX | M13E vertical reader prompt; M13/M13A/M13B/M13C/M13D accepted source/tests; M13E builder log |
+| M13 | Codex Adapter implementation | CLOSED | CODEX | M13A-M13E accepted strict re-audits and user native/visual evidence |
 | M13D-R33 | Eliminate post-startup visible console flashes from owned background children | CLOSED | CODEX | M13D prompt / process_policy.rs / M13D builder log |
 | M13D-R34 | Restore real Codex operation and truthful failure evidence | CLOSED | CODEX | M13D prompt / codex_adapter.rs / M13D builder log |
-| M13E-UX | Replace horizontal persisted Codex output with a full-width vertical reader | COMPLETE_PENDING_AUDIT | CODEX | M13E prompt / pages.tsx / project-cockpit.css / M13E builder log |
+| M13E-UX | Replace horizontal persisted Codex output with a full-width vertical reader | CLOSED | CODEX | Accepted M13E strict re-audit and user native/visual evidence |
+| M14 | Agent Session Center for Codex + Claude | IMPLEMENTATION_COMPLETE_PENDING_AUDIT | CODEX | M14 authoritative implementation prompt / M14 implementation log |
 
 ## Blockers and waiting
 
 - M12, M12A R26, and M12B are PASS/CLOSED on accepted strict evidence and user native/visual acceptance.
-- M13 implementation remains open; M13A R27-R29 and M13B R30-R31 accepted boundaries are preserved.
-- M13D R33/R34 and M13E vertical reader remediation are complete; independent strict re-audit and user native/visual acceptance remain pending.
+- M13 is PASS/CLOSED; M13A-M13E accepted boundaries, strict re-audits, and user native/visual evidence are preserved.
+- M14 implementation is complete pending independent strict audit and user native/visual acceptance; M15-M20 remain planned/blocked and M21 remains planned/not started.
 - M21 remains planned and was not started.
 
 ## Milestone summary
@@ -64,8 +65,9 @@ branchPolicy: H!veAI
 - M12: PASS/CLOSED on accepted strict evidence and user native/visual acceptance.
 - M12A: PASS/CLOSED; R26 independently re-audited.
 - M12B: PASS/CLOSED; native Open Cockpit acceptance recorded.
-- M13/M13A/M13B/M13C: REMEDIATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
-- Strict completed roadmap count: 13/20 = 65%.
+- M13/M13A/M13B/M13C/M13D/M13E: PASS/CLOSED on accepted strict re-audits and user native/visual evidence.
+- M14: implementation complete pending independent strict audit and user native/visual acceptance.
+- Strict completed roadmap count: 14/20 = 70%.
 
 ## Quality and verification
 
@@ -86,16 +88,18 @@ branchPolicy: H!veAI
 | M13C verification/publication | PASS | Full native/frontend regression, typecheck/build/audit/checks, publisher rollback harness, and governed production publication |
 | M13E focused frontend reader tests | PASS | Long JSON/path wrapping, unrecognized-line preservation, completed output, failed diagnostics, and redaction marker visibility |
 | M13E verification/publication | PASS | Full native/frontend regression, typecheck/build/audit/checks, security review, and governed publication; native visual acceptance remains pending |
+| M13 closure acceptance | PASS | M13A-M13E strict re-audits and explicit user native/visual acceptance recorded 2026-09-02 |
+| M14 implementation | COMPLETE_PENDING_AUDIT | Codex + Claude Agent Session Center implementation complete; independent strict audit and user native/visual acceptance remain pending |
 
 ## Recent meaningful activity
 
 - M11 closure accepted from the REV7 strict audit and final Projects strict audit; M11 remains PASS/CLOSED.
-- M12 Project Cockpit, M12A R26 history remediation, and M12B native route-loading remediation are PASS/CLOSED on accepted evidence; M13E is the active remediation record within M13.
+- M12 Project Cockpit, M12A R26 history remediation, and M12B native route-loading remediation are PASS/CLOSED on accepted evidence; M13 is PASS/CLOSED and M14 implementation is complete pending independent audit and user acceptance.
 - Prior M11A R01-R08, E01-E03, and UX01-UX04 source fixes are preserved.
 - H!veAI own dashboard contract is now the dogfood single-dashboard watch target; materialized activity remains explicitly undated and REV7 publication evidence is complete.
 - M13 Codex adapter is implemented with direct owned-process execution, persisted agent evidence, bounded redacted output, and explicit unsupported resume semantics.
 - M13A closes R27-R29 with the provider-neutral lifecycle trait, incremental bounded stream events, and clean-stop-first/owned-tree escalation evidence.
-- M13B remediates R30/R31 with stateful pre-persistence redaction and a bounded single-writer durable event path; M13C remediates R32 with one bounded native executable resolver shared by readiness and start; M13D remediates R33/R34 with one no-visible-console child policy, a fixed compatible Codex invocation, and visible bounded failure evidence; M13E replaces the persisted-session horizontal output with a scoped full-width vertical reader; independent strict re-audit remains pending.
+- M13B remediates R30/R31 with stateful pre-persistence redaction and a bounded single-writer durable event path; M13C remediates R32 with one bounded native executable resolver shared by readiness and start; M13D remediates R33/R34 with one no-visible-console child policy, a fixed compatible Codex invocation, and visible bounded failure evidence; M13E replaces the persisted-session horizontal output with a scoped full-width vertical reader; M13 is closed on accepted strict and user evidence. M14 implementation is complete pending independent audit and user acceptance.
 
 ## Provenance
 
@@ -115,6 +119,6 @@ M12B remediation prompt: `docs/H!veAI/prompts/M12B_NATIVE_OPEN_COCKPIT_ROUTE_LOA
 
 M12 closure and M13 activation prompt: `docs/H!veAI/prompts/M12_CLOSURE_AND_M13_ACTIVATION_PROMPT.md`.
 
-M13E remediation is complete; the authoritative M13/M13A/M13B/M13C/M13D/M13E prompts, source/test evidence, and immutable builder logs remain available for independent re-audit.
+M13 is closed on accepted strict and user native/visual evidence; the authoritative M13/M13A/M13B/M13C/M13D/M13E prompts, source/test evidence, and immutable builder logs remain available as immutable provenance.
 
 H!veAI actively watches only .hiveai/PROJECT_DASHBOARD.md for project-status changes; the sources above are internal project evidence/provenance and are not independent live-watch targets.

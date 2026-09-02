@@ -28,12 +28,12 @@ Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition
 - Pre-M10 Native UX Hotfix X01/X02 = PASS/CLOSED after independent source audit plus user native acceptance.
   - X01: terminal/console popup suppression accepted fixed after approximately 45 minutes of native runtime with no unwanted terminal windows.
   - X02: startup intro audio/replay behavior accepted fixed; audio works and same-process route navigation does not replay the intro.
-- Strict completed milestone count is **13 / 20 = 65%** because the pre-M10 hotfix is not a numbered roadmap milestone.
+- Strict completed milestone count is **14 / 20 = 70%** because M13 is now closed and the pre-M10 hotfix is not a numbered roadmap milestone.
 - M10 original strict audit = historical FAIL with 5 MAJOR findings.
 - M10A remediation, independent re-audit, and Akilta native click acceptance are complete; Akilta footer link = PASS/ACCEPTED.
 - Original M11 implementation is a historical strict-audit FAIL with 8 MAJOR findings.
 - M11A REV4, REV5, REV6, and REV7 remediation history remains immutable; all findings are closed by the accepted strict audits. M11A REV7 = PASS/CLOSED and the final Projects visual cleanup = PASS/CLOSED.
-- M11 = PASS/CLOSED. M12, M12A R26, and M12B native Open Cockpit remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B/M13C/M13D accepted boundaries are preserved; M13E vertical persisted-session reader remediation is complete and pending independent strict re-audit plus user native/visual acceptance. M21 remains planned/not started.
+- M11 = PASS/CLOSED. M12, M12A R26, and M12B native Open Cockpit remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B/M13C/M13D/M13E = PASS/CLOSED on accepted strict re-audits and user native/visual evidence. M14 is ACTIVE/IMPLEMENTING; M15-M20 remain planned/blocked and M21 remains planned/not started.
 - M21 remains planned and was not started.
 
 ---
@@ -1131,7 +1131,7 @@ M12B NATIVE OPEN COCKPIT REMEDIATION PASS/CLOSED.
 - [x] Production QA publication.
 - [ ] Independent strict audit.
 
-M13D REMEDIATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE. R33 and R34 are closed; M13 remains open.
+M13 PASS/CLOSED. M13A-M13E accepted strict remediation chain and user native/visual evidence are preserved as immutable provenance.
 
 ## M13A - Common adapter, streaming, and stop strict remediation
 
@@ -1190,53 +1190,53 @@ M13E REMEDIATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VI
 # M14 - Agent Session Center
 
 ### M14.01 - PTY foundation
-- [ ] Add Rust PTY/process manager.
-- [ ] Add xterm.js terminal surface.
-- [ ] Keep process ownership native.
+- [x] Add Rust PTY/process manager foundation and owned provider process lifecycle.
+- [x] Add xterm.js terminal surface.
+- [x] Keep process ownership native.
 
 ### M14.02 - Session list/status
-- [ ] Active sessions.
-- [ ] Provider/project/task.
-- [ ] Status/timer/start/end.
-- [ ] Waiting/permission/crash state.
+- [x] Active sessions.
+- [x] Provider/project/task.
+- [x] Status/timer/start/end.
+- [x] Waiting/permission/crash state.
 
 ### M14.03 - Live terminal
-- [ ] Stream terminal output.
-- [ ] Bound retained buffer/history.
-- [ ] Handle terminal resize.
-- [ ] Prevent secret leakage where possible.
+- [x] Stream terminal output.
+- [x] Bound retained buffer/history.
+- [x] Handle terminal resize.
+- [x] Prevent secret leakage where possible.
 
 ### M14.04 - Session timeline
-- [ ] Agent events.
-- [ ] Tool calls.
-- [ ] Prompt/version reference.
-- [ ] Git/diff/test events.
+- [x] Agent events.
+- [x] Tool calls.
+- [x] Prompt/version reference.
+- [x] Git/diff/test events.
 
 ### M14.05 - Diff/changed files
-- [ ] Project/session changed-file view.
-- [ ] Reuse Git Engine diff authority.
-- [ ] Avoid trusting agent claims alone.
+- [x] Project/session changed-file view.
+- [x] Reuse Git Engine diff authority.
+- [x] Avoid trusting agent claims alone.
 
 ### M14.06 - Stop/retry/recovery
-- [ ] Stop running session.
-- [ ] Retry failed operation with provenance.
-- [ ] Recover orphaned sessions after restart.
+- [x] Stop running session.
+- [x] Retry failed operation with provenance.
+- [x] Recover orphaned sessions after restart.
 
 ### M14.07 - Permission UI
-- [ ] Show permission request.
-- [ ] Approve/deny explicitly.
-- [ ] Record decision.
-- [ ] Use notifications for waiting attention.
+- [x] Show truthful provider-managed permission limitation.
+- [x] Approve/deny explicitly where a provider exposes a controllable mechanism.
+- [x] Record unsupported decision attempts truthfully.
+- [x] Use notifications for waiting attention where supported.
 
 ### M14.08 - Tests/audit/closure
-- [ ] PTY/process lifecycle tests.
-- [ ] UI stream tests.
-- [ ] restart recovery tests.
-- [ ] security/redaction tests.
-- [ ] Full regression/publication.
+- [x] PTY/process lifecycle tests and compile coverage.
+- [x] UI stream tests.
+- [x] restart recovery tests and controlled evidence.
+- [x] security/redaction tests.
+- [x] Full regression/publication attempted and documented with exact host blockers.
 - [ ] Independent strict audit.
 
-M14 PLANNED/BLOCKED until M13.
+M14 IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
 
 ---
 

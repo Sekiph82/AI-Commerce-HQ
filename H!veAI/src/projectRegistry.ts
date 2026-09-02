@@ -27,6 +27,7 @@ export type ProjectRecord = {
   preferredBuilder: string | null;
   preferredAuditor: string | null;
   taskSourcePolicy: string | null;
+  preferredAgentProvider?: 'CODEX' | 'CLAUDE' | null;
   registeredAt: string;
   lastValidatedAt: string | null;
   repository: RepositoryRecord | null;
@@ -65,8 +66,8 @@ export function repairProjectPath(projectId: string, path: string) {
   return invoke<ProjectRecord>('hiveai_project_repair_path', { request: { projectId, path } });
 }
 
-export function updateProjectSettings(projectId: string, priority: number) {
-  return invoke<ProjectRecord>('hiveai_project_update_settings', { request: { projectId, priority } });
+export function updateProjectSettings(projectId: string, priority: number, preferredAgentProvider?: 'CODEX' | 'CLAUDE' | null) {
+  return invoke<ProjectRecord>('hiveai_project_update_settings', { request: { projectId, priority, preferredAgentProvider } });
 }
 
 export function refreshWatcherSet() {

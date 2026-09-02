@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{Emitter, Manager};
 use tauri_plugin_log::{Target, TargetKind};
 
+mod agent_session_center;
 mod codex_adapter;
 mod command_center;
 mod db;
@@ -18,14 +19,18 @@ mod task_sources;
 mod time;
 mod watcher;
 mod workflow;
+use agent_session_center::{
+    AgentRetryRequest, AgentSession, AgentSessionCenter, AgentStartRequest, ProviderReadiness,
+    SessionEvent,
+};
 use codex_adapter::{AgentAdapter, CodexAdapter, CodexReadiness, CodexSession, CodexStartRequest};
 use command_center::CommandCenterSnapshot;
 use db::{DatabaseState, DatabaseStatus};
 use project_cockpit::ProjectCockpitSnapshot;
 use project_dashboard::ProjectDashboardResolution;
 use projects::{
-    ProjectListQuery, ProjectRecord, RegisterProjectRequest, RepairProjectPathRequest,
-    UpdateProjectSettingsRequest,
+    ensure_scrubbots_agent_preference, ProjectListQuery, ProjectRecord, RegisterProjectRequest,
+    RepairProjectPathRequest, UpdateProjectSettingsRequest,
 };
 use runtime::{RuntimeStatus, RuntimeSupervisor};
 use task_intelligence::TaskIntelligenceSnapshot;
@@ -195,6 +200,94 @@ fn hiveai_codex_resume(
     session_id: String,
 ) -> Result<CodexSession, String> {
     adapter.resume(&database, &session_id)
+}
+
+#[tauri::command]
+fn hiveai_agent_readiness() -> Vec<ProviderReadiness> {
+    agent_session_center::readiness()
+}
+
+#[tauri::command]
+fn hiveai_agent_sessions_list(
+    center: tauri::State<'_, AgentSessionCenter>,
+    codex: tauri::State<'_, CodexAdapter>,
+    database: tauri::State<'_, DatabaseState>,
+    project_id: String,
+) -> Result<Vec<AgentSession>, String> {
+    agent_session_center::list(&center, &codex, &database, &project_id)
+}
+
+#[tauri::command]
+fn hiveai_agent_start(
+    center: tauri::State<'_, AgentSessionCenter>,
+    codex: tauri::State<'_, CodexAdapter>,
+    database: tauri::State<'_, DatabaseState>,
+    request: AgentStartRequest,
+) -> Result<AgentSession, String> {
+    agent_session_center::start(&center, &codex, &database, request)
+}
+
+#[tauri::command]
+fn hiveai_agent_stop(
+    center: tauri::State<'_, AgentSessionCenter>,
+    codex: tauri::State<'_, CodexAdapter>,
+    database: tauri::State<'_, DatabaseState>,
+    project_id: String,
+    session_id: String,
+) -> Result<AgentSession, String> {
+    agent_session_center::stop(&center, &codex, &database, &project_id, &session_id)
+}
+
+#[tauri::command]
+fn hiveai_agent_retry(
+    center: tauri::State<'_, AgentSessionCenter>,
+    codex: tauri::State<'_, CodexAdapter>,
+    database: tauri::State<'_, DatabaseState>,
+    request: AgentRetryRequest,
+) -> Result<AgentSession, String> {
+    agent_session_center::retry(&center, &codex, &database, request)
+}
+
+#[tauri::command]
+fn hiveai_agent_resume(
+    database: tauri::State<'_, DatabaseState>,
+    project_id: String,
+    session_id: String,
+) -> Result<AgentSession, String> {
+    agent_session_center::resume(&database, &project_id, &session_id)
+}
+
+#[tauri::command]
+fn hiveai_agent_session_events(
+    database: tauri::State<'_, DatabaseState>,
+    project_id: String,
+    session_id: String,
+) -> Result<Vec<SessionEvent>, String> {
+    agent_session_center::session_events(&database, &project_id, &session_id)
+}
+
+#[tauri::command]
+fn hiveai_agent_resize(
+    database: tauri::State<'_, DatabaseState>,
+    project_id: String,
+    session_id: String,
+    rows: u16,
+    columns: u16,
+) -> Result<(), String> {
+    agent_session_center::resize(&database, &project_id, &session_id, rows, columns)
+}
+
+#[tauri::command]
+fn hiveai_agent_permission_decision(
+    database: tauri::State<'_, DatabaseState>,
+    project_id: String,
+    session_id: String,
+    permission_id: String,
+    decision: String,
+) -> Result<(), String> {
+    let _ = agent_session_center::session_events(&database, &project_id, &session_id)?;
+    let _ = (permission_id, decision);
+    Err("AGENT_PERMISSION_PROVIDER_MANAGED_UNSUPPORTED".into())
 }
 
 #[tauri::command]
@@ -434,6 +527,15 @@ pub fn run() {
             hiveai_codex_start,
             hiveai_codex_stop,
             hiveai_codex_resume,
+            hiveai_agent_readiness,
+            hiveai_agent_sessions_list,
+            hiveai_agent_start,
+            hiveai_agent_stop,
+            hiveai_agent_retry,
+            hiveai_agent_resume,
+            hiveai_agent_session_events,
+            hiveai_agent_resize,
+            hiveai_agent_permission_decision,
             hiveai_projects_list,
             hiveai_project_register,
             hiveai_project_get,
@@ -471,18 +573,25 @@ pub fn run() {
                 .map_err(|error| format!("resolve H!veAI app-data directory: {error}"))?;
             let database = DatabaseState::initialize(app_data_dir.clone())
                 .map_err(|error| format!("H!veAI persistence initialization failed: {error}"))?;
+            ensure_scrubbots_agent_preference(&database).map_err(|error| {
+                format!("H!veAI agent preference initialization failed: {error}")
+            })?;
             workflow::recover_stale(&database)
                 .map_err(|error| format!("H!veAI workflow recovery failed: {error}"))?;
             let codex_adapter = CodexAdapter::default();
             codex_adapter
                 .reconcile(&database)
                 .map_err(|error| format!("H!veAI Codex recovery failed: {error}"))?;
+            let agent_session_center = AgentSessionCenter::default();
+            agent_session_center::reconcile(&database)
+                .map_err(|error| format!("H!veAI agent session recovery failed: {error}"))?;
             let database_status = database.status();
             let watcher_manager =
                 WatcherManager::initialize_with_app_handle(database.clone(), app.handle().clone())
                     .map_err(|error| format!("H!veAI watcher initialization failed: {error}"))?;
             app.manage(database);
             app.manage(codex_adapter);
+            app.manage(agent_session_center);
             app.manage(watcher_manager);
 
             log::info!(

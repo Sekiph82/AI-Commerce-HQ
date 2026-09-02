@@ -31,6 +31,7 @@ pub struct UpdateProjectSettingsRequest {
     pub preferred_builder: Option<String>,
     pub preferred_auditor: Option<String>,
     pub task_source_policy: Option<String>,
+    pub preferred_agent_provider: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -52,6 +53,7 @@ pub struct ProjectRecord {
     pub preferred_builder: Option<String>,
     pub preferred_auditor: Option<String>,
     pub task_source_policy: Option<String>,
+    pub preferred_agent_provider: Option<String>,
     pub registered_at: String,
     pub last_validated_at: Option<String>,
     pub repository: Option<RepositoryRecord>,
@@ -156,8 +158,8 @@ pub fn update_project_settings(
 ) -> Result<ProjectRecord, String> {
     let connection = database.open_connection()?;
     let updated = connection.execute(
-        "UPDATE projects SET priority = COALESCE(?2, priority), preferred_builder = COALESCE(?3, preferred_builder), preferred_auditor = COALESCE(?4, preferred_auditor), task_source_policy = COALESCE(?5, task_source_policy), updated_at = ?6 WHERE id = ?1",
-        params![request.project_id, request.priority, request.preferred_builder.and_then(non_empty), request.preferred_auditor.and_then(non_empty), request.task_source_policy.and_then(non_empty), timestamp()],
+        "UPDATE projects SET priority = COALESCE(?2, priority), preferred_builder = COALESCE(?3, preferred_builder), preferred_auditor = COALESCE(?4, preferred_auditor), task_source_policy = COALESCE(?5, task_source_policy), preferred_agent_provider = COALESCE(?6, preferred_agent_provider), updated_at = ?7 WHERE id = ?1",
+        params![request.project_id, request.priority, request.preferred_builder.and_then(non_empty), request.preferred_auditor.and_then(non_empty), request.task_source_policy.and_then(non_empty), request.preferred_agent_provider.and_then(validate_agent_provider), timestamp()],
     ).map_err(db_error)?;
     if updated == 0 {
         return Err("project is not registered".to_string());
@@ -261,7 +263,7 @@ pub fn repair_project_path(
     fetch_project(database, &request.project_id)
 }
 
-const PROJECT_SELECT: &str = "SELECT p.id, p.name, COALESCE(p.original_path, p.local_path, ''), COALESCE(p.normalized_path, p.local_path, ''), p.status, p.priority, p.preferred_builder, p.preferred_auditor, p.task_source_policy, COALESCE(p.registered_at, p.created_at), p.last_validated_at, r.id, r.is_git_repository, r.repository_root, r.current_branch, r.head_sha, r.remote_url, r.default_branch, r.github_owner, r.github_repo, r.remote_urls_json FROM projects p LEFT JOIN repositories r ON r.project_id = p.id";
+const PROJECT_SELECT: &str = "SELECT p.id, p.name, COALESCE(p.original_path, p.local_path, ''), COALESCE(p.normalized_path, p.local_path, ''), p.status, p.priority, p.preferred_builder, p.preferred_auditor, p.task_source_policy, p.preferred_agent_provider, COALESCE(p.registered_at, p.created_at), p.last_validated_at, r.id, r.is_git_repository, r.repository_root, r.current_branch, r.head_sha, r.remote_url, r.default_branch, r.github_owner, r.github_repo, r.remote_urls_json FROM projects p LEFT JOIN repositories r ON r.project_id = p.id";
 
 fn map_project(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectRecord> {
     let normalized_path: String = row.get(3)?;
@@ -273,19 +275,19 @@ fn map_project(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectRecord> {
     } else {
         "MISSING".to_string()
     };
-    let repository_id: Option<String> = row.get(11)?;
+    let repository_id: Option<String> = row.get(12)?;
     let repository = repository_id.map(|id| RepositoryRecord {
         id,
-        is_git_repository: row.get::<_, i64>(12).unwrap_or_default() == 1,
-        repository_root: row.get(13).ok().flatten(),
-        current_branch: row.get(14).ok().flatten(),
-        head_sha: row.get(15).ok().flatten(),
-        preferred_remote_url: row.get(16).ok().flatten(),
-        default_branch: row.get(17).ok().flatten(),
-        github_owner: row.get(18).ok().flatten(),
-        github_repo: row.get(19).ok().flatten(),
+        is_git_repository: row.get::<_, i64>(13).unwrap_or_default() == 1,
+        repository_root: row.get(14).ok().flatten(),
+        current_branch: row.get(15).ok().flatten(),
+        head_sha: row.get(16).ok().flatten(),
+        preferred_remote_url: row.get(17).ok().flatten(),
+        default_branch: row.get(18).ok().flatten(),
+        github_owner: row.get(19).ok().flatten(),
+        github_repo: row.get(20).ok().flatten(),
         remotes: row
-            .get::<_, Option<String>>(20)
+            .get::<_, Option<String>>(21)
             .ok()
             .flatten()
             .and_then(|value| serde_json::from_str(&value).ok())
@@ -301,8 +303,9 @@ fn map_project(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectRecord> {
         preferred_builder: row.get(6)?,
         preferred_auditor: row.get(7)?,
         task_source_policy: row.get(8)?,
-        registered_at: row.get(9)?,
-        last_validated_at: row.get(10)?,
+        preferred_agent_provider: row.get(9)?,
+        registered_at: row.get(10)?,
+        last_validated_at: row.get(11)?,
         repository,
     })
 }
@@ -364,6 +367,17 @@ fn folder_name(path: &Path) -> String {
 fn non_empty(value: String) -> Option<String> {
     let value = value.trim().to_string();
     (!value.is_empty()).then_some(value)
+}
+
+fn validate_agent_provider(value: String) -> Option<String> {
+    let value = value.trim().to_ascii_uppercase();
+    matches!(value.as_str(), "CODEX" | "CLAUDE").then_some(value)
+}
+
+pub fn ensure_scrubbots_agent_preference(database: &DatabaseState) -> Result<(), String> {
+    let connection = database.open_connection()?;
+    connection.execute("UPDATE projects SET preferred_agent_provider='CLAUDE', updated_at=?1 WHERE preferred_agent_provider IS NULL AND lower(name) LIKE '%scrubbots%'", [timestamp()]).map_err(db_error)?;
+    Ok(())
 }
 fn timestamp() -> String {
     crate::time::utc_timestamp()

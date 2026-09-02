@@ -79,3 +79,8 @@ commands.allow = ["hiveai_workflow_task_get", "hiveai_workflow_project_list", "h
 identifier = "allow-codex-adapter"
 description = "Allows the main window to use the bounded, registered-project Codex adapter lifecycle."
 commands.allow = ["hiveai_codex_readiness", "hiveai_codex_sessions_list", "hiveai_codex_start", "hiveai_codex_stop", "hiveai_codex_resume"]
+
+[[permission]]
+identifier = "allow-agent-session-center"
+description = "Allows the main window to use the provider-neutral, registered-project Codex and Claude session center."
+commands.allow = ["hiveai_agent_readiness", "hiveai_agent_sessions_list", "hiveai_agent_start", "hiveai_agent_stop", "hiveai_agent_retry", "hiveai_agent_resume", "hiveai_agent_session_events", "hiveai_agent_resize", "hiveai_agent_permission_decision"]
