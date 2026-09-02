@@ -41,6 +41,7 @@ export type AgentSession = {
   diagnosticCode: string | null;
   diagnosticMessage: string | null;
   promptReference: string | null;
+  promptBody: string | null;
   providerVersion: string | null;
   elapsedMs: number | null;
   supportsResume: boolean;

@@ -1792,8 +1792,6 @@ function AgentTerminal({ session, onResize }: { session: AgentSession; onResize:
   return <div className="agent-terminal" ref={host} aria-label={`${session.provider} live terminal`} data-testid="agent-live-terminal" />;
 }
 
-type ReadableOutputRow = { label: "Assistant" | "Tool action" | "Output"; content: string };
-
 function readableText(value: unknown): string {
   if (typeof value === "string") return value;
   if (Array.isArray(value)) return value.map(readableText).filter(Boolean).join("\n");
@@ -1807,47 +1805,138 @@ function readableText(value: unknown): string {
   return "";
 }
 
-function readableOutputRows(text: string): ReadableOutputRow[] {
-  const rows: ReadableOutputRow[] = [];
-  const add = (label: ReadableOutputRow["label"], content: string) => {
-    const value = content.trim();
-    if (!value || rows.some((row) => row.content === value)) return;
-    rows.push({ label, content: value });
+type ConversationProjection = { assistant: string; activity: string[]; hasRawOnlyOutput: boolean };
+
+function looksLikeRawEnvelope(value: string) {
+  const trimmed = value.trim();
+  return trimmed.startsWith("{") || trimmed.startsWith("[") || /^(SESSION_|PROCESS_|STREAM_|SYSTEM|RATE_LIMIT|REDACTED)/i.test(trimmed);
+}
+
+function compactToolSummary(item: Record<string, unknown>, type: string) {
+  const name = [item.name, item.tool_name, item.toolName, item.command].find((value) => typeof value === "string" && value.trim()) as string | undefined;
+  const status = typeof item.status === "string" ? item.status.trim() : "";
+  return [name || type.replaceAll("_", " "), status].filter(Boolean).join(" · ").slice(0, 180);
+}
+
+function projectConversation(text: string): ConversationProjection {
+  const assistantSegments: string[] = [];
+  const activity: string[] = [];
+  let hasRawOnlyOutput = false;
+  const addAssistant = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed || looksLikeRawEnvelope(trimmed) || assistantSegments.includes(trimmed)) return;
+    assistantSegments.push(trimmed);
+  };
+  const addActivity = (value: string) => {
+    const trimmed = value.trim();
+    if (trimmed && !activity.includes(trimmed)) activity.push(trimmed.slice(0, 180));
   };
   for (const line of text.split(/\r?\n/)) {
     if (!line.trim()) continue;
     try {
       const parsed: unknown = JSON.parse(line);
-      if (!parsed || typeof parsed !== "object") { add("Output", line); continue; }
+      if (!parsed || typeof parsed !== "object") { addAssistant(line); continue; }
       const item = parsed as Record<string, unknown>;
       const type = typeof item.type === "string" ? item.type : "";
-      const message = readableText(item.message ?? item.delta ?? item.content);
-      if (type === "assistant" || type === "content_block_delta" || type === "message") add("Assistant", message);
-      else if (type === "result") add("Assistant", typeof item.result === "string" ? item.result : message);
-      else if (type.includes("tool") || type === "command.started" || type === "command.completed") {
-        const summary = [type, typeof item.command === "string" ? item.command : "", typeof item.status === "string" ? item.status : ""].filter(Boolean).join(" · ");
-        add("Tool action", summary || message);
-      } else if (message) add("Output", message);
-      else if (type) add("Output", type);
+      const role = typeof item.role === "string" ? item.role.toLowerCase() : "";
+      const message = readableText(item.message ?? item.delta ?? item.content ?? item.text);
+      if (type === "assistant" || type === "content_block_delta" || (type === "message" && role === "assistant")) addAssistant(message);
+      else if (type === "result") addAssistant(typeof item.result === "string" ? item.result : message);
+      else if (type.includes("tool") || type.includes("command") || type === "tool_use" || type === "tool_result") addActivity(compactToolSummary(item, type || "Tool action"));
+      else if (/system|rate_limit|process_policy|session_started|session_finished|stream_stdout|redact/i.test(type)) hasRawOnlyOutput = true;
+      else if (message && role === "assistant") addAssistant(message);
+      else if (type) hasRawOnlyOutput = true;
     } catch {
-      add("Output", line);
+      addAssistant(line);
     }
   }
-  return rows;
+  return { assistant: assistantSegments.join("\n\n"), activity: activity.slice(0, 12), hasRawOnlyOutput };
 }
 
-function AgentSessionOutput({ text, truncated }: { text: string; truncated: boolean }) {
-  const rows = readableOutputRows(text);
-  return <section className="agent-output-reader" aria-label="Agent output" data-testid="agent-stdout-reader">
-    <div className="agent-output-reader-heading">Agent output</div>
-    <div className="agent-output-events">{rows.length ? rows.map((row, index) => <div className={`agent-output-event agent-output-event-${row.label.toLowerCase().replace(" ", "-")}`} key={`${row.label}-${index}`}><div className="agent-output-event-label">{row.label}</div><div className="agent-output-event-content">{row.content}</div></div>) : <div className="agent-output-empty">No agent output recorded.</div>}</div>
-    {truncated ? <div className="agent-output-truncated">[output truncated]</div> : null}
+function renderInline(value: string, keyPrefix: string): React.ReactNode[] {
+  const nodes: React.ReactNode[] = [];
+  const pattern = /(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\(https:\/\/[^\s)]+\))/g;
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+  let index = 0;
+  while ((match = pattern.exec(value))) {
+    if (match.index > cursor) nodes.push(value.slice(cursor, match.index));
+    const token = match[0];
+    if (token.startsWith("`")) nodes.push(<code key={`${keyPrefix}-code-${index}`}>{token.slice(1, -1)}</code>);
+    else if (token.startsWith("**")) nodes.push(<strong key={`${keyPrefix}-strong-${index}`}>{token.slice(2, -2)}</strong>);
+    else {
+      const link = token.match(/^\[([^\]]+)\]\((https:\/\/[^\s)]+)\)$/);
+      if (link) nodes.push(<button className="agent-markdown-link" key={`${keyPrefix}-link-${index}`} type="button" onClick={() => void invoke("hiveai_open_external_url", { url: link[2] })}>{link[1]}</button>);
+      else nodes.push(token);
+    }
+    cursor = match.index + token.length;
+    index += 1;
+  }
+  if (cursor < value.length) nodes.push(value.slice(cursor));
+  return nodes;
+}
+
+function renderMarkdown(text: string) {
+  const lines = text.slice(0, 64 * 1024).split(/\r?\n/);
+  const blocks: React.ReactNode[] = [];
+  let index = 0;
+  let blockKey = 0;
+  while (index < lines.length) {
+    const line = lines[index];
+    if (!line.trim()) { index += 1; continue; }
+    if (line.trim().startsWith("```")) {
+      const code: string[] = [];
+      index += 1;
+      while (index < lines.length && !lines[index].trim().startsWith("```")) code.push(lines[index++]);
+      if (index < lines.length) index += 1;
+      blocks.push(<pre key={`markdown-code-${blockKey++}`}><code>{code.join("\n")}</code></pre>);
+      continue;
+    }
+    const heading = line.match(/^#{1,6}\s+(.+)$/);
+    if (heading) { blocks.push(<h3 key={`markdown-heading-${blockKey++}`}>{renderInline(heading[1], `heading-${blockKey}`)}</h3>); index += 1; continue; }
+    if (/^\s*\|/.test(line) && index + 1 < lines.length && /^\s*\|?\s*:?-{3,}/.test(lines[index + 1])) {
+      const parseRow = (row: string) => row.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
+      const headers = parseRow(line); index += 2;
+      const rows: string[][] = [];
+      while (index < lines.length && /^\s*\|/.test(lines[index])) rows.push(parseRow(lines[index++]));
+      blocks.push(<table key={`markdown-table-${blockKey++}`}><thead><tr>{headers.map((cell, cellIndex) => <th key={cellIndex}>{renderInline(cell, `th-${blockKey}-${cellIndex}`)}</th>)}</tr></thead><tbody>{rows.map((row, rowIndex) => <tr key={rowIndex}>{headers.map((_, cellIndex) => <td key={cellIndex}>{renderInline(row[cellIndex] ?? "", `td-${blockKey}-${rowIndex}-${cellIndex}`)}</td>)}</tr>)}</tbody></table>);
+      continue;
+    }
+    const listMatch = line.match(/^\s*([-*])\s+(.+)$/);
+    if (listMatch) {
+      const items: string[] = [];
+      while (index < lines.length) { const item = lines[index].match(/^\s*[-*]\s+(.+)$/); if (!item) break; items.push(item[1]); index += 1; }
+      blocks.push(<ul key={`markdown-ul-${blockKey++}`}>{items.map((item, itemIndex) => <li key={itemIndex}>{renderInline(item, `ul-${blockKey}-${itemIndex}`)}</li>)}</ul>);
+      continue;
+    }
+    const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    if (ordered) {
+      const items: string[] = [];
+      while (index < lines.length) { const item = lines[index].match(/^\s*\d+[.)]\s+(.+)$/); if (!item) break; items.push(item[1]); index += 1; }
+      blocks.push(<ol key={`markdown-ol-${blockKey++}`}>{items.map((item, itemIndex) => <li key={itemIndex}>{renderInline(item, `ol-${blockKey}-${itemIndex}`)}</li>)}</ol>);
+      continue;
+    }
+    const paragraph: string[] = [line]; index += 1;
+    while (index < lines.length && lines[index].trim() && !/^\s*(#{1,6}\s|[-*]\s+|\d+[.)]\s+|```|\|)/.test(lines[index])) paragraph.push(lines[index++]);
+    blocks.push(<p key={`markdown-p-${blockKey++}`}>{renderInline(paragraph.join(" "), `p-${blockKey}`)}</p>);
+  }
+  return blocks;
+}
+
+function AgentSessionOutput({ session }: { session: AgentSession }) {
+  const projection = projectConversation(session.stdout);
+  const promptBody = session.promptBody?.trim();
+  return <section className="agent-conversation" aria-label="Agent conversation" data-testid="agent-stdout-reader">
+    <article className="agent-chat-message agent-chat-user"><div className="agent-chat-author">You</div><div className="agent-chat-body">{promptBody ? renderMarkdown(promptBody) : <p>Original prompt text was not persisted for this session.</p>}</div></article>
+    <article className="agent-chat-message agent-chat-assistant"><div className="agent-chat-author">{session.provider === "CLAUDE" ? "Claude" : "Codex"}</div><div className="agent-chat-body">{projection.assistant ? renderMarkdown(projection.assistant) : <p>No final assistant response was captured.</p>}</div></article>
+    {projection.activity.length ? <details className="agent-activity-disclosure"><summary>View activity ({projection.activity.length})</summary><ul>{projection.activity.map((item, index) => <li key={index}>{item}</li>)}</ul></details> : null}
+    {session.stdoutTruncated ? <div className="agent-output-truncated">[bounded output truncated]</div> : null}
   </section>;
 }
 
 function sessionDiagnostic(session: AgentSession): string | null {
   if (session.diagnosticMessage) return session.diagnosticMessage;
-  const stderr = readableOutputRows(session.stderr).map((row) => row.content).join("\n").trim();
+  const stderr = projectConversation(session.stderr).assistant.trim();
   return stderr || null;
 }
 
@@ -1857,10 +1946,6 @@ function SessionTime({ session, now }: { session: AgentSession; now: number }) {
 
 function ProviderBadge({ provider }: { provider: SessionProvider }) {
   return <span className={`agent-provider-badge agent-provider-${provider.toLowerCase()}`}>{provider}</span>;
-}
-
-function AgentReadinessCard({ item }: { item: ProviderReadiness }) {
-  return <div className="agent-readiness-card"><div><ProviderBadge provider={item.provider} /><strong>{item.readinessState}</strong></div><span>{item.version ?? "Version unavailable"}</span><small>{item.diagnosticMessage ?? "No diagnostic"}</small></div>;
 }
 
 function elapsedLabel(session: AgentSession, now: number) {
@@ -1923,10 +2008,9 @@ export function Agents() {
     <PageHeader title="Agent Session Center" description="Observe owned Codex and Claude sessions for registered projects." />
     {!desktop ? <div className="fixture-note">Native H!veAI is required for provider sessions.</div> : null}
     {error ? <div className="safe-notice" role="alert">{error}</div> : null}
-    <section className="panel agent-center-readiness"><SectionHeader title="Provider readiness" detail="Bounded native adapters" /><div className="agent-readiness-grid">{readiness.map((item) => <AgentReadinessCard key={item.provider} item={item} />)}{!readiness.length ? <div className="fixture-note">Provider readiness is checked in native H!veAI.</div> : null}</div></section>
     <section className="panel agent-operation-panel"><SectionHeader title="Start owned session" detail="Registered project, fixed provider policy" /><label>Project<select aria-label="Agent project" value={selected?.id ?? ""} onChange={(event) => selectProject(event.target.value, true)} disabled={busy || !records.length}>{records.map((record) => <option key={record.id} value={record.id}>{record.name}</option>)}</select></label><label>Provider<select aria-label="Agent provider" value={provider} onChange={(event) => void chooseProvider(event.target.value as SessionProvider)} disabled={busy}><option value="CODEX">Codex</option><option value="CLAUDE">Claude</option></select></label><label>Task ID <span className="agent-field-note">optional, must belong to project</span><input aria-label="Agent task ID" value={taskId} onChange={(event) => setTaskId(event.target.value)} disabled={busy} maxLength={256} /></label><label>Prompt<textarea aria-label="Agent prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} disabled={busy} maxLength={65536} rows={5} /></label><div className="agent-action-row"><button className="primary-button" type="button" onClick={() => void start()} disabled={!desktop || !selected || !selectedReadiness?.available || !prompt.trim() || busy}><Terminal size={15} /> Start {provider} session</button>{selectedSession && ["FAILED", "STOPPED", "CRASHED"].includes(selectedSession.state) ? <button className="secondary-button" type="button" onClick={() => void retry()} disabled={!prompt.trim() || busy}><RefreshCw size={15} /> Retry as new session</button> : null}</div></section>
     <section className="panel agent-sessions-panel"><SectionHeader title="Active and persisted sessions" detail={selected ? selected.name : "No project selected"} /><div className="agent-session-list">{sessions.map((session) => <button className={`agent-session-row ${session.id === selectedSession?.id ? "agent-session-row-selected" : ""}`} type="button" key={session.id} onClick={() => setSelectedSessionId(session.id)} aria-label={`View ${session.provider} ${session.operationKind} ${session.state}`}><span className="agent-session-row-main"><ProviderBadge provider={session.provider} /><strong>{session.operationKind.replaceAll("_", " ")}</strong></span><span className="agent-session-row-project">{selected?.name ?? "Registered project"}</span><span className={`agent-session-row-state agent-state-${session.state.toLowerCase()}`}>{session.state.replaceAll("_", " ")}</span><SessionTime session={session} now={now} /><span className="agent-session-view">View</span></button>)}{!sessions.length ? <EmptyState title="No agent sessions" detail={selected ? "No persisted Codex or Claude session evidence is available." : "Register a project to use the session center."} /> : null}</div></section>
-    {selectedSession ? <section className="panel agent-session-detail" data-testid="agent-session-detail"><div className="agent-detail-header"><div><div className="eyebrow">Selected session</div><h2>{selectedSession.provider} session</h2></div><button className="icon-button" type="button" aria-label="Close session details" title="Close session details" onClick={() => setSelectedSessionId(null)}><X size={16} /></button></div><div className="agent-session-summary"><ProviderBadge provider={selectedSession.provider} /><strong>{selected?.name ?? "Registered project"}</strong><span className={`agent-session-row-state agent-state-${selectedSession.state.toLowerCase()}`}>{selectedSession.state.replaceAll("_", " ")}</span><span>{selectedSession.operationKind.replaceAll("_", " ")}</span></div><div className="agent-session-actions">{["STARTING", "RUNNING"].includes(selectedSession.state) ? <button className="secondary-button" type="button" onClick={() => void stop()} disabled={busy}>Stop owned session</button> : null}{selectedSession.supportsResume ? <button className="secondary-button" type="button" onClick={() => setError(`${selectedSession.provider} resume is not supported by the verified provider capability`)} disabled={busy}>Resume</button> : null}{selectedSession.state === "FAILED" ? <button className="secondary-button" type="button" onClick={() => void retry()} disabled={!prompt.trim() || busy}><RefreshCw size={15} /> Retry as new session</button> : null}</div><CockpitFacts facts={[["Project", selected?.name ?? selectedSession.projectId], ["Task", selectedSession.taskId ?? "Freeform operation"], ["Started", selectedSession.startedAt ?? "Unknown"], ["Ended", selectedSession.endedAt ?? "Active"], ["Elapsed", selectedSession.elapsedMs == null ? elapsedLabel(selectedSession, now) : `${selectedSession.elapsedMs} ms`], ...(selectedSession.exitCode != null ? [["Exit code", String(selectedSession.exitCode)] as [string, string]] : [])]} />{selectedSession.state === "FAILED" && sessionDiagnostic(selectedSession) ? <div className="agent-diagnostic-card" role="alert"><strong>Diagnostic</strong><p>{sessionDiagnostic(selectedSession)}</p></div> : null}<AgentSessionOutput text={selectedSession.stdout} truncated={selectedSession.stdoutTruncated} />{selectedSession.supportsPty && ["STARTING", "RUNNING", "WAITING_PERMISSION", "STOPPING"].includes(selectedSession.state) ? <details className="agent-advanced-section"><summary>Live terminal</summary><AgentTerminal session={selectedSession} onResize={resize} /></details> : null}<details className="agent-advanced-section"><summary>Technical details</summary><CockpitFacts facts={[["Session ID", selectedSession.id], ["Working directory", selectedSession.cwd], ["Provider version", selectedSession.providerVersion ?? "Unavailable"], ["Prompt reference", selectedSession.promptReference ?? "Unavailable"], ["Diagnostic code", selectedSession.diagnosticCode ?? "None"]]} /></details><details className="agent-advanced-section"><summary>Timeline</summary><div className="agent-timeline">{(selectedSession.events ?? []).map((event) => <div className="agent-timeline-row" key={event.id}><time>{event.occurredAt}</time><strong>{event.eventType.replaceAll("_", " ")}</strong><code>{JSON.stringify(event.payload ?? {})}</code></div>)}{!(selectedSession.events ?? []).length ? <span className="cockpit-muted">No durable event evidence available.</span> : null}</div></details><details className="agent-advanced-section"><summary>Raw events</summary><div className="agent-raw-events">{(selectedSession.events ?? []).map((event) => <pre key={event.id}>{JSON.stringify(event, null, 2)}</pre>)}{!(selectedSession.events ?? []).length ? <span className="cockpit-muted">No durable event evidence available.</span> : null}</div></details><details className="agent-advanced-section"><summary>Git evidence</summary><div className="agent-changed-files">{git?.stagedFiles.map((file) => <span key={`staged-${file.path}`}>STAGED: {file.path}</span>)}{git?.unstagedFiles.map((file) => <span key={`unstaged-${file.path}`}>UNSTAGED: {file.path}</span>)}{git?.untrackedFiles.map((file) => <span key={`untracked-${file}`}>UNTRACKED: {file}</span>)}{git?.conflictedFiles.map((file) => <span key={`conflict-${file}`}>CONFLICT: {file}</span>)}{git && !git.stagedFiles.length && !git.unstagedFiles.length && !git.untrackedFiles.length && !git.conflictedFiles.length ? <span className="cockpit-muted">No Git changes detected by the Git Engine.</span> : null}{!git ? <span className="cockpit-muted">Git evidence unavailable.</span> : null}</div>{gitDiff ? <details className="agent-diff"><summary>View bounded Git diff</summary><pre className="cockpit-code">{gitDiff.text || "No diff content"}</pre>{gitDiff.truncated ? <span className="agent-output-truncated">[Git diff truncated]</span> : null}</details> : null}</details><div className="agent-permission-note">Permission model: provider-managed. Claude runs in restricted plan mode; Codex keeps its accepted M13 policy. No generic approval or shell control surface is exposed.</div></section> : null}
+    {selectedSession ? <section className="panel agent-session-detail" data-testid="agent-session-detail"><div className="agent-detail-header"><div><div className="eyebrow">Selected session</div><h2>{selectedSession.provider} session</h2></div><button className="icon-button" type="button" aria-label="Close session details" title="Close session details" onClick={() => setSelectedSessionId(null)}><X size={16} /></button></div><div className="agent-session-summary"><ProviderBadge provider={selectedSession.provider} /><strong>{selected?.name ?? "Registered project"}</strong><span className={`agent-session-row-state agent-state-${selectedSession.state.toLowerCase()}`}>{selectedSession.state.replaceAll("_", " ")}</span><span>{selectedSession.operationKind.replaceAll("_", " ")}</span></div><div className="agent-session-actions">{["STARTING", "RUNNING"].includes(selectedSession.state) ? <button className="secondary-button" type="button" onClick={() => void stop()} disabled={busy}>Stop owned session</button> : null}{selectedSession.supportsResume ? <button className="secondary-button" type="button" onClick={() => setError(`${selectedSession.provider} resume is not supported by the verified provider capability`)} disabled={busy}>Resume</button> : null}{selectedSession.state === "FAILED" ? <button className="secondary-button" type="button" onClick={() => void retry()} disabled={!prompt.trim() || busy}><RefreshCw size={15} /> Retry as new session</button> : null}</div><CockpitFacts facts={[["Project", selected?.name ?? selectedSession.projectId], ["Task", selectedSession.taskId ?? "Freeform operation"], ["Started", selectedSession.startedAt ?? "Unknown"], ["Ended", selectedSession.endedAt ?? "Active"], ["Elapsed", selectedSession.elapsedMs == null ? elapsedLabel(selectedSession, now) : `${selectedSession.elapsedMs} ms`], ...(selectedSession.exitCode != null ? [["Exit code", String(selectedSession.exitCode)] as [string, string]] : [])]} />{selectedSession.state === "FAILED" && sessionDiagnostic(selectedSession) ? <div className="agent-diagnostic-card" role="alert"><strong>Diagnostic</strong><p>{sessionDiagnostic(selectedSession)}</p></div> : null}<AgentSessionOutput session={selectedSession} />{selectedSession.supportsPty && ["STARTING", "RUNNING", "WAITING_PERMISSION", "STOPPING"].includes(selectedSession.state) ? <details className="agent-advanced-section"><summary>Live terminal</summary><AgentTerminal session={selectedSession} onResize={resize} /></details> : null}<details className="agent-advanced-section"><summary>Technical details</summary><CockpitFacts facts={[["Session ID", selectedSession.id], ["Working directory", selectedSession.cwd], ["Provider version", selectedSession.providerVersion ?? "Unavailable"], ["Prompt reference", selectedSession.promptReference ?? "Unavailable"], ["Diagnostic code", selectedSession.diagnosticCode ?? "None"]]} /></details><details className="agent-advanced-section"><summary>Timeline</summary><div className="agent-timeline">{(selectedSession.events ?? []).map((event) => <div className="agent-timeline-row" key={event.id}><time>{event.occurredAt}</time><strong>{event.eventType.replaceAll("_", " ")}</strong><code>{JSON.stringify(event.payload ?? {})}</code></div>)}{!(selectedSession.events ?? []).length ? <span className="cockpit-muted">No durable event evidence available.</span> : null}</div></details><details className="agent-advanced-section"><summary>Raw events</summary><div className="agent-raw-events">{(selectedSession.events ?? []).map((event) => <pre key={event.id}>{JSON.stringify(event, null, 2)}</pre>)}{!(selectedSession.events ?? []).length ? <span className="cockpit-muted">No durable event evidence available.</span> : null}</div></details><details className="agent-advanced-section"><summary>Git evidence</summary><div className="agent-changed-files">{git?.stagedFiles.map((file) => <span key={`staged-${file.path}`}>STAGED: {file.path}</span>)}{git?.unstagedFiles.map((file) => <span key={`unstaged-${file.path}`}>UNSTAGED: {file.path}</span>)}{git?.untrackedFiles.map((file) => <span key={`untracked-${file}`}>UNTRACKED: {file}</span>)}{git?.conflictedFiles.map((file) => <span key={`conflict-${file}`}>CONFLICT: {file}</span>)}{git && !git.stagedFiles.length && !git.unstagedFiles.length && !git.untrackedFiles.length && !git.conflictedFiles.length ? <span className="cockpit-muted">No Git changes detected by the Git Engine.</span> : null}{!git ? <span className="cockpit-muted">Git evidence unavailable.</span> : null}</div>{gitDiff ? <details className="agent-diff"><summary>View bounded Git diff</summary><pre className="cockpit-code">{gitDiff.text || "No diff content"}</pre>{gitDiff.truncated ? <span className="agent-output-truncated">[Git diff truncated]</span> : null}</details> : null}</details><div className="agent-permission-note">Permission model: provider-managed. Claude runs in restricted plan mode; Codex keeps its accepted M13 policy. No generic approval or shell control surface is exposed.</div></section> : null}
   </>;
 }
 

@@ -75,6 +75,7 @@ pub struct AdapterSession {
     pub stderr_truncated: bool,
     pub diagnostic_code: Option<String>,
     pub diagnostic_message: Option<String>,
+    pub prompt_body: Option<String>,
 }
 
 pub trait AgentAdapter {
@@ -624,7 +625,7 @@ pub fn start(
         "FREEFORM_PROJECT_OPERATION"
     };
     let connection = database.open_connection()?;
-    connection.execute("INSERT INTO agent_sessions (id,project_id,task_id,provider,state,started_at,created_at) VALUES (?1,?2,?3,?4,'STARTING',?5,?5)", params![session_id, request.project_id, request.task_id, PROVIDER, started_at]).map_err(|error| format!("persist Codex session: {error}"))?;
+    connection.execute("INSERT INTO agent_sessions (id,project_id,task_id,provider,state,started_at,created_at,prompt_body) VALUES (?1,?2,?3,?4,'STARTING',?5,?5,?6)", params![session_id, request.project_id, request.task_id, PROVIDER, started_at, request.prompt]).map_err(|error| format!("persist Codex session: {error}"))?;
     insert_event(
         &connection,
         &session_id,
@@ -1213,7 +1214,7 @@ fn finish_failed(
 
 fn load_session(database: &DatabaseState, session_id: &str) -> Result<CodexSession, String> {
     let connection = database.open_connection()?;
-    let row = connection.query_row("SELECT s.id,s.project_id,s.task_id,s.state,s.started_at,s.ended_at,p.original_path FROM agent_sessions s LEFT JOIN projects p ON p.id=s.project_id WHERE s.id=?1", [session_id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, Option<String>>(2)?, row.get::<_, String>(3)?, row.get::<_, Option<String>>(4)?, row.get::<_, Option<String>>(5)?, row.get::<_, Option<String>>(6)?))).map_err(|error| format!("read Codex session: {error}"))?;
+    let row = connection.query_row("SELECT s.id,s.project_id,s.task_id,s.state,s.started_at,s.ended_at,p.original_path,s.prompt_body FROM agent_sessions s LEFT JOIN projects p ON p.id=s.project_id WHERE s.id=?1", [session_id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, Option<String>>(2)?, row.get::<_, String>(3)?, row.get::<_, Option<String>>(4)?, row.get::<_, Option<String>>(5)?, row.get::<_, Option<String>>(6)?, row.get::<_, Option<String>>(7)?))).map_err(|error| format!("read Codex session: {error}"))?;
     let mut stdout = String::new();
     let mut stderr = String::new();
     let mut stdout_truncated = false;
@@ -1350,6 +1351,7 @@ fn load_session(database: &DatabaseState, session_id: &str) -> Result<CodexSessi
         stderr_truncated,
         diagnostic_code,
         diagnostic_message,
+        prompt_body: row.7,
     })
 }
 

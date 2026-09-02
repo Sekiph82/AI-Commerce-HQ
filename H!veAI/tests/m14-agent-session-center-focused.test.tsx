@@ -8,7 +8,7 @@ const readiness = [
   { provider: "CODEX", available: true, version: "codex-cli 0.149.1", readinessState: "VERSION_VERIFIED_AUTH_UNKNOWN", diagnosticCode: "AUTH_UNKNOWN", diagnosticMessage: "Codex authentication is determined by operation", capabilities: ["START", "LIST", "STOP"], supportsPty: false, supportsResume: false, checkedAt: "2026-09-02T10:00:00Z" },
   { provider: "CLAUDE", available: true, version: "2.1.248 (Claude Code)", readinessState: "VERSION_VERIFIED_AUTH_UNKNOWN", diagnosticCode: "AUTH_UNKNOWN", diagnosticMessage: "Claude authentication is determined by operation", capabilities: ["START", "LIST", "STOP", "BOUNDED_STREAM_JSON"], supportsPty: false, supportsResume: false, checkedAt: "2026-09-02T10:00:00Z" },
 ];
-const session = { id: "claude-session", provider: "CLAUDE", projectId: "scrubbots", taskId: null, operationKind: "FREEFORM_PROJECT_OPERATION", state: "COMPLETED", cwd: "C:\\Projects\\ScrubBots", startedAt: "2026-09-02T10:01:00Z", endedAt: "2026-09-02T10:01:04Z", exitCode: 0, stdout: "read-only repository summary", stderr: "", stdoutTruncated: false, stderrTruncated: false, diagnosticCode: null, diagnosticMessage: null, promptReference: "sha256:fixture", providerVersion: "2.1.248 (Claude Code)", elapsedMs: 4000, supportsResume: false, supportsPty: false, events: [{ sequence: 1, id: "event-1", eventType: "SESSION_STARTED", payload: { providerVersion: "2.1.248 (Claude Code)" }, occurredAt: "2026-09-02T10:01:00Z" }] };
+const session = { id: "claude-session", provider: "CLAUDE", projectId: "scrubbots", taskId: null, operationKind: "FREEFORM_PROJECT_OPERATION", state: "COMPLETED", cwd: "C:\\Projects\\ScrubBots", startedAt: "2026-09-02T10:01:00Z", endedAt: "2026-09-02T10:01:04Z", exitCode: 0, stdout: "read-only repository summary", stderr: "", stdoutTruncated: false, stderrTruncated: false, diagnosticCode: null, diagnosticMessage: null, promptReference: "sha256:fixture", promptBody: "Summarize the repository safely.", providerVersion: "2.1.248 (Claude Code)", elapsedMs: 4000, supportsResume: false, supportsPty: false, events: [{ sequence: 1, id: "event-1", eventType: "SESSION_STARTED", payload: { providerVersion: "2.1.248 (Claude Code)" }, occurredAt: "2026-09-02T10:01:00Z" }] };
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
@@ -29,10 +29,13 @@ beforeEach(() => {
 });
 
 describe("M14 Agent Session Center", () => {
-  it("shows both provider readiness cards and the persisted ScrubBots preference", async () => {
+  it("keeps readiness native and removes the large readiness card", async () => {
     render(<App />);
-    expect(await screen.findByText("2.1.248 (Claude Code)")).toBeInTheDocument();
-    expect(screen.getByText("codex-cli 0.149.1")).toBeInTheDocument();
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("hiveai_agent_readiness"));
+    expect(screen.queryByText("2.1.248 (Claude Code)")).not.toBeInTheDocument();
+    expect(screen.queryByText("codex-cli 0.149.1")).not.toBeInTheDocument();
+    expect(screen.queryByText("Provider readiness")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("agent-center-readiness")).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText("Agent provider")).toHaveValue("CLAUDE"));
   });
 
@@ -67,6 +70,9 @@ describe("M14 Agent Session Center", () => {
     expect(screen.queryByText("SESSION_STARTED")).not.toBeInTheDocument();
     fireEvent.click(viewButton);
     expect(screen.getByTestId("agent-stdout-reader")).toHaveTextContent("read-only repository summary");
+    expect(screen.getByTestId("agent-stdout-reader")).toHaveTextContent("You");
+    expect(screen.getByTestId("agent-stdout-reader")).toHaveTextContent("Claude");
+    expect(screen.getByTestId("agent-stdout-reader")).toHaveTextContent("Summarize the repository safely.");
     expect(screen.queryByText("SESSION_STARTED")).not.toBeInTheDocument();
     fireEvent.click(screen.getByText("Timeline"));
     expect(await screen.findByText("SESSION STARTED")).toBeInTheDocument();
@@ -77,6 +83,48 @@ describe("M14 Agent Session Center", () => {
     expect(screen.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Close session details" }));
     expect(screen.queryByTestId("agent-session-detail")).not.toBeInTheDocument();
+  });
+
+  it("projects Claude and Codex streams into chat messages with collapsed activity", async () => {
+    const conversation = { ...session, stdout: [
+      JSON.stringify({ type: "system", subtype: "init", session_id: "hidden" }),
+      JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "## Findings\n\n- First item\n- Second item\n\n`bounded code`" }] } }),
+      JSON.stringify({ type: "tool_use", name: "read_file", input: { path: "secret.json" } }),
+      JSON.stringify({ type: "rate_limit_event", status: "allowed" }),
+      JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "The repository is clean." }] } }),
+    ].join("\n") };
+    invoke.mockImplementation((command: string) => {
+      if (command === "hiveai_projects_list") return Promise.resolve(records);
+      if (command === "hiveai_agent_readiness") return Promise.resolve(readiness);
+      if (command === "hiveai_agent_sessions_list") return Promise.resolve([conversation]);
+      return Promise.resolve({ stagedFiles: [], unstagedFiles: [], untrackedFiles: [], conflictedFiles: [] });
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /View CLAUDE FREEFORM_PROJECT_OPERATION COMPLETED/i }));
+    const reader = screen.getByTestId("agent-stdout-reader");
+    expect(reader).toHaveTextContent("You");
+    expect(reader).toHaveTextContent("Claude");
+    expect(reader).toHaveTextContent("Findings");
+    expect(reader).toHaveTextContent("First item");
+    expect(reader).toHaveTextContent("The repository is clean.");
+    expect(reader).not.toHaveTextContent("hidden");
+    expect(reader).not.toHaveTextContent("rate_limit_event");
+    const activity = reader.querySelector(".agent-activity-disclosure");
+    expect(activity).toBeTruthy();
+    expect(activity).not.toHaveAttribute("open");
+  });
+
+  it("shows the truthful prompt placeholder for historical sessions", async () => {
+    const historical = { ...session, id: "historical", promptBody: null, stdout: "No final text" };
+    invoke.mockImplementation((command: string) => {
+      if (command === "hiveai_projects_list") return Promise.resolve(records);
+      if (command === "hiveai_agent_readiness") return Promise.resolve(readiness);
+      if (command === "hiveai_agent_sessions_list") return Promise.resolve([historical]);
+      return Promise.resolve({ stagedFiles: [], unstagedFiles: [], untrackedFiles: [], conflictedFiles: [] });
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /View CLAUDE FREEFORM_PROJECT_OPERATION COMPLETED/i }));
+    expect(screen.getByText("Original prompt text was not persisted for this session.")).toBeInTheDocument();
   });
 
   it("keeps persisted sessions compact and permits only one explicit detail", async () => {

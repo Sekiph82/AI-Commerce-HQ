@@ -138,6 +138,11 @@ mod app_commands {
     }
 
     #[tauri::command]
+    fn hiveai_open_external_url(url: String) -> Result<(), String> {
+        external_browser::open_external_url(&url)
+    }
+
+    #[tauri::command]
     fn hiveai_startup_intro_claim(state: tauri::State<'_, StartupIntroState>) -> bool {
         claim_startup_intro(&state)
     }
@@ -534,6 +539,7 @@ mod app_commands {
                 hiveai_native_status,
                 hiveai_frontend_ready,
                 hiveai_open_akilta,
+                hiveai_open_external_url,
                 hiveai_startup_intro_claim,
                 hiveai_request_restart,
                 hiveai_runtime_status,

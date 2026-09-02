@@ -103,6 +103,7 @@ pub struct AgentSession {
     pub diagnostic_code: Option<String>,
     pub diagnostic_message: Option<String>,
     pub prompt_reference: Option<String>,
+    pub prompt_body: Option<String>,
     pub provider_version: Option<String>,
     pub elapsed_ms: Option<u64>,
     pub supports_resume: bool,
@@ -508,7 +509,7 @@ fn start_claude(
         "FREEFORM_PROJECT_OPERATION"
     };
     let connection = database.open_connection()?;
-    connection.execute("INSERT INTO agent_sessions (id,project_id,task_id,provider,state,started_at,created_at) VALUES (?1,?2,?3,'CLAUDE','STARTING',?4,?4)", params![session_id, request.project_id, request.task_id, started_at]).map_err(|error| format!("persist Claude session: {error}"))?;
+    connection.execute("INSERT INTO agent_sessions (id,project_id,task_id,provider,state,started_at,created_at,prompt_body) VALUES (?1,?2,?3,'CLAUDE','STARTING',?4,?4,?5)", params![session_id, request.project_id, request.task_id, started_at, request.prompt]).map_err(|error| format!("persist Claude session: {error}"))?;
     insert_event(
         &connection,
         &session_id,
@@ -956,7 +957,7 @@ fn load_session(
     session_id: &str,
 ) -> Result<AgentSession, String> {
     let connection = database.open_connection()?;
-    let row = connection.query_row("SELECT id,project_id,task_id,provider,state,started_at,ended_at,created_at FROM agent_sessions WHERE id=?1", [session_id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, Option<String>>(2)?, row.get::<_, String>(3)?, row.get::<_, String>(4)?, row.get::<_, Option<String>>(5)?, row.get::<_, Option<String>>(6)?, row.get::<_, String>(7)?))).optional().map_err(|error| format!("read agent session: {error}"))?.ok_or("AGENT_SESSION_NOT_FOUND")?;
+    let row = connection.query_row("SELECT id,project_id,task_id,provider,state,started_at,ended_at,created_at,prompt_body FROM agent_sessions WHERE id=?1", [session_id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, Option<String>>(2)?, row.get::<_, String>(3)?, row.get::<_, String>(4)?, row.get::<_, Option<String>>(5)?, row.get::<_, Option<String>>(6)?, row.get::<_, String>(7)?, row.get::<_, Option<String>>(8)?))).optional().map_err(|error| format!("read agent session: {error}"))?.ok_or("AGENT_SESSION_NOT_FOUND")?;
     let events = load_events(&connection, session_id)?;
     let mut stdout = String::new();
     let mut stderr = String::new();
@@ -1067,6 +1068,7 @@ fn load_session(
         diagnostic_code,
         diagnostic_message,
         prompt_reference,
+        prompt_body: row.8,
         provider_version,
         elapsed_ms,
         supports_resume: false,
@@ -1160,6 +1162,7 @@ impl AgentSession {
             diagnostic_code: session.diagnostic_code,
             diagnostic_message: session.diagnostic_message,
             prompt_reference: None,
+            prompt_body: session.prompt_body,
             provider_version: None,
             elapsed_ms: None,
             supports_resume: false,

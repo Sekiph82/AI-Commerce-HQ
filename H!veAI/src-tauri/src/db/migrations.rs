@@ -373,6 +373,11 @@ pub fn migrations() -> &'static [Migration] {
             name: "project_preferred_agent_provider",
             sql: "ALTER TABLE projects ADD COLUMN preferred_agent_provider TEXT;",
         },
+        Migration {
+            version: 9,
+            name: "agent_session_prompt_body",
+            sql: "ALTER TABLE agent_sessions ADD COLUMN prompt_body TEXT;",
+        },
     ]
 }
 
@@ -471,8 +476,8 @@ mod tests {
     fn fresh_database_reaches_latest_version() {
         let (_directory, mut connection) = temp_connection();
         let report = apply_migrations(&mut connection, migrations()).expect("migrations apply");
-        assert_eq!(report.schema_version, 8);
-        assert_eq!(report.migration_count, 8);
+        assert_eq!(report.schema_version, 9);
+        assert_eq!(report.migration_count, 9);
         assert_eq!(report.last_migration_status, "APPLIED");
     }
 
@@ -482,7 +487,7 @@ mod tests {
         apply_migrations(&mut connection, migrations()).expect("first apply");
         let report = apply_migrations(&mut connection, migrations()).expect("second apply");
         assert_eq!(report.last_migration_status, "ALREADY_CURRENT");
-        assert_eq!(report.migration_count, 8);
+        assert_eq!(report.migration_count, 9);
     }
 
     #[test]
@@ -549,7 +554,7 @@ mod tests {
         let (_directory, mut connection) = temp_connection();
         let first = apply_migrations(&mut connection, migrations()).expect("first apply");
         let second = apply_migrations(&mut connection, migrations()).expect("rerun");
-        assert_eq!(first.schema_version, 8);
+        assert_eq!(first.schema_version, 9);
         assert_eq!(second.last_migration_status, "ALREADY_CURRENT");
         let mismatch = [Migration {
             version: 1,
@@ -580,9 +585,30 @@ mod tests {
                 (5, "timestamp_standardization".to_string()),
                 (6, "residual_timestamp_standardization".to_string()),
                 (7, "project_snapshot_created_timestamp".to_string()),
-                (8, "project_preferred_agent_provider".to_string())
+                (8, "project_preferred_agent_provider".to_string()),
+                (9, "agent_session_prompt_body".to_string())
             ]
         );
+    }
+
+    #[test]
+    fn prompt_body_migration_is_nullable_and_backward_compatible() {
+        let (_directory, mut connection) = temp_connection();
+        apply_migrations(&mut connection, migrations()).expect("migrations apply");
+        connection
+            .execute(
+                "INSERT INTO agent_sessions (id, project_id, provider, state, created_at) VALUES ('legacy', NULL, 'CODEX', 'COMPLETED', 'now')",
+                [],
+            )
+            .expect("legacy session insert");
+        let value: Option<String> = connection
+            .query_row(
+                "SELECT prompt_body FROM agent_sessions WHERE id='legacy'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("prompt body column is readable");
+        assert_eq!(value, None);
     }
 
     #[test]

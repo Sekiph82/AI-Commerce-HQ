@@ -39,6 +39,29 @@ fn chrome_candidates() -> Vec<PathBuf> {
 
 #[cfg(windows)]
 pub fn open_akilta() -> Result<(), String> {
+    open_https_url(AKILTA_URL)
+}
+
+#[cfg(windows)]
+pub fn open_external_url(url: &str) -> Result<(), String> {
+    validate_https_url(url)?;
+    open_https_url(url)
+}
+
+#[cfg(windows)]
+fn validate_https_url(url: &str) -> Result<(), String> {
+    if !url.starts_with("https://")
+        || url
+            .chars()
+            .any(|character| character.is_whitespace() || character == '"')
+    {
+        return Err("EXTERNAL_URL_BLOCKED: only bounded HTTPS URLs may be opened".into());
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn open_https_url(url: &str) -> Result<(), String> {
     let chrome = chrome_candidates()
         .into_iter()
         .find(|candidate| candidate.is_file())
@@ -46,7 +69,7 @@ pub fn open_akilta() -> Result<(), String> {
         .map_err(|error| error.to_string())?;
     Command::new(chrome)
         .arg("--new-window")
-        .arg(AKILTA_URL)
+        .arg(url)
         .creation_flags(0x08000000)
         .spawn()
         .map(|_| ())
@@ -55,10 +78,22 @@ pub fn open_akilta() -> Result<(), String> {
 
 #[cfg(not(windows))]
 pub fn open_akilta() -> Result<(), String> {
+    open_external_url(AKILTA_URL)
+}
+
+#[cfg(not(windows))]
+pub fn open_external_url(url: &str) -> Result<(), String> {
+    if !url.starts_with("https://")
+        || url
+            .chars()
+            .any(|character| character.is_whitespace() || character == '"')
+    {
+        return Err("EXTERNAL_URL_BLOCKED: only bounded HTTPS URLs may be opened".into());
+    }
     for executable in ["google-chrome", "google-chrome-stable"] {
         let result = Command::new(executable)
             .arg("--new-window")
-            .arg(AKILTA_URL)
+            .arg(url)
             .spawn();
         if result.is_ok() {
             return Ok(());
@@ -69,10 +104,16 @@ pub fn open_akilta() -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::AKILTA_URL;
+    use super::{open_external_url, AKILTA_URL};
 
     #[test]
     fn akilta_url_is_fixed() {
         assert_eq!(AKILTA_URL, "https://www.akilta.com/");
+    }
+
+    #[test]
+    fn external_url_policy_rejects_non_https_input() {
+        assert!(open_external_url("http://example.com").is_err());
+        assert!(open_external_url("javascript:alert(1)").is_err());
     }
 }

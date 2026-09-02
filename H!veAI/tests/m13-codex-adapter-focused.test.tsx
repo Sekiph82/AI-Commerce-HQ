@@ -22,16 +22,17 @@ beforeEach(() => {
 });
 
 describe("M13 Codex adapter", () => {
-  it("renders truthful readiness and selected registered project", async () => {
+  it("keeps truthful readiness gating without rendering a readiness card", async () => {
     render(<App />);
-    expect(await screen.findByText("codex-cli 0.130.0-alpha.5")).toBeInTheDocument();
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("hiveai_agent_readiness"));
+    expect(screen.queryByText("codex-cli 0.130.0-alpha.5")).not.toBeInTheDocument();
     expect(screen.getAllByText("Project Alpha").length).toBeGreaterThan(0);
-    expect(screen.getByText("authentication is unknown")).toBeInTheDocument();
+    expect(screen.queryByText("authentication is unknown")).not.toBeInTheDocument();
   });
 
   it("passes only the selected project, bounded task id, and prompt to native start", async () => {
     render(<App />);
-    await screen.findByText("codex-cli 0.130.0-alpha.5");
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("hiveai_agent_readiness"));
     fireEvent.change(screen.getByLabelText("Agent task ID"), { target: { value: "alpha-task" } });
     fireEvent.change(screen.getByLabelText("Agent prompt"), { target: { value: "inspect x & y | z" } });
     fireEvent.click(screen.getByRole("button", { name: "Start CODEX session" }));
@@ -160,12 +161,12 @@ describe("M13 Codex adapter", () => {
     const { container } = render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: /View CODEX CODEX_EXEC COMPLETED/i }));
     const reader = await screen.findByTestId("agent-stdout-reader");
-    expect(reader).toHaveClass("agent-output-reader");
-    expect(reader).toHaveTextContent("command.completed");
-    expect(reader).toHaveTextContent("result.json");
+    expect(reader).toHaveClass("agent-conversation");
+    expect(reader).toHaveTextContent("View activity");
     expect(reader).toHaveTextContent(longUnrecognizedLine);
     expect(reader.querySelector("pre")).toBeNull();
-    expect(reader.querySelector(".agent-output-event-content")).toBeTruthy();
+    expect(reader.querySelector(".agent-activity-disclosure")).toBeTruthy();
+    expect(reader.querySelector(".agent-activity-disclosure")?.hasAttribute("open")).toBe(false);
     expect(container.querySelector(".agent-sessions-panel")?.textContent).toContain("COMPLETED");
   });
 });
