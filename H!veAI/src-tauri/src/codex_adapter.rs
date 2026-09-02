@@ -9,6 +9,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -19,6 +20,10 @@ const MAX_PROMPT_BYTES: usize = 64 * 1024;
 const MAX_OUTPUT_BYTES: usize = 64 * 1024;
 const MAX_OUTPUT_EVENTS: usize = 128;
 const MAX_SESSION_EVENTS: usize = MAX_OUTPUT_EVENTS * 2 + 16;
+const MAX_REDACTION_CARRY_BYTES: usize = 4096;
+const PERSIST_QUEUE_CAPACITY: usize = 32;
+const PERSIST_RETRY_ATTEMPTS: usize = 3;
+const PERSIST_RETRY_BACKOFF: [Duration; 2] = [Duration::from_millis(10), Duration::from_millis(25)];
 const READINESS_TIMEOUT: Duration = Duration::from_secs(5);
 const STOP_GRACE: Duration = Duration::from_millis(750);
 const STOP_ESCALATION_TIMEOUT: Duration = Duration::from_secs(2);
@@ -105,6 +110,22 @@ pub struct CodexAdapter {
     processes: Arc<Mutex<HashMap<String, OwnedProcess>>>,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+struct ChannelPersistenceStats {
+    bytes: usize,
+    events: usize,
+}
+
+#[derive(Debug, Clone, Default)]
+struct PersistenceStats {
+    stdout: ChannelPersistenceStats,
+    stderr: ChannelPersistenceStats,
+    failures: usize,
+    degraded: bool,
+    diagnostic_code: Option<String>,
+    diagnostic_message: Option<String>,
+}
+
 #[derive(Default)]
 struct Capture {
     text: String,
@@ -114,13 +135,12 @@ struct Capture {
 }
 
 impl Capture {
-    fn append(&mut self, bytes: &[u8]) -> Option<(String, usize, bool)> {
+    fn append(&mut self, redacted_text: &str) -> Option<(String, usize, bool)> {
         if self.event_count >= MAX_OUTPUT_EVENTS {
             self.truncated = true;
             return None;
         }
-        let redacted = redact_output(&String::from_utf8_lossy(bytes));
-        let bytes = redacted.as_bytes();
+        let bytes = redacted_text.as_bytes();
         let remaining = MAX_OUTPUT_BYTES.saturating_sub(self.retained_bytes);
         let take = bytes.len().min(remaining);
         if take == 0 {
@@ -136,6 +156,323 @@ impl Capture {
         }
         Some((text, self.event_count, self.truncated))
     }
+}
+
+#[derive(Default)]
+struct StreamRedactor {
+    carry: Vec<u8>,
+    discard_until_newline: bool,
+}
+
+impl StreamRedactor {
+    fn push(&mut self, bytes: &[u8]) -> Vec<String> {
+        let mut output = Vec::new();
+        let mut remaining = bytes;
+        while !remaining.is_empty() {
+            if self.discard_until_newline {
+                if let Some(index) = remaining.iter().position(|byte| *byte == b'\n') {
+                    self.discard_until_newline = false;
+                    remaining = &remaining[index + 1..];
+                } else {
+                    return output;
+                }
+            } else {
+                self.carry.extend_from_slice(remaining);
+                remaining = &[];
+                while let Some(index) = self.carry.iter().position(|byte| *byte == b'\n') {
+                    let record: Vec<u8> = self.carry.drain(..=index).collect();
+                    output.push(redact_record(&record));
+                }
+                if self.carry.len() > MAX_REDACTION_CARRY_BYTES {
+                    output.push("[REDACTED SENSITIVE OUTPUT]".to_string());
+                    self.carry.clear();
+                    self.discard_until_newline = true;
+                }
+            }
+        }
+        output
+    }
+
+    fn finish(&mut self) -> Vec<String> {
+        if self.discard_until_newline {
+            self.carry.clear();
+            self.discard_until_newline = false;
+            return Vec::new();
+        }
+        if self.carry.is_empty() {
+            return Vec::new();
+        }
+        let record = std::mem::take(&mut self.carry);
+        vec![redact_record(&record)]
+    }
+}
+
+fn redact_record(record: &[u8]) -> String {
+    let text = String::from_utf8_lossy(record);
+    let has_newline = text.ends_with('\n');
+    let content = text.trim_end_matches('\n').trim_end_matches('\r');
+    if contains_sensitive_marker(content) {
+        let mut redacted = "[REDACTED SENSITIVE OUTPUT]".to_string();
+        if has_newline {
+            redacted.push('\n');
+        }
+        redacted
+    } else {
+        text.into_owned()
+    }
+}
+
+fn contains_sensitive_marker(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    [
+        "api_key",
+        "apikey",
+        "token",
+        "password",
+        "secret",
+        "authorization",
+        "sk-",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
+}
+
+trait EventStore: Send {
+    fn insert_event(
+        &mut self,
+        session_id: &str,
+        event_type: &str,
+        payload: serde_json::Value,
+    ) -> Result<(), String>;
+}
+
+struct SqliteEventStore {
+    connection: rusqlite::Connection,
+}
+
+impl EventStore for SqliteEventStore {
+    fn insert_event(
+        &mut self,
+        session_id: &str,
+        event_type: &str,
+        payload: serde_json::Value,
+    ) -> Result<(), String> {
+        insert_event(&self.connection, session_id, event_type, payload)
+    }
+}
+
+struct UnavailableEventStore {
+    error: String,
+}
+
+impl EventStore for UnavailableEventStore {
+    fn insert_event(
+        &mut self,
+        _session_id: &str,
+        _event_type: &str,
+        _payload: serde_json::Value,
+    ) -> Result<(), String> {
+        Err(self.error.clone())
+    }
+}
+
+enum PersistRequest {
+    Stream {
+        session_id: String,
+        channel: String,
+        sequence: usize,
+        text: String,
+        truncated: bool,
+    },
+    Shutdown,
+}
+
+#[derive(Clone)]
+struct EventWriterHandle {
+    sender: SyncSender<PersistRequest>,
+    stats: Arc<Mutex<PersistenceStats>>,
+}
+
+struct EventWriter {
+    handle: EventWriterHandle,
+    join: Option<thread::JoinHandle<()>>,
+}
+
+impl EventWriter {
+    fn spawn(database: &DatabaseState, stats: Arc<Mutex<PersistenceStats>>) -> Self {
+        let store = database
+            .open_connection()
+            .map(|connection| Box::new(SqliteEventStore { connection }) as Box<dyn EventStore>)
+            .unwrap_or_else(|error| Box::new(UnavailableEventStore { error }));
+        Self::spawn_with_store(store, stats)
+    }
+
+    fn spawn_with_store(
+        mut store: Box<dyn EventStore>,
+        stats: Arc<Mutex<PersistenceStats>>,
+    ) -> Self {
+        let (sender, receiver) = sync_channel(PERSIST_QUEUE_CAPACITY);
+        let writer_stats = stats.clone();
+        let join = thread::spawn(move || event_writer_loop(&mut *store, receiver, writer_stats));
+        Self {
+            handle: EventWriterHandle { sender, stats },
+            join: Some(join),
+        }
+    }
+
+    fn handle(&self) -> EventWriterHandle {
+        self.handle.clone()
+    }
+
+    fn finish(mut self) -> PersistenceStats {
+        let _ = self.handle.sender.send(PersistRequest::Shutdown);
+        if let Some(join) = self.join.take() {
+            let _ = join.join();
+        }
+        self.handle
+            .stats
+            .lock()
+            .map(|stats| stats.clone())
+            .unwrap_or_else(|_| PersistenceStats {
+                degraded: true,
+                diagnostic_code: Some("CODEX_PERSISTENCE_STATE_POISONED".into()),
+                diagnostic_message: Some("persistence state could not be read".into()),
+                ..PersistenceStats::default()
+            })
+    }
+}
+
+impl EventWriterHandle {
+    fn stream(
+        &self,
+        session_id: &str,
+        channel: &str,
+        sequence: usize,
+        text: String,
+        truncated: bool,
+    ) {
+        let request = PersistRequest::Stream {
+            session_id: session_id.to_string(),
+            channel: channel.to_string(),
+            sequence,
+            text,
+            truncated,
+        };
+        if self.sender.send(request).is_err() {
+            mark_persistence_failure(
+                &self.stats,
+                "CODEX_PERSISTENCE_WRITER_UNAVAILABLE",
+                "the bounded persistence writer stopped before the stream event was accepted",
+            );
+        }
+    }
+}
+
+fn event_writer_loop(
+    store: &mut dyn EventStore,
+    receiver: Receiver<PersistRequest>,
+    stats: Arc<Mutex<PersistenceStats>>,
+) {
+    while let Ok(request) = receiver.recv() {
+        match request {
+            PersistRequest::Stream {
+                session_id,
+                channel,
+                sequence,
+                text,
+                truncated,
+            } => {
+                let payload = serde_json::json!({
+                    "channel": channel,
+                    "sequence": sequence,
+                    "text": text,
+                    "truncated": truncated
+                });
+                let persisted =
+                    persist_with_bounded_retry(store, &session_id, "STREAM_OUTPUT", payload);
+                if persisted.is_ok() {
+                    record_persisted_output(&stats, &channel, text.len());
+                } else if let Err(error) = persisted {
+                    let first_failure = mark_persistence_failure(
+                        &stats,
+                        "CODEX_STREAM_OUTPUT_PERSISTENCE_FAILED",
+                        &bounded_error(&error),
+                    );
+                    if first_failure {
+                        let diagnostic = serde_json::json!({
+                            "diagnosticCode":"CODEX_STREAM_OUTPUT_PERSISTENCE_FAILED",
+                            "diagnosticMessage":bounded_error(&error),
+                            "channel":channel,
+                            "sequence":sequence,
+                            "durable":false
+                        });
+                        let _ = persist_with_bounded_retry(
+                            store,
+                            &session_id,
+                            "PERSISTENCE_DEGRADED",
+                            diagnostic,
+                        );
+                    }
+                }
+            }
+            PersistRequest::Shutdown => break,
+        }
+    }
+}
+
+fn persist_with_bounded_retry(
+    store: &mut dyn EventStore,
+    session_id: &str,
+    event_type: &str,
+    payload: serde_json::Value,
+) -> Result<(), String> {
+    let mut last_error = String::from("unknown persistence failure");
+    for attempt in 0..PERSIST_RETRY_ATTEMPTS {
+        match store.insert_event(session_id, event_type, payload.clone()) {
+            Ok(()) => return Ok(()),
+            Err(error) => {
+                last_error = error;
+                if attempt + 1 < PERSIST_RETRY_ATTEMPTS {
+                    thread::sleep(PERSIST_RETRY_BACKOFF[attempt]);
+                }
+            }
+        }
+    }
+    Err(last_error)
+}
+
+fn record_persisted_output(stats: &Arc<Mutex<PersistenceStats>>, channel: &str, bytes: usize) {
+    if let Ok(mut state) = stats.lock() {
+        let target = if channel == "STDERR" {
+            &mut state.stderr
+        } else {
+            &mut state.stdout
+        };
+        target.bytes += bytes;
+        target.events += 1;
+    }
+}
+
+fn mark_persistence_failure(
+    stats: &Arc<Mutex<PersistenceStats>>,
+    code: &str,
+    message: &str,
+) -> bool {
+    let Ok(mut state) = stats.lock() else {
+        return false;
+    };
+    let first_failure = !state.degraded;
+    state.degraded = true;
+    state.failures = state.failures.saturating_add(1);
+    if state.diagnostic_code.is_none() {
+        state.diagnostic_code = Some(code.to_string());
+        state.diagnostic_message = Some(message.to_string());
+    }
+    first_failure
+}
+
+fn bounded_error(error: &str) -> String {
+    error.chars().take(512).collect()
 }
 
 impl AgentAdapter for CodexAdapter {
@@ -301,17 +638,19 @@ pub fn start(
         .map_err(|error| format!("mark Codex session running: {error}"))?;
     let stdout_capture = Arc::new(Mutex::new(Capture::default()));
     let stderr_capture = Arc::new(Mutex::new(Capture::default()));
+    let persistence_stats = Arc::new(Mutex::new(PersistenceStats::default()));
+    let event_writer = EventWriter::spawn(database, persistence_stats);
+    let event_writer_for_stdout = event_writer.handle();
+    let event_writer_for_stderr = event_writer.handle();
     let stdout_capture_for_monitor = stdout_capture.clone();
     let stderr_capture_for_monitor = stderr_capture.clone();
-    let database_for_stdout = database.clone();
-    let database_for_stderr = database.clone();
     let session_for_stdout = session_id.clone();
     let session_for_stderr = session_id.clone();
     let stdout_thread = thread::spawn(move || {
         read_stream(
             stdout,
             stdout_capture,
-            database_for_stdout,
+            event_writer_for_stdout,
             session_for_stdout,
             "STDOUT",
         )
@@ -320,7 +659,7 @@ pub fn start(
         read_stream(
             stderr,
             stderr_capture,
-            database_for_stderr,
+            event_writer_for_stderr,
             session_for_stderr,
             "STDERR",
         )
@@ -340,6 +679,7 @@ pub fn start(
             stderr_capture_for_monitor,
             stdout_thread,
             stderr_thread,
+            event_writer,
         )
     });
     load_session(database, &session_id)
@@ -356,6 +696,7 @@ fn monitor_process(
     stderr_capture: Arc<Mutex<Capture>>,
     stdout_thread: thread::JoinHandle<()>,
     stderr_thread: thread::JoinHandle<()>,
+    event_writer: EventWriter,
 ) {
     let status = loop {
         match child
@@ -370,6 +711,7 @@ fn monitor_process(
     };
     let _ = stdout_thread.join();
     let _ = stderr_thread.join();
+    let persistence = event_writer.finish();
     if let Ok(connection) = database.open_connection() {
         let state = if status.is_some() && stop_requested.load(Ordering::Acquire) {
             "STOPPED"
@@ -414,15 +756,27 @@ fn monitor_process(
                 )
             })
             .unwrap_or_default();
-        let _ = connection.execute(
+        let lifecycle_result = connection.execute(
             "UPDATE agent_sessions SET state=?2,ended_at=?3 WHERE id=?1",
             params![session_id, state, utc_timestamp()],
         );
-        let _ = insert_event(
+        let mut finish_payload = session_finished_payload(
+            state,
+            exit_code,
+            termination,
+            stdout_state,
+            stderr_state,
+            persistence,
+        );
+        if let Err(error) = lifecycle_result {
+            finish_payload["lifecyclePersistenceError"] =
+                serde_json::Value::String(bounded_error(&error.to_string()));
+        }
+        let _ = insert_event_with_bounded_retry(
             &connection,
             &session_id,
             "SESSION_FINISHED",
-            serde_json::json!({"state":state,"exitCode":exit_code,"termination":termination,"stdoutTruncated":stdout_state.0,"stderrTruncated":stderr_state.0,"stdoutBytes":stdout_state.1,"stderrBytes":stderr_state.1,"stdoutEvents":stdout_state.2,"stderrEvents":stderr_state.2}),
+            finish_payload,
         );
     }
     if let Ok(mut owned) = processes.lock() {
@@ -433,14 +787,12 @@ fn monitor_process(
 fn read_stream<R: Read>(
     mut reader: R,
     capture: Arc<Mutex<Capture>>,
-    database: DatabaseState,
+    writer: EventWriterHandle,
     session_id: String,
     channel: &str,
 ) {
-    let Ok(connection) = database.open_connection() else {
-        return;
-    };
     let mut buffer = [0u8; 4096];
+    let mut redactor = StreamRedactor::default();
     loop {
         let Ok(size) = reader.read(&mut buffer) else {
             break;
@@ -448,17 +800,31 @@ fn read_stream<R: Read>(
         if size == 0 {
             break;
         }
+        persist_redacted_records(
+            redactor.push(&buffer[..size]),
+            &capture,
+            &writer,
+            &session_id,
+            channel,
+        );
+    }
+    persist_redacted_records(redactor.finish(), &capture, &writer, &session_id, channel);
+}
+
+fn persist_redacted_records(
+    records: Vec<String>,
+    capture: &Arc<Mutex<Capture>>,
+    writer: &EventWriterHandle,
+    session_id: &str,
+    channel: &str,
+) {
+    for record in records {
         let event = capture
             .lock()
             .ok()
-            .and_then(|mut target| target.append(&buffer[..size]));
+            .and_then(|mut target| target.append(&record));
         if let Some((text, sequence, truncated)) = event {
-            let _ = insert_event(
-                &connection,
-                &session_id,
-                "STREAM_OUTPUT",
-                serde_json::json!({"channel":channel,"sequence":sequence,"text":text,"truncated":truncated}),
-            );
+            writer.stream(session_id, channel, sequence, text, truncated);
         }
     }
 }
@@ -586,32 +952,6 @@ fn parse_version(output: &Output) -> Result<String, ProbeError> {
     Ok(first.to_string())
 }
 
-fn redact_output(value: &str) -> String {
-    value
-        .lines()
-        .map(|line| {
-            let lower = line.to_ascii_lowercase();
-            if [
-                "api_key",
-                "apikey",
-                "token",
-                "password",
-                "secret",
-                "authorization",
-                "sk-",
-            ]
-            .iter()
-            .any(|needle| lower.contains(needle))
-            {
-                "[REDACTED SENSITIVE OUTPUT]"
-            } else {
-                line
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
 fn insert_event(
     connection: &rusqlite::Connection,
     session_id: &str,
@@ -620,6 +960,62 @@ fn insert_event(
 ) -> Result<(), String> {
     connection.execute("INSERT INTO agent_events (id,session_id,event_type,payload_json,occurred_at) VALUES (?1,?2,?3,?4,?5)", params![Uuid::new_v4().to_string(), session_id, event_type, payload.to_string(), utc_timestamp()]).map_err(|error| format!("persist Codex event: {error}"))?;
     Ok(())
+}
+
+fn insert_event_with_bounded_retry(
+    connection: &rusqlite::Connection,
+    session_id: &str,
+    event_type: &str,
+    payload: serde_json::Value,
+) -> Result<(), String> {
+    let mut last_error = String::from("unknown persistence failure");
+    for attempt in 0..PERSIST_RETRY_ATTEMPTS {
+        match insert_event(connection, session_id, event_type, payload.clone()) {
+            Ok(()) => return Ok(()),
+            Err(error) => {
+                last_error = error;
+                if attempt + 1 < PERSIST_RETRY_ATTEMPTS {
+                    thread::sleep(PERSIST_RETRY_BACKOFF[attempt]);
+                }
+            }
+        }
+    }
+    Err(last_error)
+}
+
+fn session_finished_payload(
+    state: &str,
+    exit_code: Option<i32>,
+    termination: &str,
+    stdout: (bool, usize, usize),
+    stderr: (bool, usize, usize),
+    persistence: PersistenceStats,
+) -> serde_json::Value {
+    serde_json::json!({
+        "state": state,
+        "exitCode": exit_code,
+        "termination": termination,
+        "stdoutTruncated": stdout.0,
+        "stderrTruncated": stderr.0,
+        "stdoutBytes": persistence.stdout.bytes,
+        "stderrBytes": persistence.stderr.bytes,
+        "stdoutEvents": persistence.stdout.events,
+        "stderrEvents": persistence.stderr.events,
+        "stdoutCapturedBytes": stdout.1,
+        "stderrCapturedBytes": stderr.1,
+        "stdoutCapturedEvents": stdout.2,
+        "stderrCapturedEvents": stderr.2,
+        "stdoutPersistedBytes": persistence.stdout.bytes,
+        "stderrPersistedBytes": persistence.stderr.bytes,
+        "stdoutPersistedEvents": persistence.stdout.events,
+        "stderrPersistedEvents": persistence.stderr.events,
+        "stdoutPersistenceDegraded": persistence.degraded && stdout.2 > persistence.stdout.events,
+        "stderrPersistenceDegraded": persistence.degraded && stderr.2 > persistence.stderr.events,
+        "outputDegraded": persistence.degraded,
+        "persistenceFailures": persistence.failures,
+        "persistenceDiagnosticCode": persistence.diagnostic_code,
+        "persistenceDiagnosticMessage": persistence.diagnostic_message
+    })
 }
 
 fn finish_failed(
@@ -653,6 +1049,8 @@ fn load_session(database: &DatabaseState, session_id: &str) -> Result<CodexSessi
     let mut diagnostic_code = None;
     let mut diagnostic_message = None;
     let mut exit_code = None;
+    let mut stdout_stream = Vec::new();
+    let mut stderr_stream = Vec::new();
     let mut events = connection.prepare("SELECT event_type,payload_json FROM agent_events WHERE session_id=?1 ORDER BY occurred_at ASC,id ASC LIMIT ?2").map_err(|error| format!("read Codex events: {error}"))?;
     let event_rows = events
         .query_map(params![session_id, MAX_SESSION_EVENTS as i64], |row| {
@@ -672,19 +1070,20 @@ fn load_session(database: &DatabaseState, session_id: &str) -> Result<CodexSessi
                 let text = value
                     .get("text")
                     .and_then(serde_json::Value::as_str)
-                    .unwrap_or_default();
+                    .unwrap_or_default()
+                    .to_string();
+                let sequence = value
+                    .get("sequence")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(usize::MAX as u64) as usize;
+                let truncated = value
+                    .get("truncated")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false);
                 if value.get("channel").and_then(serde_json::Value::as_str) == Some("STDERR") {
-                    stderr.push_str(text);
-                    stderr_truncated |= value
-                        .get("truncated")
-                        .and_then(serde_json::Value::as_bool)
-                        .unwrap_or(false);
+                    stderr_stream.push((sequence, text, truncated));
                 } else {
-                    stdout.push_str(text);
-                    stdout_truncated |= value
-                        .get("truncated")
-                        .and_then(serde_json::Value::as_bool)
-                        .unwrap_or(false);
+                    stdout_stream.push((sequence, text, truncated));
                 }
             }
             "STDOUT" => {
@@ -720,6 +1119,18 @@ fn load_session(database: &DatabaseState, session_id: &str) -> Result<CodexSessi
                     .get("diagnosticMessage")
                     .and_then(serde_json::Value::as_str)
                     .map(str::to_string);
+                if diagnostic_code.is_none() {
+                    diagnostic_code = value
+                        .get("persistenceDiagnosticCode")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_string);
+                }
+                if diagnostic_message.is_none() {
+                    diagnostic_message = value
+                        .get("persistenceDiagnosticMessage")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_string);
+                }
                 exit_code = value
                     .get("exitCode")
                     .and_then(serde_json::Value::as_i64)
@@ -735,6 +1146,16 @@ fn load_session(database: &DatabaseState, session_id: &str) -> Result<CodexSessi
             }
             _ => {}
         }
+    }
+    stdout_stream.sort_by_key(|(sequence, _, _)| *sequence);
+    stderr_stream.sort_by_key(|(sequence, _, _)| *sequence);
+    for (_, text, truncated) in stdout_stream {
+        stdout.push_str(&text);
+        stdout_truncated |= truncated;
+    }
+    for (_, text, truncated) in stderr_stream {
+        stderr.push_str(&text);
+        stderr_truncated |= truncated;
     }
     Ok(CodexSession {
         id: row.0,
@@ -904,7 +1325,96 @@ pub fn reconcile(database: &DatabaseState) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io;
     use tempfile::tempdir;
+
+    struct TinyChunkReader {
+        bytes: Vec<u8>,
+        offset: usize,
+        chunk_size: usize,
+    }
+
+    impl TinyChunkReader {
+        fn new(value: &str, chunk_size: usize) -> Self {
+            Self {
+                bytes: value.as_bytes().to_vec(),
+                offset: 0,
+                chunk_size,
+            }
+        }
+    }
+
+    impl Read for TinyChunkReader {
+        fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+            if self.offset == self.bytes.len() {
+                return Ok(0);
+            }
+            let size = self
+                .chunk_size
+                .min(buffer.len())
+                .min(self.bytes.len() - self.offset);
+            buffer[..size].copy_from_slice(&self.bytes[self.offset..self.offset + size]);
+            self.offset += size;
+            Ok(size)
+        }
+    }
+
+    #[derive(Default)]
+    struct TestStoreState {
+        events: Vec<(String, serde_json::Value)>,
+        stream_attempts: usize,
+        transient_failures: usize,
+        terminal_stream_failure: bool,
+    }
+
+    #[derive(Clone)]
+    struct TestStore {
+        state: Arc<Mutex<TestStoreState>>,
+    }
+
+    impl EventStore for TestStore {
+        fn insert_event(
+            &mut self,
+            _session_id: &str,
+            event_type: &str,
+            payload: serde_json::Value,
+        ) -> Result<(), String> {
+            let mut state = self.state.lock().unwrap();
+            if event_type == "STREAM_OUTPUT" {
+                state.stream_attempts += 1;
+                if state.terminal_stream_failure
+                    || state.stream_attempts <= state.transient_failures
+                {
+                    return Err("database is locked".into());
+                }
+            }
+            state.events.push((event_type.to_string(), payload));
+            Ok(())
+        }
+    }
+
+    fn test_store(
+        transient_failures: usize,
+        terminal_stream_failure: bool,
+    ) -> (TestStore, Arc<Mutex<TestStoreState>>) {
+        let state = Arc::new(Mutex::new(TestStoreState {
+            transient_failures,
+            terminal_stream_failure,
+            ..TestStoreState::default()
+        }));
+        (
+            TestStore {
+                state: state.clone(),
+            },
+            state,
+        )
+    }
+
+    fn seed_session(database: &DatabaseState, session_id: &str) {
+        let connection = database.open_connection().unwrap();
+        connection.execute("INSERT OR IGNORE INTO projects (id,name,local_path,status,priority,created_at,updated_at,original_path,normalized_path,registered_at) VALUES ('p','Project','C:\\project','ACTIVE',0,'now','now','C:\\project','c:\\project','now')", []).unwrap();
+        connection.execute("INSERT INTO agent_sessions (id,project_id,provider,state,created_at) VALUES (?1,'p','CODEX','RUNNING','now')", [session_id]).unwrap();
+    }
 
     #[test]
     fn common_contract_dispatches_codex_and_rejects_unallowlisted_provider() {
@@ -935,25 +1445,353 @@ mod tests {
         connection.execute("INSERT INTO agent_sessions (id,project_id,provider,state,created_at) VALUES ('s','p','CODEX','RUNNING','now')", []).unwrap();
         drop(connection);
         let capture = Arc::new(Mutex::new(Capture::default()));
+        let writer =
+            EventWriter::spawn(&database, Arc::new(Mutex::new(PersistenceStats::default())));
         let data = b"first\napi_key=secret\n";
         read_stream(
             std::io::Cursor::new(data),
             capture,
-            database.clone(),
+            writer.handle(),
             "s".into(),
             "STDOUT",
         );
+        let _ = writer.finish();
+        let connection = database.open_connection().unwrap();
+        let payloads: Vec<String> = connection
+            .prepare("SELECT payload_json FROM agent_events WHERE session_id='s' AND event_type='STREAM_OUTPUT'")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .map(|row| row.unwrap())
+            .collect();
+        let payload = payloads.join("\n");
+        assert!(payload.contains("first"));
+        assert!(payload.contains("REDACTED"));
+        assert!(!payload.contains("secret"));
+    }
+
+    #[test]
+    fn stream_redaction_handles_every_protected_marker_across_tiny_chunks() {
+        let cases = [
+            ("api_key", "api_key=super-secret-value"),
+            ("apikey", "apikey=super-secret-value"),
+            ("token", "token=super-secret-value"),
+            ("password", "password=super-secret-value"),
+            ("secret", "secret=super-secret-value"),
+            ("authorization", "authorization: Bearer super-secret-value"),
+            ("sk-", "sk-super-secret-value"),
+        ];
+        for (index, (marker, line)) in cases.iter().enumerate() {
+            let directory = tempdir().unwrap();
+            let database = DatabaseState::initialize(directory.path().to_path_buf()).unwrap();
+            let session_id = format!("s-{index}");
+            seed_session(&database, &session_id);
+            let stats = Arc::new(Mutex::new(PersistenceStats::default()));
+            let writer = EventWriter::spawn(&database, stats);
+            read_stream(
+                TinyChunkReader::new(&format!("{line}\n"), 1),
+                Arc::new(Mutex::new(Capture::default())),
+                writer.handle(),
+                session_id.clone(),
+                "STDOUT",
+            );
+            let _ = writer.finish();
+            let connection = database.open_connection().unwrap();
+            let payloads: Vec<String> = connection
+                .prepare("SELECT payload_json FROM agent_events WHERE session_id=?1 AND event_type='STREAM_OUTPUT'")
+                .unwrap()
+                .query_map([session_id], |row| row.get(0))
+                .unwrap()
+                .map(|row| row.unwrap())
+                .collect();
+            assert!(
+                !payloads.is_empty(),
+                "marker {marker} must produce evidence"
+            );
+            let combined = payloads.join("\n").to_ascii_lowercase();
+            assert!(!combined.contains(&line.to_ascii_lowercase()));
+            assert!(!combined.contains("super-secret-value"));
+            assert!(!combined.contains(marker));
+            assert!(combined.contains("redacted"));
+        }
+    }
+
+    #[test]
+    fn stream_redaction_flushes_unterminated_sensitive_lines_without_leaking() {
+        let directory = tempdir().unwrap();
+        let database = DatabaseState::initialize(directory.path().to_path_buf()).unwrap();
+        seed_session(&database, "unterminated");
+        let writer =
+            EventWriter::spawn(&database, Arc::new(Mutex::new(PersistenceStats::default())));
+        read_stream(
+            TinyChunkReader::new("password=super-secret-value", 1),
+            Arc::new(Mutex::new(Capture::default())),
+            writer.handle(),
+            "unterminated".into(),
+            "STDOUT",
+        );
+        let writer = writer.finish();
+        assert!(!writer.degraded);
         let connection = database.open_connection().unwrap();
         let payload: String = connection
+            .query_row("SELECT payload_json FROM agent_events WHERE session_id='unterminated' AND event_type='STREAM_OUTPUT'", [], |row| row.get(0))
+            .unwrap();
+        assert!(!payload.contains("password"));
+        assert!(payload.contains("REDACTED"));
+    }
+
+    #[test]
+    fn normal_utf8_content_crossing_chunks_reconstructs_from_durable_events() {
+        let directory = tempdir().unwrap();
+        let database = DatabaseState::initialize(directory.path().to_path_buf()).unwrap();
+        seed_session(&database, "utf8");
+        let writer =
+            EventWriter::spawn(&database, Arc::new(Mutex::new(PersistenceStats::default())));
+        read_stream(
+            TinyChunkReader::new("normal café output\nsecond line", 1),
+            Arc::new(Mutex::new(Capture::default())),
+            writer.handle(),
+            "utf8".into(),
+            "STDOUT",
+        );
+        let _ = writer.finish();
+        let session = load_session(&database, "utf8").unwrap();
+        assert_eq!(session.stdout, "normal café output\nsecond line");
+    }
+
+    #[test]
+    fn durable_stream_rows_match_final_persisted_output_counts() {
+        let directory = tempdir().unwrap();
+        let database = DatabaseState::initialize(directory.path().to_path_buf()).unwrap();
+        seed_session(&database, "counted");
+        let capture = Arc::new(Mutex::new(Capture::default()));
+        let writer =
+            EventWriter::spawn(&database, Arc::new(Mutex::new(PersistenceStats::default())));
+        read_stream(
+            TinyChunkReader::new("one\ntwo\n", 1),
+            capture.clone(),
+            writer.handle(),
+            "counted".into(),
+            "STDOUT",
+        );
+        let persistence = writer.finish();
+        let captured = capture.lock().unwrap();
+        let payload = session_finished_payload(
+            "COMPLETED",
+            Some(0),
+            "NATURAL",
+            (
+                captured.truncated,
+                captured.retained_bytes,
+                captured.event_count,
+            ),
+            (false, 0, 0),
+            persistence,
+        );
+        let connection = database.open_connection().unwrap();
+        let durable_rows: i64 = connection
             .query_row(
-                "SELECT payload_json FROM agent_events WHERE session_id='s'",
+                "SELECT COUNT(*) FROM agent_events WHERE session_id='counted' AND event_type='STREAM_OUTPUT'",
                 [],
                 |row| row.get(0),
             )
             .unwrap();
-        assert!(payload.contains("first"));
-        assert!(payload.contains("REDACTED"));
-        assert!(!payload.contains("secret"));
+        assert_eq!(durable_rows, payload["stdoutPersistedEvents"]);
+        assert_eq!(
+            payload["stdoutCapturedEvents"],
+            payload["stdoutPersistedEvents"]
+        );
+        assert_eq!(payload["outputDegraded"], false);
+    }
+
+    #[test]
+    fn stateful_redaction_remains_bounded_before_capture_caps_are_applied() {
+        let mut redactor = StreamRedactor::default();
+        let output = redactor.push(&vec![b'a'; MAX_REDACTION_CARRY_BYTES + 1]);
+        assert!(output.iter().any(|value| value.contains("REDACTED")));
+        assert!(redactor.carry.len() <= MAX_REDACTION_CARRY_BYTES);
+        let mut capture = Capture::default();
+        for _ in 0..(MAX_OUTPUT_EVENTS + 4) {
+            let _ = capture.append("safe");
+        }
+        assert_eq!(capture.event_count, MAX_OUTPUT_EVENTS);
+        assert!(capture.truncated);
+    }
+
+    #[test]
+    fn stateful_redacted_output_keeps_durable_event_and_byte_caps() {
+        let directory = tempdir().unwrap();
+        let database = DatabaseState::initialize(directory.path().to_path_buf()).unwrap();
+        seed_session(&database, "capped");
+        let capture = Arc::new(Mutex::new(Capture::default()));
+        let writer =
+            EventWriter::spawn(&database, Arc::new(Mutex::new(PersistenceStats::default())));
+        let input = (0..(MAX_OUTPUT_EVENTS + 8))
+            .map(|index| format!("safe-line-{index}\n"))
+            .collect::<String>();
+        read_stream(
+            TinyChunkReader::new(&input, 1),
+            capture.clone(),
+            writer.handle(),
+            "capped".into(),
+            "STDOUT",
+        );
+        let _ = writer.finish();
+        let captured = capture.lock().unwrap();
+        let connection = database.open_connection().unwrap();
+        let (rows, bytes): (i64, i64) = connection
+            .query_row(
+                "SELECT COUNT(*), COALESCE(SUM(length(json_extract(payload_json, '$.text'))), 0) FROM agent_events WHERE session_id='capped' AND event_type='STREAM_OUTPUT'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(rows, MAX_OUTPUT_EVENTS as i64);
+        assert!(bytes <= MAX_OUTPUT_BYTES as i64);
+        assert!(captured.truncated);
+    }
+
+    #[test]
+    fn concurrent_stdout_stderr_writes_use_one_bounded_writer_and_keep_channel_sequences() {
+        let (store, state) = test_store(0, false);
+        let writer = EventWriter::spawn_with_store(
+            Box::new(store),
+            Arc::new(Mutex::new(PersistenceStats::default())),
+        );
+        let stdout_writer = writer.handle();
+        let stderr_writer = writer.handle();
+        let stdout = thread::spawn(move || {
+            read_stream(
+                TinyChunkReader::new("out-1\nout-2\n", 1),
+                Arc::new(Mutex::new(Capture::default())),
+                stdout_writer,
+                "s".into(),
+                "STDOUT",
+            )
+        });
+        let stderr = thread::spawn(move || {
+            read_stream(
+                TinyChunkReader::new("err-1\nerr-2\n", 1),
+                Arc::new(Mutex::new(Capture::default())),
+                stderr_writer,
+                "s".into(),
+                "STDERR",
+            )
+        });
+        stdout.join().unwrap();
+        stderr.join().unwrap();
+        let persistence = writer.finish();
+        assert_eq!(persistence.stdout.events, 2);
+        assert_eq!(persistence.stderr.events, 2);
+        let state = state.lock().unwrap();
+        let stdout_sequences: Vec<i64> = state
+            .events
+            .iter()
+            .filter(|(event_type, _)| event_type == "STREAM_OUTPUT")
+            .filter(|(_, payload)| payload["channel"] == "STDOUT")
+            .map(|(_, payload)| payload["sequence"].as_i64().unwrap())
+            .collect();
+        let stderr_sequences: Vec<i64> = state
+            .events
+            .iter()
+            .filter(|(event_type, _)| event_type == "STREAM_OUTPUT")
+            .filter(|(_, payload)| payload["channel"] == "STDERR")
+            .map(|(_, payload)| payload["sequence"].as_i64().unwrap())
+            .collect();
+        assert_eq!(stdout_sequences, vec![1, 2]);
+        assert_eq!(stderr_sequences, vec![1, 2]);
+    }
+
+    #[test]
+    fn transient_persistence_failure_recovers_with_bounded_retries() {
+        let (store, state) = test_store(2, false);
+        let stats = Arc::new(Mutex::new(PersistenceStats::default()));
+        let writer = EventWriter::spawn_with_store(Box::new(store), stats);
+        read_stream(
+            TinyChunkReader::new("recoverable\n", 1),
+            Arc::new(Mutex::new(Capture::default())),
+            writer.handle(),
+            "s".into(),
+            "STDOUT",
+        );
+        let persistence = writer.finish();
+        assert!(!persistence.degraded);
+        assert_eq!(persistence.stdout.events, 1);
+        assert_eq!(state.lock().unwrap().stream_attempts, 3);
+    }
+
+    #[test]
+    fn terminal_persistence_failure_is_explicit_and_never_claims_durable_output() {
+        let (store, state) = test_store(0, true);
+        let stats = Arc::new(Mutex::new(PersistenceStats::default()));
+        let writer = EventWriter::spawn_with_store(Box::new(store), stats);
+        let capture = Arc::new(Mutex::new(Capture::default()));
+        read_stream(
+            TinyChunkReader::new("lost-output\n", 1),
+            capture.clone(),
+            writer.handle(),
+            "s".into(),
+            "STDOUT",
+        );
+        let persistence = writer.finish();
+        let captured = capture.lock().unwrap();
+        assert_eq!(captured.event_count, 1);
+        assert_eq!(persistence.stdout.events, 0);
+        assert!(persistence.degraded);
+        assert_eq!(
+            state.lock().unwrap().stream_attempts,
+            PERSIST_RETRY_ATTEMPTS
+        );
+        let events = state.lock().unwrap();
+        assert!(events
+            .events
+            .iter()
+            .any(|(event_type, _)| event_type == "PERSISTENCE_DEGRADED"));
+        let payload = session_finished_payload(
+            "FAILED",
+            Some(9),
+            "NATURAL",
+            (false, captured.retained_bytes, captured.event_count),
+            (false, 0, 0),
+            persistence,
+        );
+        assert_eq!(payload["stdoutCapturedEvents"], 1);
+        assert_eq!(payload["stdoutPersistedEvents"], 0);
+        assert_eq!(payload["stdoutEvents"], 0);
+        assert_eq!(payload["outputDegraded"], true);
+    }
+
+    #[test]
+    fn final_evidence_preserves_truthful_terminal_states_and_counts() {
+        for state in ["COMPLETED", "FAILED", "STOPPED", "CRASHED"] {
+            let payload = session_finished_payload(
+                state,
+                None,
+                "NATURAL",
+                (true, 12, 3),
+                (false, 4, 1),
+                PersistenceStats {
+                    stdout: ChannelPersistenceStats {
+                        bytes: 8,
+                        events: 2,
+                    },
+                    stderr: ChannelPersistenceStats {
+                        bytes: 4,
+                        events: 1,
+                    },
+                    failures: 1,
+                    degraded: true,
+                    diagnostic_code: Some("CODEX_STREAM_OUTPUT_PERSISTENCE_FAILED".into()),
+                    diagnostic_message: Some("locked".into()),
+                },
+            );
+            assert_eq!(payload["state"], state);
+            assert_eq!(payload["stdoutCapturedEvents"], 3);
+            assert_eq!(payload["stdoutPersistedEvents"], 2);
+            assert_eq!(payload["stderrCapturedEvents"], 1);
+            assert_eq!(payload["stderrPersistedEvents"], 1);
+            assert_eq!(payload["outputDegraded"], true);
+        }
     }
 
     #[test]
@@ -964,20 +1802,23 @@ mod tests {
         connection.execute("INSERT INTO projects (id,name,local_path,status,priority,created_at,updated_at,original_path,normalized_path,registered_at) VALUES ('p','Project','C:\\project','ACTIVE',0,'now','now','C:\\project','c:\\project','now')", []).unwrap();
         connection.execute("INSERT INTO agent_sessions (id,project_id,provider,state,started_at,created_at) VALUES ('s','p','CODEX','RUNNING','now','now')", []).unwrap();
         drop(connection);
+        let writer =
+            EventWriter::spawn(&database, Arc::new(Mutex::new(PersistenceStats::default())));
         read_stream(
             std::io::Cursor::new(b"stdout-line"),
             Arc::new(Mutex::new(Capture::default())),
-            database.clone(),
+            writer.handle(),
             "s".into(),
             "STDOUT",
         );
         read_stream(
             std::io::Cursor::new(b"stderr-line"),
             Arc::new(Mutex::new(Capture::default())),
-            database.clone(),
+            writer.handle(),
             "s".into(),
             "STDERR",
         );
+        let _ = writer.finish();
         let connection = database.open_connection().unwrap();
         insert_event(
             &connection,
@@ -996,12 +1837,12 @@ mod tests {
     fn capture_enforces_byte_and_event_caps_truthfully() {
         let mut capture = Capture::default();
         for _ in 0..(MAX_OUTPUT_EVENTS + 4) {
-            let _ = capture.append(b"x");
+            let _ = capture.append("x");
         }
         assert_eq!(capture.event_count, MAX_OUTPUT_EVENTS);
         assert!(capture.truncated);
         let mut bytes = Capture::default();
-        let _ = bytes.append(&vec![b'a'; MAX_OUTPUT_BYTES + 1]);
+        let _ = bytes.append(&"a".repeat(MAX_OUTPUT_BYTES + 1));
         assert_eq!(bytes.retained_bytes, MAX_OUTPUT_BYTES);
         assert!(bytes.truncated);
     }
@@ -1025,15 +1866,18 @@ mod tests {
             .unwrap();
         let stdout = child.stdout.take().unwrap();
         let handle = thread::spawn({
-            let db = database.clone();
+            let writer =
+                EventWriter::spawn(&database, Arc::new(Mutex::new(PersistenceStats::default())));
+            let writer_handle = writer.handle();
             move || {
                 read_stream(
                     stdout,
                     Arc::new(Mutex::new(Capture::default())),
-                    db,
+                    writer_handle,
                     "s".into(),
                     "STDOUT",
-                )
+                );
+                let _ = writer.finish();
             }
         });
         let deadline = Instant::now() + Duration::from_secs(2);
@@ -1099,6 +1943,8 @@ mod tests {
                 escalation_requested: escalation_requested.clone(),
             },
         );
+        let event_writer =
+            EventWriter::spawn(&database, Arc::new(Mutex::new(PersistenceStats::default())));
         let monitor = thread::spawn({
             let processes = adapter.processes.clone();
             let db = database.clone();
@@ -1114,6 +1960,7 @@ mod tests {
                     Arc::new(Mutex::new(Capture::default())),
                     thread::spawn(|| {}),
                     thread::spawn(|| {}),
+                    event_writer,
                 )
             }
         });

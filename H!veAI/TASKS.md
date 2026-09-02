@@ -33,7 +33,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition
 - M10A remediation, independent re-audit, and Akilta native click acceptance are complete; Akilta footer link = PASS/ACCEPTED.
 - Original M11 implementation is a historical strict-audit FAIL with 8 MAJOR findings.
 - M11A REV4, REV5, REV6, and REV7 remediation history remains immutable; all findings are closed by the accepted strict audits. M11A REV7 = PASS/CLOSED and the final Projects visual cleanup = PASS/CLOSED.
-- M11 = PASS/CLOSED. M12, M12A R26, and M12B native Open Cockpit remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13 is READY / ACTIVE FOR NEXT IMPLEMENTATION RUN; its implementation has not started. M21 remains planned/not started.
+- M11 = PASS/CLOSED. M12, M12A R26, and M12B native Open Cockpit remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B implementation remediation is complete and pending independent strict re-audit plus user native/visual acceptance. M21 remains planned/not started.
 - M21 remains planned and was not started.
 
 ---
@@ -1144,6 +1144,16 @@ M13 IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT AUDIT + USER NATIVE/VIS
 
 M13A REMEDIATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
 
+## M13B - Stream-safe redaction and durable event truth remediation
+
+- [x] Close R30 with bounded stateful stream redaction before persistence.
+- [x] Close R31 with a bounded single stream persistence writer, retry recovery, and explicit degradation evidence.
+- [x] Add adversarial split-marker, UTF-8, cap, concurrency, retry, terminal-failure, durable-row, and terminal-state tests.
+- [x] Run full regression, security, and governed publication gates.
+- [ ] Independent strict re-audit and user native/visual acceptance.
+
+M13B REMEDIATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
+
 ---
 
 # M14 - Agent Session Center
@@ -1543,7 +1553,7 @@ M20 PLANNED/BLOCKED until M19 and final hardening gates.
 - M00-M09 are PASS/CLOSED.
 - Pre-M10 Native UX Hotfix X01/X02 is PASS/CLOSED after independent audit and user native acceptance.
 - M10 original strict audit is historical FAIL; M10A remediation is IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT.
-- M13 is READY / ACTIVE FOR NEXT IMPLEMENTATION RUN but its implementation has not started; M14-M20 remain planned/blocked.
+- M13B remediation is complete; M13 remains open pending independent strict re-audit and user native/visual acceptance. M14-M20 remain planned/blocked.
 - M11/M12 must implement the Project Dashboard manifest authority resolver before treating `.hiveai/PROJECT_DASHBOARD.md` as live runtime truth.
 - Each future milestone should be executed as one bounded milestone unless an actual independent audit requires a remediation prompt.
 - Subpackage numbering is for traceability, source/evidence mapping, and progress visibility, not an instruction to generate many tiny prompts.
