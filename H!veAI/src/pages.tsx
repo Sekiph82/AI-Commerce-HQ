@@ -1792,22 +1792,67 @@ function AgentTerminal({ session, onResize }: { session: AgentSession; onResize:
   return <div className="agent-terminal" ref={host} aria-label={`${session.provider} live terminal`} data-testid="agent-live-terminal" />;
 }
 
-function AgentSessionOutput({ label, text, truncated }: { label: "stdout" | "stderr"; text: string; truncated: boolean }) {
-  const rows = text.split(/\r?\n/).map((line) => {
-    if (!line) return { label: "Output", content: "" };
+type ReadableOutputRow = { label: "Assistant" | "Tool action" | "Output"; content: string };
+
+function readableText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.map(readableText).filter(Boolean).join("\n");
+  if (!value || typeof value !== "object") return "";
+  const item = value as Record<string, unknown>;
+  if (typeof item.text === "string") return item.text;
+  if (typeof item.content === "string") return item.content;
+  if (item.content) return readableText(item.content);
+  if (item.message) return readableText(item.message);
+  if (item.delta) return readableText(item.delta);
+  return "";
+}
+
+function readableOutputRows(text: string): ReadableOutputRow[] {
+  const rows: ReadableOutputRow[] = [];
+  const add = (label: ReadableOutputRow["label"], content: string) => {
+    const value = content.trim();
+    if (!value || rows.some((row) => row.content === value)) return;
+    rows.push({ label, content: value });
+  };
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim()) continue;
     try {
       const parsed: unknown = JSON.parse(line);
-      const eventLabel = parsed && typeof parsed === "object" && "type" in parsed && typeof parsed.type === "string" ? parsed.type : "JSON event";
-      return { label: eventLabel, content: JSON.stringify(parsed, null, 2) ?? line };
+      if (!parsed || typeof parsed !== "object") { add("Output", line); continue; }
+      const item = parsed as Record<string, unknown>;
+      const type = typeof item.type === "string" ? item.type : "";
+      const message = readableText(item.message ?? item.delta ?? item.content);
+      if (type === "assistant" || type === "content_block_delta" || type === "message") add("Assistant", message);
+      else if (type === "result") add("Assistant", typeof item.result === "string" ? item.result : message);
+      else if (type.includes("tool") || type === "command.started" || type === "command.completed") {
+        const summary = [type, typeof item.command === "string" ? item.command : "", typeof item.status === "string" ? item.status : ""].filter(Boolean).join(" · ");
+        add("Tool action", summary || message);
+      } else if (message) add("Output", message);
+      else if (type) add("Output", type);
     } catch {
-      return { label: "Output", content: line };
+      add("Output", line);
     }
-  });
-  return <section className={`agent-output-reader ${label === "stderr" ? "agent-output-reader-error" : ""}`} aria-label={`${label} output`} data-testid={`agent-${label}-reader`}>
-    <div className="agent-output-reader-heading">{label === "stderr" ? "Error output" : "Session output"}</div>
-    <div className="agent-output-events">{rows.map((row, index) => <div className="agent-output-event" key={`${label}-${index}`}><div className="agent-output-event-label">{index + 1}. {row.label}</div><code className="agent-output-event-content">{row.content}</code></div>)}</div>
-    {truncated ? <div className="agent-output-truncated">[{label === "stderr" ? "error output" : "output"} truncated]</div> : null}
+  }
+  return rows;
+}
+
+function AgentSessionOutput({ text, truncated }: { text: string; truncated: boolean }) {
+  const rows = readableOutputRows(text);
+  return <section className="agent-output-reader" aria-label="Agent output" data-testid="agent-stdout-reader">
+    <div className="agent-output-reader-heading">Agent output</div>
+    <div className="agent-output-events">{rows.length ? rows.map((row, index) => <div className={`agent-output-event agent-output-event-${row.label.toLowerCase().replace(" ", "-")}`} key={`${row.label}-${index}`}><div className="agent-output-event-label">{row.label}</div><div className="agent-output-event-content">{row.content}</div></div>) : <div className="agent-output-empty">No agent output recorded.</div>}</div>
+    {truncated ? <div className="agent-output-truncated">[output truncated]</div> : null}
   </section>;
+}
+
+function sessionDiagnostic(session: AgentSession): string | null {
+  if (session.diagnosticMessage) return session.diagnosticMessage;
+  const stderr = readableOutputRows(session.stderr).map((row) => row.content).join("\n").trim();
+  return stderr || null;
+}
+
+function SessionTime({ session, now }: { session: AgentSession; now: number }) {
+  return <span className="agent-session-time">{session.startedAt ? new Date(session.startedAt).toLocaleString() : "Unknown start"}{session.endedAt ? ` · ${new Date(session.endedAt).toLocaleString()}` : ` · ${elapsedLabel(session, now)} elapsed`}</span>;
 }
 
 function ProviderBadge({ provider }: { provider: SessionProvider }) {
@@ -1842,7 +1887,7 @@ export function Agents() {
   const [git, setGit] = React.useState<GitSnapshot | null>(null);
   const [gitDiff, setGitDiff] = React.useState<GitDiff | null>(null);
   const [now, setNow] = React.useState(() => Date.now());
-  const selectedSession = sessions.find((session) => session.id === selectedSessionId) ?? sessions[0] ?? null;
+  const selectedSession = sessions.find((session) => session.id === selectedSessionId) ?? null;
   const selectedReadiness = readiness.find((item) => item.provider === provider);
   const refreshSessions = React.useCallback(async () => {
     if (!desktop || !selected?.id) return;
@@ -1854,6 +1899,7 @@ export function Agents() {
   }, [desktop, refreshSessions]);
   React.useEffect(() => { setProvider(selected?.preferredAgentProvider ?? "CODEX"); }, [selected?.id, selected?.preferredAgentProvider]);
   React.useEffect(() => { void refresh(); }, [refresh]);
+  React.useEffect(() => { if (selectedSessionId && !sessions.some((session) => session.id === selectedSessionId)) setSelectedSessionId(null); }, [sessions, selectedSessionId]);
   React.useEffect(() => { if (!desktop || !selected?.id) return; const timer = window.setInterval(() => { void refreshSessions(); }, 750); return () => window.clearInterval(timer); }, [desktop, refreshSessions, selected?.id]);
   React.useEffect(() => {
     if (!selectedSession) { setGit(null); setGitDiff(null); return; }
@@ -1879,8 +1925,8 @@ export function Agents() {
     {error ? <div className="safe-notice" role="alert">{error}</div> : null}
     <section className="panel agent-center-readiness"><SectionHeader title="Provider readiness" detail="Bounded native adapters" /><div className="agent-readiness-grid">{readiness.map((item) => <AgentReadinessCard key={item.provider} item={item} />)}{!readiness.length ? <div className="fixture-note">Provider readiness is checked in native H!veAI.</div> : null}</div></section>
     <section className="panel agent-operation-panel"><SectionHeader title="Start owned session" detail="Registered project, fixed provider policy" /><label>Project<select aria-label="Agent project" value={selected?.id ?? ""} onChange={(event) => selectProject(event.target.value, true)} disabled={busy || !records.length}>{records.map((record) => <option key={record.id} value={record.id}>{record.name}</option>)}</select></label><label>Provider<select aria-label="Agent provider" value={provider} onChange={(event) => void chooseProvider(event.target.value as SessionProvider)} disabled={busy}><option value="CODEX">Codex</option><option value="CLAUDE">Claude</option></select></label><label>Task ID <span className="agent-field-note">optional, must belong to project</span><input aria-label="Agent task ID" value={taskId} onChange={(event) => setTaskId(event.target.value)} disabled={busy} maxLength={256} /></label><label>Prompt<textarea aria-label="Agent prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} disabled={busy} maxLength={65536} rows={5} /></label><div className="agent-action-row"><button className="primary-button" type="button" onClick={() => void start()} disabled={!desktop || !selected || !selectedReadiness?.available || !prompt.trim() || busy}><Terminal size={15} /> Start {provider} session</button>{selectedSession && ["FAILED", "STOPPED", "CRASHED"].includes(selectedSession.state) ? <button className="secondary-button" type="button" onClick={() => void retry()} disabled={!prompt.trim() || busy}><RefreshCw size={15} /> Retry as new session</button> : null}</div></section>
-    <section className="panel agent-sessions-panel"><SectionHeader title="Active and persisted sessions" detail={selected ? selected.name : "No project selected"} /><div className="agent-session-list">{sessions.map((session) => <button className={`agent-session-row ${session.id === selectedSession?.id ? "agent-session-row-selected" : ""}`} type="button" key={session.id} onClick={() => setSelectedSessionId(session.id)}><span><ProviderBadge provider={session.provider} /><strong>{session.operationKind}</strong></span><span>{session.state}</span><small>{session.startedAt ?? "Unknown"}</small></button>)}{!sessions.length ? <EmptyState title="No agent sessions" detail={selected ? "No persisted Codex or Claude session evidence is available." : "Register a project to use the session center."} /> : null}</div></section>
-     {selectedSession ? <section className="panel agent-session-detail"><SectionHeader title="Selected session" detail={`${selectedSession.provider} / ${selectedSession.state}`} /><div className="agent-session-title"><ProviderBadge provider={selectedSession.provider} /><strong>{selectedSession.id}</strong><span>{selectedSession.state}</span></div><div className="agent-session-actions"><button className="secondary-button" type="button" onClick={() => void stop()} disabled={busy || !["STARTING", "RUNNING"].includes(selectedSession.state)}>Stop owned session</button><button className="secondary-button" type="button" onClick={() => setError(`${selectedSession.provider} resume is not supported by the verified provider capability`)} disabled={!selectedSession.supportsResume}>Resume</button></div><CockpitFacts facts={[["Project", selectedSession.projectId], ["Task", selectedSession.taskId ?? "Freeform"], ["Working directory", selectedSession.cwd], ["Started", selectedSession.startedAt ?? "Unknown"], ["Elapsed", selectedSession.elapsedMs == null ? elapsedLabel(selectedSession, now) : `${selectedSession.elapsedMs} ms`], ["Ended", selectedSession.endedAt ?? "Active"], ["Exit code", selectedSession.exitCode == null ? "Active / unknown" : String(selectedSession.exitCode)], ["Diagnostic code", selectedSession.diagnosticCode ?? "None"], ["Diagnostic message", selectedSession.diagnosticMessage ?? "None"], ["Prompt reference", selectedSession.promptReference ?? "Unavailable"], ["Provider version", selectedSession.providerVersion ?? "Unavailable"]]} /><div className="agent-detail-grid"><div><div className="agent-detail-heading">Live output</div><AgentTerminal session={selectedSession} onResize={resize} />{selectedSession.stdout ? <AgentSessionOutput label="stdout" text={selectedSession.stdout} truncated={selectedSession.stdoutTruncated} /> : null}{selectedSession.stderr ? <AgentSessionOutput label="stderr" text={selectedSession.stderr} truncated={selectedSession.stderrTruncated} /> : null}</div><div><div className="agent-detail-heading">Session timeline</div><div className="agent-timeline">{(selectedSession.events ?? []).map((event) => <div className="agent-timeline-row" key={event.id}><time>{event.occurredAt}</time><strong>{event.eventType}</strong><code>{JSON.stringify(event.payload ?? {})}</code></div>)}{!(selectedSession.events ?? []).length ? <span className="cockpit-muted">No durable event evidence available.</span> : null}</div><div className="agent-detail-heading">Changed files / Git authority</div><div className="agent-changed-files">{git?.stagedFiles.map((file) => <span key={`staged-${file.path}`}>STAGED: {file.path}</span>)}{git?.unstagedFiles.map((file) => <span key={`unstaged-${file.path}`}>UNSTAGED: {file.path}</span>)}{git?.untrackedFiles.map((file) => <span key={`untracked-${file}`}>UNTRACKED: {file}</span>)}{git?.conflictedFiles.map((file) => <span key={`conflict-${file}`}>CONFLICT: {file}</span>)}{git && !git.stagedFiles.length && !git.unstagedFiles.length && !git.untrackedFiles.length && !git.conflictedFiles.length ? <span className="cockpit-muted">No Git changes detected by the Git Engine.</span> : null}{!git ? <span className="cockpit-muted">Git evidence unavailable.</span> : null}</div>{gitDiff ? <details className="agent-diff"><summary>View bounded Git diff</summary><pre className="cockpit-code">{gitDiff.text || "No diff content"}</pre>{gitDiff.truncated ? <span className="agent-output-truncated">[Git diff truncated]</span> : null}</details> : null}</div></div><div className="agent-permission-note">Permission model: provider-managed. Claude runs in restricted plan mode; Codex keeps its accepted M13 policy. No generic approval or shell control surface is exposed.</div></section> : null}
+    <section className="panel agent-sessions-panel"><SectionHeader title="Active and persisted sessions" detail={selected ? selected.name : "No project selected"} /><div className="agent-session-list">{sessions.map((session) => <button className={`agent-session-row ${session.id === selectedSession?.id ? "agent-session-row-selected" : ""}`} type="button" key={session.id} onClick={() => setSelectedSessionId(session.id)} aria-label={`View ${session.provider} ${session.operationKind} ${session.state}`}><span className="agent-session-row-main"><ProviderBadge provider={session.provider} /><strong>{session.operationKind.replaceAll("_", " ")}</strong></span><span className="agent-session-row-project">{selected?.name ?? "Registered project"}</span><span className={`agent-session-row-state agent-state-${session.state.toLowerCase()}`}>{session.state.replaceAll("_", " ")}</span><SessionTime session={session} now={now} /><span className="agent-session-view">View</span></button>)}{!sessions.length ? <EmptyState title="No agent sessions" detail={selected ? "No persisted Codex or Claude session evidence is available." : "Register a project to use the session center."} /> : null}</div></section>
+    {selectedSession ? <section className="panel agent-session-detail" data-testid="agent-session-detail"><div className="agent-detail-header"><div><div className="eyebrow">Selected session</div><h2>{selectedSession.provider} session</h2></div><button className="icon-button" type="button" aria-label="Close session details" title="Close session details" onClick={() => setSelectedSessionId(null)}><X size={16} /></button></div><div className="agent-session-summary"><ProviderBadge provider={selectedSession.provider} /><strong>{selected?.name ?? "Registered project"}</strong><span className={`agent-session-row-state agent-state-${selectedSession.state.toLowerCase()}`}>{selectedSession.state.replaceAll("_", " ")}</span><span>{selectedSession.operationKind.replaceAll("_", " ")}</span></div><div className="agent-session-actions">{["STARTING", "RUNNING"].includes(selectedSession.state) ? <button className="secondary-button" type="button" onClick={() => void stop()} disabled={busy}>Stop owned session</button> : null}{selectedSession.supportsResume ? <button className="secondary-button" type="button" onClick={() => setError(`${selectedSession.provider} resume is not supported by the verified provider capability`)} disabled={busy}>Resume</button> : null}{selectedSession.state === "FAILED" ? <button className="secondary-button" type="button" onClick={() => void retry()} disabled={!prompt.trim() || busy}><RefreshCw size={15} /> Retry as new session</button> : null}</div><CockpitFacts facts={[["Project", selected?.name ?? selectedSession.projectId], ["Task", selectedSession.taskId ?? "Freeform operation"], ["Started", selectedSession.startedAt ?? "Unknown"], ["Ended", selectedSession.endedAt ?? "Active"], ["Elapsed", selectedSession.elapsedMs == null ? elapsedLabel(selectedSession, now) : `${selectedSession.elapsedMs} ms`], ...(selectedSession.exitCode != null ? [["Exit code", String(selectedSession.exitCode)] as [string, string]] : [])]} />{selectedSession.state === "FAILED" && sessionDiagnostic(selectedSession) ? <div className="agent-diagnostic-card" role="alert"><strong>Diagnostic</strong><p>{sessionDiagnostic(selectedSession)}</p></div> : null}<AgentSessionOutput text={selectedSession.stdout} truncated={selectedSession.stdoutTruncated} />{selectedSession.supportsPty && ["STARTING", "RUNNING", "WAITING_PERMISSION", "STOPPING"].includes(selectedSession.state) ? <details className="agent-advanced-section"><summary>Live terminal</summary><AgentTerminal session={selectedSession} onResize={resize} /></details> : null}<details className="agent-advanced-section"><summary>Technical details</summary><CockpitFacts facts={[["Session ID", selectedSession.id], ["Working directory", selectedSession.cwd], ["Provider version", selectedSession.providerVersion ?? "Unavailable"], ["Prompt reference", selectedSession.promptReference ?? "Unavailable"], ["Diagnostic code", selectedSession.diagnosticCode ?? "None"]]} /></details><details className="agent-advanced-section"><summary>Timeline</summary><div className="agent-timeline">{(selectedSession.events ?? []).map((event) => <div className="agent-timeline-row" key={event.id}><time>{event.occurredAt}</time><strong>{event.eventType.replaceAll("_", " ")}</strong><code>{JSON.stringify(event.payload ?? {})}</code></div>)}{!(selectedSession.events ?? []).length ? <span className="cockpit-muted">No durable event evidence available.</span> : null}</div></details><details className="agent-advanced-section"><summary>Raw events</summary><div className="agent-raw-events">{(selectedSession.events ?? []).map((event) => <pre key={event.id}>{JSON.stringify(event, null, 2)}</pre>)}{!(selectedSession.events ?? []).length ? <span className="cockpit-muted">No durable event evidence available.</span> : null}</div></details><details className="agent-advanced-section"><summary>Git evidence</summary><div className="agent-changed-files">{git?.stagedFiles.map((file) => <span key={`staged-${file.path}`}>STAGED: {file.path}</span>)}{git?.unstagedFiles.map((file) => <span key={`unstaged-${file.path}`}>UNSTAGED: {file.path}</span>)}{git?.untrackedFiles.map((file) => <span key={`untracked-${file}`}>UNTRACKED: {file}</span>)}{git?.conflictedFiles.map((file) => <span key={`conflict-${file}`}>CONFLICT: {file}</span>)}{git && !git.stagedFiles.length && !git.unstagedFiles.length && !git.untrackedFiles.length && !git.conflictedFiles.length ? <span className="cockpit-muted">No Git changes detected by the Git Engine.</span> : null}{!git ? <span className="cockpit-muted">Git evidence unavailable.</span> : null}</div>{gitDiff ? <details className="agent-diff"><summary>View bounded Git diff</summary><pre className="cockpit-code">{gitDiff.text || "No diff content"}</pre>{gitDiff.truncated ? <span className="agent-output-truncated">[Git diff truncated]</span> : null}</details> : null}</details><div className="agent-permission-note">Permission model: provider-managed. Claude runs in restricted plan mode; Codex keeps its accepted M13 policy. No generic approval or shell control surface is exposed.</div></section> : null}
   </>;
 }
 

@@ -77,12 +77,14 @@ describe("M13 Codex adapter", () => {
       return Promise.resolve({});
     });
     render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /View CODEX CODEX_EXEC FAILED/i }));
+    fireEvent.click(screen.getByText("Technical details"));
     expect((await screen.findAllByText("FAILED")).length).toBeGreaterThan(0);
     expect(screen.getByText("CODEX_PROCESS_FAILED")).toBeInTheDocument();
     expect(screen.getByText("Codex exited with code 1")).toBeInTheDocument();
     expect(screen.getByText("1")).toBeInTheDocument();
-    expect(screen.getByText(/model requires a newer Codex version/)).toBeInTheDocument();
-    expect(screen.getByText(/\[REDACTED SENSITIVE OUTPUT\]/)).toBeInTheDocument();
+    expect(screen.queryByText(/model requires a newer Codex version/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\[REDACTED SENSITIVE OUTPUT\]/)).not.toBeInTheDocument();
     expect(screen.queryByText(/password=/i)).not.toBeInTheDocument();
   });
 
@@ -117,6 +119,7 @@ describe("M13 Codex adapter", () => {
       return Promise.resolve({});
     });
     render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /View CODEX CODEX_EXEC COMPLETED/i }));
     expect((await screen.findAllByText("COMPLETED")).length).toBeGreaterThan(0);
     expect(screen.getByText("status: clean")).toBeInTheDocument();
   });
@@ -155,6 +158,7 @@ describe("M13 Codex adapter", () => {
       return Promise.resolve({});
     });
     const { container } = render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /View CODEX CODEX_EXEC COMPLETED/i }));
     const reader = await screen.findByTestId("agent-stdout-reader");
     expect(reader).toHaveClass("agent-output-reader");
     expect(reader).toHaveTextContent("command.completed");

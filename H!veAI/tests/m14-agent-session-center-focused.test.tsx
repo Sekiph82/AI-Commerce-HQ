@@ -62,10 +62,38 @@ describe("M14 Agent Session Center", () => {
       return Promise.resolve({});
     });
     render(<App />);
-    expect(await screen.findByText("SESSION_STARTED")).toBeInTheDocument();
+    const viewButton = await screen.findByRole("button", { name: /View CLAUDE FREEFORM_PROJECT_OPERATION COMPLETED/i });
+    expect(screen.queryByTestId("agent-session-detail")).not.toBeInTheDocument();
+    expect(screen.queryByText("SESSION_STARTED")).not.toBeInTheDocument();
+    fireEvent.click(viewButton);
     expect(screen.getByTestId("agent-stdout-reader")).toHaveTextContent("read-only repository summary");
+    expect(screen.queryByText("SESSION_STARTED")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Timeline"));
+    expect(await screen.findByText("SESSION STARTED")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Git evidence"));
     expect(await screen.findByText("UNTRACKED: README.md")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("View bounded Git diff"));
     expect(await screen.findByText("diff --git a/README.md b/README.md")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Resume" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Close session details" }));
+    expect(screen.queryByTestId("agent-session-detail")).not.toBeInTheDocument();
+  });
+
+  it("keeps persisted sessions compact and permits only one explicit detail", async () => {
+    const secondSession = { ...session, id: "codex-session", provider: "CODEX", operationKind: "CODEX_EXEC" };
+    invoke.mockImplementation((command: string) => {
+      if (command === "hiveai_projects_list") return Promise.resolve(records);
+      if (command === "hiveai_agent_readiness") return Promise.resolve(readiness);
+      if (command === "hiveai_agent_sessions_list") return Promise.resolve([session, secondSession]);
+      return Promise.resolve({ stagedFiles: [], unstagedFiles: [], untrackedFiles: [], conflictedFiles: [] });
+    });
+    render(<App />);
+    expect(await screen.findByRole("button", { name: /View CLAUDE FREEFORM_PROJECT_OPERATION COMPLETED/i })).toBeInTheDocument();
+    expect(screen.queryByTestId("agent-session-detail")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /View CLAUDE FREEFORM_PROJECT_OPERATION COMPLETED/i }));
+    expect(screen.getByTestId("agent-session-detail")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /View CODEX CODEX_EXEC COMPLETED/i }));
+    expect(screen.getAllByTestId("agent-session-detail")).toHaveLength(1);
+    expect(screen.getByText("CODEX session")).toBeInTheDocument();
   });
 });

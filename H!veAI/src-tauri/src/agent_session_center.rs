@@ -519,7 +519,7 @@ fn start_claude(
         &connection,
         &session_id,
         "PROCESS_POLICY",
-        json!({"executable":"claude.exe","argumentPolicy":"FIXED_CLAUDE_PRINT_ARGS","args":["--print","--output-format","stream-json","--no-session-persistence","--permission-mode","plan","--restricted"],"cwd":cwd.to_string_lossy(),"shell":false,"promptTransport":"STDIN_BOUNDED"}),
+        json!({"executable":"claude.exe","argumentPolicy":"FIXED_CLAUDE_PRINT_ARGS","args":["--print","--output-format","stream-json","--verbose","--no-session-persistence","--permission-mode","plan","--restricted"],"cwd":cwd.to_string_lossy(),"shell":false,"promptTransport":"STDIN_BOUNDED"}),
     )?;
     let mut command = background_command(&executable);
     command
@@ -589,6 +589,7 @@ fn fixed_claude_args() -> Vec<String> {
         "--print".into(),
         "--output-format".into(),
         "stream-json".into(),
+        "--verbose".into(),
         "--no-session-persistence".into(),
         "--permission-mode".into(),
         "plan".into(),
@@ -1380,6 +1381,7 @@ mod tests {
                 "--print",
                 "--output-format",
                 "stream-json",
+                "--verbose",
                 "--no-session-persistence",
                 "--permission-mode",
                 "plan",
