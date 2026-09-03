@@ -1,7 +1,8 @@
 use crate::db::DatabaseState;
+use crate::final_response::{FinalResponseCapture, FinalResponseState, ProviderKind};
 use crate::process_policy::background_command;
 use crate::projects::{fetch_project, ProjectRecord};
-use crate::stream_sanitizer::{has_meaningful_provider_output, StreamRedactor};
+use crate::stream_sanitizer::StreamRedactor;
 use crate::time::utc_timestamp;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
@@ -73,6 +74,10 @@ pub struct AdapterSession {
     pub stderr: String,
     pub stdout_truncated: bool,
     pub stderr_truncated: bool,
+    pub final_response: Option<String>,
+    pub final_response_truncated: bool,
+    pub final_response_state: String,
+    pub final_response_role: Option<String>,
     pub diagnostic_code: Option<String>,
     pub diagnostic_message: Option<String>,
     pub prompt_body: Option<String>,
@@ -625,15 +630,18 @@ pub fn start(
     let event_writer_for_stderr = event_writer.handle();
     let stdout_capture_for_monitor = stdout_capture.clone();
     let stderr_capture_for_monitor = stderr_capture.clone();
+    let final_response = Arc::new(Mutex::new(FinalResponseCapture::default()));
+    let final_response_for_monitor = final_response.clone();
     let session_for_stdout = session_id.clone();
     let session_for_stderr = session_id.clone();
     let stdout_thread = thread::spawn(move || {
-        read_stream(
+        read_stream_with_final(
             stdout,
             stdout_capture,
             event_writer_for_stdout,
             session_for_stdout,
             "STDOUT",
+            Some(final_response),
         )
     });
     let stderr_thread = thread::spawn(move || {
@@ -658,6 +666,7 @@ pub fn start(
             escalation_requested,
             stdout_capture_for_monitor,
             stderr_capture_for_monitor,
+            final_response_for_monitor,
             stdout_thread,
             stderr_thread,
             event_writer,
@@ -675,6 +684,7 @@ fn monitor_process(
     escalation_requested: Arc<AtomicBool>,
     stdout_capture: Arc<Mutex<Capture>>,
     stderr_capture: Arc<Mutex<Capture>>,
+    final_response: Arc<Mutex<FinalResponseCapture>>,
     stdout_thread: thread::JoinHandle<()>,
     stderr_thread: thread::JoinHandle<()>,
     event_writer: EventWriter,
@@ -763,18 +773,37 @@ fn monitor_process(
             finish_payload["diagnosticMessage"] =
                 serde_json::Value::String("Codex process ended without a status".into());
         } else if state == "COMPLETED"
-            && !stdout_capture
+            && final_response
                 .lock()
                 .ok()
-                .map(|capture| has_meaningful_provider_output(&capture.text))
-                .unwrap_or(false)
+                .map(|capture| capture.state() == FinalResponseState::Unavailable)
+                .unwrap_or(true)
         {
             finish_payload["diagnosticCode"] =
-                serde_json::Value::String("CODEX_ASSISTANT_EVIDENCE_UNAVAILABLE".into());
+                serde_json::Value::String("CODEX_FINAL_RESPONSE_UNAVAILABLE".into());
             finish_payload["diagnosticMessage"] = serde_json::Value::String(
-                "Codex exited successfully, but no durable assistant or result text was captured"
+                "Codex exited successfully, but no dedicated final assistant response was captured"
                     .into(),
             );
+        }
+        let final_snapshot = final_response
+            .lock()
+            .ok()
+            .map(|capture| {
+                (
+                    capture.text().map(str::to_string),
+                    capture.truncated(),
+                    capture.state().as_str().to_string(),
+                )
+            })
+            .unwrap_or((None, false, "UNAVAILABLE".into()));
+        if let Err(error) = connection.execute(
+            "UPDATE agent_sessions SET final_response=?2,final_response_truncated=?3,final_response_state=?4,final_response_role=CASE WHEN ?2 IS NULL THEN NULL ELSE 'assistant' END WHERE id=?1",
+            params![session_id, final_snapshot.0, final_snapshot.1, final_snapshot.2],
+        ) {
+            finish_payload["diagnosticCode"] = serde_json::Value::String("CODEX_FINAL_RESPONSE_PERSISTENCE_DEGRADED".into());
+            finish_payload["diagnosticMessage"] = serde_json::Value::String("Codex completed, but the dedicated final assistant response could not be persisted".into());
+            finish_payload["finalResponsePersistenceError"] = serde_json::Value::String(bounded_error(&error.to_string()));
         }
         if let Err(error) = lifecycle_result {
             finish_payload["lifecyclePersistenceError"] =
@@ -793,11 +822,22 @@ fn monitor_process(
 }
 
 fn read_stream<R: Read>(
+    reader: R,
+    capture: Arc<Mutex<Capture>>,
+    writer: EventWriterHandle,
+    session_id: String,
+    channel: &str,
+) {
+    read_stream_with_final(reader, capture, writer, session_id, channel, None);
+}
+
+fn read_stream_with_final<R: Read>(
     mut reader: R,
     capture: Arc<Mutex<Capture>>,
     writer: EventWriterHandle,
     session_id: String,
     channel: &str,
+    final_response: Option<Arc<Mutex<FinalResponseCapture>>>,
 ) {
     let mut buffer = [0u8; 4096];
     let mut redactor = StreamRedactor::default();
@@ -814,9 +854,17 @@ fn read_stream<R: Read>(
             &writer,
             &session_id,
             channel,
+            final_response.clone(),
         );
     }
-    persist_redacted_records(redactor.finish(), &capture, &writer, &session_id, channel);
+    persist_redacted_records(
+        redactor.finish(),
+        &capture,
+        &writer,
+        &session_id,
+        channel,
+        final_response,
+    );
 }
 
 fn persist_redacted_records(
@@ -825,8 +873,16 @@ fn persist_redacted_records(
     writer: &EventWriterHandle,
     session_id: &str,
     channel: &str,
+    final_response: Option<Arc<Mutex<FinalResponseCapture>>>,
 ) {
     for record in records {
+        if channel == "STDOUT" {
+            if let Some(target) = final_response.as_ref() {
+                if let Ok(mut target) = target.lock() {
+                    target.observe(ProviderKind::Codex, &record);
+                }
+            }
+        }
         let event = capture
             .lock()
             .ok()
@@ -1148,7 +1204,7 @@ fn finish_failed(
 
 fn load_session(database: &DatabaseState, session_id: &str) -> Result<CodexSession, String> {
     let connection = database.open_connection()?;
-    let row = connection.query_row("SELECT s.id,s.project_id,s.task_id,s.state,s.started_at,s.ended_at,p.original_path,s.prompt_body FROM agent_sessions s LEFT JOIN projects p ON p.id=s.project_id WHERE s.id=?1", [session_id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, Option<String>>(2)?, row.get::<_, String>(3)?, row.get::<_, Option<String>>(4)?, row.get::<_, Option<String>>(5)?, row.get::<_, Option<String>>(6)?, row.get::<_, Option<String>>(7)?))).map_err(|error| format!("read Codex session: {error}"))?;
+    let row = connection.query_row("SELECT s.id,s.project_id,s.task_id,s.state,s.started_at,s.ended_at,p.original_path,s.prompt_body,s.final_response,s.final_response_truncated,s.final_response_state,s.final_response_role FROM agent_sessions s LEFT JOIN projects p ON p.id=s.project_id WHERE s.id=?1", [session_id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, Option<String>>(2)?, row.get::<_, String>(3)?, row.get::<_, Option<String>>(4)?, row.get::<_, Option<String>>(5)?, row.get::<_, Option<String>>(6)?, row.get::<_, Option<String>>(7)?, row.get::<_, Option<String>>(8)?, row.get::<_, bool>(9)?, row.get::<_, String>(10)?, row.get::<_, Option<String>>(11)?))).map_err(|error| format!("read Codex session: {error}"))?;
     let mut stdout = String::new();
     let mut stderr = String::new();
     let mut stdout_truncated = false;
@@ -1283,6 +1339,10 @@ fn load_session(database: &DatabaseState, session_id: &str) -> Result<CodexSessi
         stderr,
         stdout_truncated,
         stderr_truncated,
+        final_response: row.8,
+        final_response_truncated: row.9,
+        final_response_state: row.10,
+        final_response_role: row.11,
         diagnostic_code,
         diagnostic_message,
         prompt_body: row.7,
@@ -1524,6 +1584,50 @@ mod tests {
         let connection = database.open_connection().unwrap();
         connection.execute("INSERT OR IGNORE INTO projects (id,name,local_path,status,priority,created_at,updated_at,original_path,normalized_path,registered_at) VALUES ('p','Project','C:\\project','ACTIVE',0,'now','now','C:\\project','c:\\project','now')", []).unwrap();
         connection.execute("INSERT INTO agent_sessions (id,project_id,provider,state,created_at) VALUES (?1,'p','CODEX','RUNNING','now')", [session_id]).unwrap();
+    }
+
+    #[test]
+    fn dedicated_codex_final_survives_generic_event_cap() {
+        let directory = tempdir().unwrap();
+        let database = DatabaseState::initialize(directory.path().to_path_buf()).unwrap();
+        seed_session(&database, "dedicated-cap");
+        let final_response = Arc::new(Mutex::new(FinalResponseCapture::default()));
+        let writer =
+            EventWriter::spawn(&database, Arc::new(Mutex::new(PersistenceStats::default())));
+        let mut stream = (0..(MAX_OUTPUT_EVENTS + 12))
+            .map(|index| {
+                serde_json::json!({
+                    "type": "item.started",
+                    "item": {"type": "command_execution", "command": format!("read-{index}")}
+                })
+                .to_string()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        stream.push('\n');
+        stream.push_str(
+            &serde_json::json!({
+                "type": "item.completed",
+                "item": {"type": "agent_message", "text": "The complete Codex answer survives after transport truncation."}
+            })
+            .to_string(),
+        );
+        stream.push('\n');
+        let capture = Arc::new(Mutex::new(Capture::default()));
+        read_stream_with_final(
+            TinyChunkReader::new(&stream, 13),
+            capture.clone(),
+            writer.handle(),
+            "dedicated-cap".into(),
+            "STDOUT",
+            Some(final_response.clone()),
+        );
+        let _ = writer.finish();
+        assert!(capture.lock().unwrap().truncated);
+        assert_eq!(
+            final_response.lock().unwrap().text(),
+            Some("The complete Codex answer survives after transport truncation.")
+        );
     }
 
     #[test]
@@ -2196,6 +2300,7 @@ mod tests {
                     escalation_requested,
                     Arc::new(Mutex::new(Capture::default())),
                     Arc::new(Mutex::new(Capture::default())),
+                    Arc::new(Mutex::new(FinalResponseCapture::default())),
                     thread::spawn(|| {}),
                     thread::spawn(|| {}),
                     event_writer,

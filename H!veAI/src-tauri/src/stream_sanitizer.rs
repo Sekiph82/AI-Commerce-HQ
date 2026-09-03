@@ -212,6 +212,10 @@ fn sanitize_plain_text(value: &str) -> String {
     redact_marker_span(&sanitized, "sk-", true)
 }
 
+pub fn sanitize_text(value: &str) -> String {
+    sanitize_plain_text(value)
+}
+
 fn redact_assignment(source: &str, key: &str) -> String {
     let lower = source.to_ascii_lowercase();
     let mut result = source.to_string();

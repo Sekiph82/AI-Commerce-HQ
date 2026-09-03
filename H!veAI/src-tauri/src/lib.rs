@@ -10,6 +10,7 @@ mod codex_adapter;
 mod command_center;
 mod db;
 mod external_browser;
+mod final_response;
 mod git_engine;
 mod process_policy;
 mod project_cockpit;

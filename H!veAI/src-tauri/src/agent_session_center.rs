@@ -1,7 +1,8 @@
 use crate::codex_adapter::{AgentAdapter, CodexAdapter, CodexSession, CodexStartRequest};
+use crate::final_response::{FinalResponseCapture, FinalResponseState, ProviderKind};
 use crate::process_policy::background_command;
 use crate::projects::{fetch_project, ProjectRecord};
-use crate::stream_sanitizer::{has_meaningful_provider_output, StreamRedactor};
+use crate::stream_sanitizer::StreamRedactor;
 use crate::time::utc_timestamp;
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -100,6 +101,10 @@ pub struct AgentSession {
     pub stderr: String,
     pub stdout_truncated: bool,
     pub stderr_truncated: bool,
+    pub final_response: Option<String>,
+    pub final_response_truncated: bool,
+    pub final_response_state: String,
+    pub final_response_role: Option<String>,
     pub diagnostic_code: Option<String>,
     pub diagnostic_message: Option<String>,
     pub prompt_reference: Option<String>,
@@ -553,6 +558,7 @@ fn run_claude_session(
     let mut stderr_capture = Capture::default();
     let mut stdout_redactor = StreamRedactor::default();
     let mut stderr_redactor = StreamRedactor::default();
+    let mut final_response = FinalResponseCapture::default();
     let Ok(connection) = database.open_connection() else {
         let _ = out_thread.join();
         let _ = err_thread.join();
@@ -574,6 +580,9 @@ fn run_claude_session(
             &mut stderr_capture
         };
         for text in redactor.push(&bytes) {
+            if is_stdout {
+                final_response.observe(ProviderKind::Claude, &text);
+            }
             if let Some(retained) = capture.append(&text) {
                 let event_type = if is_stdout {
                     "STREAM_STDOUT"
@@ -596,6 +605,9 @@ fn run_claude_session(
         (false, &mut stderr_redactor, &mut stderr_capture),
     ] {
         for text in redactor.finish() {
+            if is_stdout {
+                final_response.observe(ProviderKind::Claude, &text);
+            }
             if let Some(retained) = capture.append(&text) {
                 let event_type = if is_stdout {
                     "STREAM_STDOUT"
@@ -624,11 +636,11 @@ fn run_claude_session(
             Some("CLAUDE_PROCESS_FAILED"),
             Some("Claude exited before producing a successful terminal result"),
         )
-    } else if state == "COMPLETED" && !has_meaningful_provider_output(&stdout_capture.text) {
+    } else if state == "COMPLETED" && final_response.state() == FinalResponseState::Unavailable {
         (
-            Some("CLAUDE_ASSISTANT_EVIDENCE_UNAVAILABLE"),
+            Some("CLAUDE_FINAL_RESPONSE_UNAVAILABLE"),
             Some(
-                "Claude exited successfully, but no durable assistant or result text was captured",
+                "Claude exited successfully, but no dedicated final assistant response was captured",
             ),
         )
     } else {
@@ -641,6 +653,7 @@ fn run_claude_session(
         status.and_then(|value| value.code()),
         &stdout_capture,
         &stderr_capture,
+        &final_response,
         code,
         message,
     );
@@ -675,21 +688,28 @@ fn finalize_claude(
     exit_code: Option<i32>,
     stdout: &Capture,
     stderr: &Capture,
+    final_response: &FinalResponseCapture,
     diagnostic_code: Option<&str>,
     diagnostic_message: Option<&str>,
 ) -> Result<(), String> {
     let connection = database.open_connection()?;
-    connection
-        .execute(
-            "UPDATE agent_sessions SET state=?2,ended_at=?3 WHERE id=?1",
-            params![session_id, state, utc_timestamp()],
-        )
-        .map_err(|error| format!("finalize Claude session: {error}"))?;
+    let final_text = final_response.text();
+    let final_state = final_response.state().as_str();
+    let mut effective_code = diagnostic_code;
+    let mut effective_message = diagnostic_message;
+    if let Err(error) = connection.execute(
+        "UPDATE agent_sessions SET state=?2,ended_at=?3,final_response=?4,final_response_truncated=?5,final_response_state=?6,final_response_role=CASE WHEN ?4 IS NULL THEN NULL ELSE 'assistant' END WHERE id=?1",
+        params![session_id, state, utc_timestamp(), final_text, final_response.truncated(), final_state],
+    ) {
+        effective_code = Some("CLAUDE_FINAL_RESPONSE_PERSISTENCE_DEGRADED");
+        effective_message = Some("Claude completed, but the dedicated final assistant response could not be persisted");
+        log::warn!("finalize Claude session response persistence failed: {error}");
+    }
     insert_event(
         &connection,
         session_id,
         "SESSION_FINISHED",
-        json!({"state":state,"exitCode":exit_code,"stdoutTruncated":stdout.truncated,"stderrTruncated":stderr.truncated,"diagnosticCode":diagnostic_code,"diagnosticMessage":diagnostic_message}),
+        json!({"state":state,"exitCode":exit_code,"stdoutTruncated":stdout.truncated,"stderrTruncated":stderr.truncated,"finalResponseState":final_state,"finalResponseTruncated":final_response.truncated(),"diagnosticCode":effective_code,"diagnosticMessage":effective_message}),
     )?;
     Ok(())
 }
@@ -893,7 +913,7 @@ fn load_session(
     session_id: &str,
 ) -> Result<AgentSession, String> {
     let connection = database.open_connection()?;
-    let row = connection.query_row("SELECT id,project_id,task_id,provider,state,started_at,ended_at,created_at,prompt_body FROM agent_sessions WHERE id=?1", [session_id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, Option<String>>(2)?, row.get::<_, String>(3)?, row.get::<_, String>(4)?, row.get::<_, Option<String>>(5)?, row.get::<_, Option<String>>(6)?, row.get::<_, String>(7)?, row.get::<_, Option<String>>(8)?))).optional().map_err(|error| format!("read agent session: {error}"))?.ok_or("AGENT_SESSION_NOT_FOUND")?;
+    let row = connection.query_row("SELECT id,project_id,task_id,provider,state,started_at,ended_at,created_at,prompt_body,final_response,final_response_truncated,final_response_state,final_response_role FROM agent_sessions WHERE id=?1", [session_id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, Option<String>>(2)?, row.get::<_, String>(3)?, row.get::<_, String>(4)?, row.get::<_, Option<String>>(5)?, row.get::<_, Option<String>>(6)?, row.get::<_, String>(7)?, row.get::<_, Option<String>>(8)?, row.get::<_, Option<String>>(9)?, row.get::<_, bool>(10)?, row.get::<_, String>(11)?, row.get::<_, Option<String>>(12)?))).optional().map_err(|error| format!("read agent session: {error}"))?.ok_or("AGENT_SESSION_NOT_FOUND")?;
     let events = load_events(&connection, session_id)?;
     let mut stdout = String::new();
     let mut stderr = String::new();
@@ -1001,6 +1021,10 @@ fn load_session(
         stderr,
         stdout_truncated,
         stderr_truncated,
+        final_response: row.9,
+        final_response_truncated: row.10,
+        final_response_state: row.11,
+        final_response_role: row.12,
         diagnostic_code,
         diagnostic_message,
         prompt_reference,
@@ -1095,6 +1119,10 @@ impl AgentSession {
             stderr: session.stderr,
             stdout_truncated: session.stdout_truncated,
             stderr_truncated: session.stderr_truncated,
+            final_response: session.final_response,
+            final_response_truncated: session.final_response_truncated,
+            final_response_state: session.final_response_state,
+            final_response_role: session.final_response_role,
             diagnostic_code: session.diagnostic_code,
             diagnostic_message: session.diagnostic_message,
             prompt_reference: None,
@@ -1203,6 +1231,29 @@ mod tests {
         assert!(reloaded.stdout.contains("The project is healthy."));
         assert!(!reloaded.stdout.contains("sk-never-persist"));
         assert!(reloaded.stdout.contains("REDACTED SENSITIVE VALUE"));
+
+        let mut final_response = FinalResponseCapture::default();
+        final_response.observe(
+            ProviderKind::Claude,
+            &json!({"type":"assistant","message":{"content":[{"type":"text","text":"I'll inspect the repository."}]}}).to_string(),
+        );
+        final_response.observe(
+            ProviderKind::Claude,
+            &json!({"type":"result","result":"The durable final answer is available."}).to_string(),
+        );
+        let connection = database.open_connection().unwrap();
+        connection
+            .execute(
+                "UPDATE agent_sessions SET final_response=?2,final_response_truncated=?3,final_response_state=?4,final_response_role='assistant' WHERE id=?1",
+                params![session_id, final_response.text(), final_response.truncated(), final_response.state().as_str()],
+            )
+            .unwrap();
+        let reloaded = load_session(&database, session_id).unwrap();
+        assert_eq!(
+            reloaded.final_response.as_deref(),
+            Some("The durable final answer is available.")
+        );
+        assert_eq!(reloaded.final_response_state, "AVAILABLE");
     }
 
     #[test]

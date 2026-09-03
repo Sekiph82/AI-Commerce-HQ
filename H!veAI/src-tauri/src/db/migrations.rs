@@ -378,6 +378,11 @@ pub fn migrations() -> &'static [Migration] {
             name: "agent_session_prompt_body",
             sql: "ALTER TABLE agent_sessions ADD COLUMN prompt_body TEXT;",
         },
+        Migration {
+            version: 10,
+            name: "agent_session_final_response",
+            sql: "ALTER TABLE agent_sessions ADD COLUMN final_response TEXT; ALTER TABLE agent_sessions ADD COLUMN final_response_truncated INTEGER NOT NULL DEFAULT 0; ALTER TABLE agent_sessions ADD COLUMN final_response_state TEXT NOT NULL DEFAULT 'UNAVAILABLE'; ALTER TABLE agent_sessions ADD COLUMN final_response_role TEXT;",
+        },
     ]
 }
 
@@ -476,8 +481,8 @@ mod tests {
     fn fresh_database_reaches_latest_version() {
         let (_directory, mut connection) = temp_connection();
         let report = apply_migrations(&mut connection, migrations()).expect("migrations apply");
-        assert_eq!(report.schema_version, 9);
-        assert_eq!(report.migration_count, 9);
+        assert_eq!(report.schema_version, 10);
+        assert_eq!(report.migration_count, 10);
         assert_eq!(report.last_migration_status, "APPLIED");
     }
 
@@ -487,7 +492,7 @@ mod tests {
         apply_migrations(&mut connection, migrations()).expect("first apply");
         let report = apply_migrations(&mut connection, migrations()).expect("second apply");
         assert_eq!(report.last_migration_status, "ALREADY_CURRENT");
-        assert_eq!(report.migration_count, 9);
+        assert_eq!(report.migration_count, 10);
     }
 
     #[test]
@@ -554,7 +559,7 @@ mod tests {
         let (_directory, mut connection) = temp_connection();
         let first = apply_migrations(&mut connection, migrations()).expect("first apply");
         let second = apply_migrations(&mut connection, migrations()).expect("rerun");
-        assert_eq!(first.schema_version, 9);
+        assert_eq!(first.schema_version, 10);
         assert_eq!(second.last_migration_status, "ALREADY_CURRENT");
         let mismatch = [Migration {
             version: 1,
@@ -586,7 +591,8 @@ mod tests {
                 (6, "residual_timestamp_standardization".to_string()),
                 (7, "project_snapshot_created_timestamp".to_string()),
                 (8, "project_preferred_agent_provider".to_string()),
-                (9, "agent_session_prompt_body".to_string())
+                (9, "agent_session_prompt_body".to_string()),
+                (10, "agent_session_final_response".to_string())
             ]
         );
     }

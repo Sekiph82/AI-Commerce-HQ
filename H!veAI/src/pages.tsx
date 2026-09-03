@@ -1925,16 +1925,20 @@ function renderMarkdown(text: string) {
 
 function AgentSessionOutput({ session }: { session: AgentSession }) {
   const projection = projectConversation(session.stdout);
+  const dedicatedFinalResponse = session.finalResponse?.trim() || "";
+  const hasDedicatedChannel = typeof session.finalResponseState === "string";
+  const assistantResponse = dedicatedFinalResponse || (!hasDedicatedChannel ? projection.assistant : "");
   const promptBody = session.promptBody?.trim();
   const active = ["STARTING", "RUNNING", "WAITING_PERMISSION", "STOPPING"].includes(session.state);
   const evidenceDiagnostic = session.diagnosticCode?.endsWith("ASSISTANT_EVIDENCE_UNAVAILABLE") ? session.diagnosticMessage : null;
   return <section className="agent-conversation" aria-label="Agent conversation" data-testid="agent-stdout-reader">
     <article className="agent-chat-message agent-chat-user"><div className="agent-chat-author">You</div><div className="agent-chat-body">{promptBody ? renderMarkdown(promptBody) : <p>Original prompt text was not persisted for this session.</p>}</div></article>
     {active ? <p className="agent-conversation-progress">{session.state === "RUNNING" ? `${session.provider === "CLAUDE" ? "Claude" : "Codex"} is working...` : "Starting owned session..."}</p> : null}
-    <article className="agent-chat-message agent-chat-assistant"><div className="agent-chat-author">{session.provider === "CLAUDE" ? "Claude" : "Codex"}</div><div className="agent-chat-body">{projection.assistant ? renderMarkdown(projection.assistant) : <p>{active ? "Waiting for the final assistant response..." : "No final assistant response was captured."}</p>}</div></article>
+    <article className="agent-chat-message agent-chat-assistant"><div className="agent-chat-author">{session.provider === "CLAUDE" ? "Claude" : "Codex"}</div><div className="agent-chat-body">{assistantResponse ? renderMarkdown(assistantResponse) : <p>{active ? "Waiting for the final assistant response..." : "No final assistant response was captured."}</p>}</div></article>
     {evidenceDiagnostic ? <div className="agent-diagnostic-card" role="alert"><strong>Assistant evidence unavailable</strong><p>{evidenceDiagnostic}</p></div> : null}
     {projection.activity.length ? <details className="agent-activity-disclosure"><summary>View activity ({projection.activity.length})</summary><ul>{projection.activity.map((item, index) => <li key={index}>{item}</li>)}</ul></details> : null}
-    {session.stdoutTruncated ? <div className="agent-output-truncated">[bounded output truncated]</div> : null}
+    {session.finalResponseTruncated ? <div className="agent-output-truncated">[final assistant response truncated]</div> : null}
+    {!session.finalResponseTruncated && session.stdoutTruncated ? <div className="agent-output-truncated">[bounded transport activity truncated]</div> : null}
   </section>;
 }
 

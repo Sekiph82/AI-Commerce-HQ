@@ -38,6 +38,10 @@ export type AgentSession = {
   stderr: string;
   stdoutTruncated: boolean;
   stderrTruncated: boolean;
+  finalResponse: string | null;
+  finalResponseTruncated: boolean;
+  finalResponseState: string;
+  finalResponseRole: string | null;
   diagnosticCode: string | null;
   diagnosticMessage: string | null;
   promptReference: string | null;

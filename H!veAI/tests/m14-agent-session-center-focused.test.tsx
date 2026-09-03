@@ -117,6 +117,37 @@ describe("M14 Agent Session Center", () => {
     expect(activity).not.toHaveAttribute("open");
   });
 
+  it("uses the dedicated final response after generic transport truncation", async () => {
+    const dedicated = { ...session, finalResponse: "The durable final answer is the repository summary.", finalResponseTruncated: false, finalResponseState: "AVAILABLE", finalResponseRole: "assistant", stdoutTruncated: true, stdout: JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "I'll explore the repository now..." }] } }) };
+    invoke.mockImplementation((command: string) => {
+      if (command === "hiveai_projects_list") return Promise.resolve(records);
+      if (command === "hiveai_agent_readiness") return Promise.resolve(readiness);
+      if (command === "hiveai_agent_sessions_list") return Promise.resolve([dedicated]);
+      return Promise.resolve({ stagedFiles: [], unstagedFiles: [], untrackedFiles: [], conflictedFiles: [] });
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /View CLAUDE FREEFORM_PROJECT_OPERATION COMPLETED/i }));
+    const reader = screen.getByTestId("agent-stdout-reader");
+    expect(reader).toHaveTextContent("The durable final answer is the repository summary.");
+    expect(reader).not.toHaveTextContent("I'll explore the repository now...");
+    expect(reader).toHaveTextContent("bounded transport activity truncated");
+  });
+
+  it("uses the dedicated Codex final response and keeps progress out of the answer", async () => {
+    const dedicated = { ...session, id: "codex-dedicated", provider: "CODEX", operationKind: "CODEX_EXEC", finalResponse: "Codex completed the read-only repository summary.", finalResponseTruncated: false, finalResponseState: "AVAILABLE", finalResponseRole: "assistant", stdoutTruncated: true, stdout: JSON.stringify({ type: "item.started", item: { type: "agent_message", text: "I am exploring..." } }) };
+    invoke.mockImplementation((command: string) => {
+      if (command === "hiveai_projects_list") return Promise.resolve(records);
+      if (command === "hiveai_agent_readiness") return Promise.resolve(readiness);
+      if (command === "hiveai_agent_sessions_list") return Promise.resolve([dedicated]);
+      return Promise.resolve({ stagedFiles: [], unstagedFiles: [], untrackedFiles: [], conflictedFiles: [] });
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /View CODEX CODEX_EXEC COMPLETED/i }));
+    const reader = screen.getByTestId("agent-stdout-reader");
+    expect(reader).toHaveTextContent("Codex completed the read-only repository summary.");
+    expect(reader).not.toHaveTextContent("I am exploring...");
+  });
+
   it("shows the truthful prompt placeholder for historical sessions", async () => {
     const historical = { ...session, id: "historical", promptBody: null, stdout: "No final text" };
     invoke.mockImplementation((command: string) => {
