@@ -13,6 +13,7 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  WandSparkles,
   X,
 } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
@@ -30,6 +31,7 @@ const navigation = [
   { to: "/projects", label: "Projects", icon: FolderKanban },
   { to: "/tasks", label: "Tasks", icon: Boxes },
   { to: "/agents", label: "Agents", icon: Bot },
+  { to: "/prompts", label: "Prompt Engine", icon: WandSparkles },
   { to: "/audits", label: "Audit Center", icon: ShieldCheck },
   { to: "/activity", label: "Activity", icon: Activity },
   { to: "/settings", label: "Settings", icon: Settings },

@@ -199,7 +199,7 @@ mod tests {
         let status = state.status();
         assert!(status.initialized);
         assert_eq!(status.database_path, "hiveai.db");
-        assert_eq!(status.schema_version, 10);
+        assert_eq!(status.schema_version, 11);
         assert!(status.foreign_keys_enabled);
         assert!(directory.path().join("hiveai.db").exists());
         assert_eq!(status.journal_mode, "WAL");

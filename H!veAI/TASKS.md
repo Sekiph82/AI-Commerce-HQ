@@ -28,12 +28,12 @@ Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition
 - Pre-M10 Native UX Hotfix X01/X02 = PASS/CLOSED after independent source audit plus user native acceptance.
   - X01: terminal/console popup suppression accepted fixed after approximately 45 minutes of native runtime with no unwanted terminal windows.
   - X02: startup intro audio/replay behavior accepted fixed; audio works and same-process route navigation does not replay the intro.
-- Strict completed milestone count is **14 / 20 = 70%** because M13 is now closed and the pre-M10 hotfix is not a numbered roadmap milestone.
+- Strict completed milestone count is **15 / 20 = 75%** because M14 is now accepted and closed; the pre-M10 hotfix is not a numbered roadmap milestone.
 - M10 original strict audit = historical FAIL with 5 MAJOR findings.
 - M10A remediation, independent re-audit, and Akilta native click acceptance are complete; Akilta footer link = PASS/ACCEPTED.
 - Original M11 implementation is a historical strict-audit FAIL with 8 MAJOR findings.
 - M11A REV4, REV5, REV6, and REV7 remediation history remains immutable; all findings are closed by the accepted strict audits. M11A REV7 = PASS/CLOSED and the final Projects visual cleanup = PASS/CLOSED.
-- M11 = PASS/CLOSED. M12, M12A R26, and M12B native Open Cockpit remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B/M13C/M13D/M13E = PASS/CLOSED on accepted strict re-audits and user native/visual evidence. M14A closes M14-R35, M14-R36, and M14-R37; M14B closes M14-R38, M14-R39, and M14-R40; M14 remains implementation complete pending independent strict audit and user native/visual acceptance. M15-M20 remain planned/blocked and M21 remains planned/not started.
+- M11 = PASS/CLOSED. M12, M12A R26, and M12B native Open Cockpit remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B/M13C/M13D/M13E = PASS/CLOSED on accepted strict re-audits and user native/visual evidence. M14 and M14A-M14E = PASS/CLOSED on accepted strict and native evidence. M15 is ACTIVE/IMPLEMENTING; M16-M20 remain planned/blocked and M21 remains planned/not started.
 - M21 remains planned and was not started.
 
 ---
@@ -1129,7 +1129,7 @@ M12B NATIVE OPEN COCKPIT REMEDIATION PASS/CLOSED.
 ### M13.09 - Regression/audit/closure
 - [x] Full security/process regression.
 - [x] Production QA publication.
-- [ ] Independent strict audit.
+- [x] Independent strict audit and accepted native evidence.
 
 M13 PASS/CLOSED. M13A-M13E accepted strict remediation chain and user native/visual evidence are preserved as immutable provenance.
 
@@ -1242,59 +1242,59 @@ M13E REMEDIATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VI
 - [x] M14-R38 verified real Claude CLI invocation and bounded native operation remediation.
 - [x] M14-R39 persisted-session auto-expansion and explicit detail-selection remediation.
 - [x] M14-R40 compact human-readable vertical session reader remediation.
-- [ ] Independent strict audit.
+- [x] Independent strict audit and accepted native evidence.
 
-M14B REMEDIATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
+M14B REMEDIATION COMPLETE / ACCEPTED STRICT RE-AUDIT + USER NATIVE/VISUAL EVIDENCE.
 
 ---
 
 # M15 - Prompt Engine
 
 ### M15.01 - Prompt schemas/types
-- [ ] Define prompt kinds.
-- [ ] Define implementation/remediation/audit-support prompt structures.
-- [ ] Define project/task/session provenance.
+- [x] Define prompt kinds.
+- [x] Define implementation/remediation/audit-support prompt structures.
+- [x] Define project/task/session provenance.
 
 ### M15.02 - Versioning
-- [ ] Persist prompt versions.
-- [ ] Never mutate a prompt version already used by a session.
-- [ ] Track current version separately.
+- [x] Persist prompt versions.
+- [x] Never mutate a prompt version already used by a session.
+- [x] Track current version separately.
 
 ### M15.03 - Context collector
-- [ ] Collect task requirements.
-- [ ] Collect project/source evidence.
-- [ ] Collect architecture/governance constraints.
-- [ ] Collect relevant Git/test/audit context.
-- [ ] Keep context bounded and explainable.
+- [x] Collect task requirements.
+- [x] Collect project/source evidence.
+- [x] Collect architecture/governance constraints.
+- [x] Collect relevant Git/test/audit context.
+- [x] Keep context bounded and explainable.
 
 ### M15.04 - Implementation prompt generation
-- [ ] Generate builder-ready prompt from current task/context.
-- [ ] Include exact acceptance behavior/tests.
-- [ ] Avoid irrelevant governance noise.
+- [x] Generate builder-ready prompt from current task/context.
+- [x] Include exact acceptance behavior/tests.
+- [x] Avoid irrelevant governance noise.
 
 ### M15.05 - Remediation prompt generation
-- [ ] Consume audit findings.
-- [ ] Generate defect-focused remediation prompt.
-- [ ] Require tests that fail on pre-fix behavior.
+- [x] Consume audit findings.
+- [x] Generate defect-focused remediation prompt.
+- [x] Require tests that fail on pre-fix behavior.
 
 ### M15.06 - Review/edit/approve
-- [ ] Human can review prompt.
-- [ ] Human can edit before dispatch.
-- [ ] Human approval/dispatch is explicit.
+- [x] Human can review prompt.
+- [x] Human can edit before dispatch.
+- [x] Human approval/dispatch is explicit.
 
 ### M15.07 - Dispatch/provenance
-- [ ] Dispatch approved prompt to selected adapter.
-- [ ] Attach exact prompt version to session.
-- [ ] Preserve immutable provenance.
+- [x] Dispatch approved prompt to selected adapter.
+- [x] Attach exact prompt version to session.
+- [x] Preserve immutable provenance.
 
 ### M15.08 - Tests/audit/closure
-- [ ] Version immutability tests.
-- [ ] Context-bound tests.
-- [ ] Prompt/session provenance tests.
-- [ ] Full regression/publication.
+- [x] Version immutability tests.
+- [x] Context-bound tests.
+- [x] Prompt/session provenance tests.
+- [x] Full regression/publication.
 - [ ] Independent strict audit.
 
-M15 PLANNED/BLOCKED until M14.
+M15 IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
 
 ---
 
@@ -1592,7 +1592,7 @@ M20 PLANNED/BLOCKED until M19 and final hardening gates.
 - M00-M09 are PASS/CLOSED.
 - Pre-M10 Native UX Hotfix X01/X02 is PASS/CLOSED after independent audit and user native acceptance.
 - M10 original strict audit is historical FAIL; M10A remediation is IMPLEMENTATION COMPLETE / PENDING INDEPENDENT RE-AUDIT.
-- M13C R32 remediation is complete; M13 remains open pending independent strict re-audit and user native/visual acceptance. M14A closes M14-R35/R36/R37; M14B closes M14-R38/R39/R40; M14 remains open pending independent strict re-audit and user native/visual acceptance. M15-M20 remain planned/blocked.
+- M13C R32 remediation is complete; M13 remains open pending independent strict re-audit and user native/visual acceptance. M14A closes M14-R35/R36/R37; M14B closes M14-R38/R39/R40; M14 is PASS/CLOSED on accepted strict-audit and native evidence. M15 is implementation complete pending independent strict audit and user native/visual acceptance; M16-M20 remain planned/blocked.
 - M11/M12 must implement the Project Dashboard manifest authority resolver before treating `.hiveai/PROJECT_DASHBOARD.md` as live runtime truth.
 - Each future milestone should be executed as one bounded milestone unless an actual independent audit requires a remediation prompt.
 - Subpackage numbering is for traceability, source/evidence mapping, and progress visibility, not an instruction to generate many tiny prompts.

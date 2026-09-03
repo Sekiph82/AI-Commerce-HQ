@@ -39,15 +39,15 @@ Package numbering such as `M08.01`, `M08.02`, etc. is used for traceability and 
 - X01 terminal/console popup suppression: accepted fixed after approximately 45 minutes of native runtime with no unwanted terminal windows.
 - X02 startup intro audio/replay behavior: accepted fixed; audio works and the intro does not replay during same-process route navigation.
 - M13 is PASS/CLOSED on accepted strict re-audits and user native/visual evidence.
-- M14 Agent Session Center implementation is complete for Codex and Claude; M14A closes R35-R37 and M14B closes R38-R40 with native test, publication, CLI, and Session Center readability evidence. Independent strict re-audit and user native/visual acceptance remain pending.
+- M14 Agent Session Center is PASS/CLOSED on accepted strict re-audit and native user evidence; M14A closes R35-R37 and M14B closes R38-R40 with native test, publication, CLI, and Session Center readability evidence.
 - M10 original strict audit: historical FAIL with 5 MAJOR findings.
 - M10A strict-closure remediation: independent re-audit closed all production MAJOR findings.
 - Akilta footer link: PASS/ACCEPTED after native user verification that Chrome opens, H!veAI remains open, and no terminal window appears.
 - M10 Workflow State Machine: PASS/CLOSED.
-- Strict completed roadmap progress is now 14/20 = 70%.
+- Strict completed roadmap progress is now 15/20 = 75%.
 - M11 original implementation: historical strict-audit FAIL with 8 MAJOR findings.
 - M11A REV4-REV7 remediation history remains immutable and accepted; M11A REV7 = PASS/CLOSED and final Projects visual cleanup = PASS/CLOSED.
-- M11 = PASS/CLOSED. M12, M12A R26, and M12B native cockpit route remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B/M13C/M13D/M13E = PASS/CLOSED on accepted strict re-audits and user native/visual evidence. M14A closes R35-R37 and M14B closes R38-R40; M14 implementation remains complete pending independent strict re-audit and user native/visual acceptance; M15-M20 remain planned/blocked and M21 remains planned/not started.
+- M11 = PASS/CLOSED. M12, M12A R26, and M12B native cockpit route remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B/M13C/M13D/M13E = PASS/CLOSED on accepted strict re-audits and user native/visual evidence. M14 and M14A-M14E = PASS/CLOSED on accepted strict and native evidence. M15 is IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT AUDIT + USER NATIVE/VISUAL ACCEPTANCE; M16-M20 remain planned/blocked and M21 remains planned/not started.
 - M21 remains planned and was not started.
 
 For exact live status, acceptance state, and every completed/planned package from M00 through M20, use `TASKS.md` as the canonical source of truth.

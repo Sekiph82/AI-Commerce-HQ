@@ -16,6 +16,7 @@ mod process_policy;
 mod project_cockpit;
 mod project_dashboard;
 mod projects;
+mod prompt_engine;
 mod runtime;
 mod stream_sanitizer;
 mod task_intelligence;
@@ -42,6 +43,11 @@ use project_dashboard::ProjectDashboardResolution;
 use projects::{
     ensure_scrubbots_agent_preference, ProjectListQuery, ProjectRecord, RegisterProjectRequest,
     RepairProjectPathRequest, UpdateProjectSettingsRequest,
+};
+#[cfg(not(test))]
+use prompt_engine::{
+    ContextManifest, PromptApproveRequest, PromptContextRequest, PromptDispatchRequest,
+    PromptDispatchResult, PromptEditRequest, PromptGenerateRequest, PromptRecord, PromptVersion,
 };
 #[cfg(not(test))]
 use runtime::{RuntimeStatus, RuntimeSupervisor};
@@ -317,6 +323,65 @@ mod app_commands {
     }
 
     #[tauri::command]
+    fn hiveai_prompt_context_collect(
+        database: tauri::State<'_, DatabaseState>,
+        request: PromptContextRequest,
+    ) -> Result<ContextManifest, String> {
+        prompt_engine::collect_context(&database, request)
+    }
+
+    #[tauri::command]
+    fn hiveai_prompt_generate(
+        database: tauri::State<'_, DatabaseState>,
+        request: PromptGenerateRequest,
+    ) -> Result<PromptVersion, String> {
+        prompt_engine::generate(&database, request)
+    }
+
+    #[tauri::command]
+    fn hiveai_prompts_list(
+        database: tauri::State<'_, DatabaseState>,
+        project_id: String,
+    ) -> Result<Vec<PromptRecord>, String> {
+        prompt_engine::list(&database, project_id)
+    }
+
+    #[tauri::command]
+    fn hiveai_prompt_versions(
+        database: tauri::State<'_, DatabaseState>,
+        project_id: String,
+        prompt_id: String,
+    ) -> Result<Vec<PromptVersion>, String> {
+        prompt_engine::versions_for_project(&database, project_id, prompt_id)
+    }
+
+    #[tauri::command]
+    fn hiveai_prompt_edit(
+        database: tauri::State<'_, DatabaseState>,
+        request: PromptEditRequest,
+    ) -> Result<PromptVersion, String> {
+        prompt_engine::edit(&database, request)
+    }
+
+    #[tauri::command]
+    fn hiveai_prompt_approve(
+        database: tauri::State<'_, DatabaseState>,
+        request: PromptApproveRequest,
+    ) -> Result<PromptVersion, String> {
+        prompt_engine::approve(&database, request)
+    }
+
+    #[tauri::command]
+    fn hiveai_prompt_dispatch(
+        center: tauri::State<'_, AgentSessionCenter>,
+        codex: tauri::State<'_, CodexAdapter>,
+        database: tauri::State<'_, DatabaseState>,
+        request: PromptDispatchRequest,
+    ) -> Result<PromptDispatchResult, String> {
+        prompt_engine::dispatch(&center, &codex, &database, request)
+    }
+
+    #[tauri::command]
     fn hiveai_projects_list(
         database: tauri::State<'_, DatabaseState>,
         query: Option<ProjectListQuery>,
@@ -563,6 +628,13 @@ mod app_commands {
                 hiveai_agent_session_events,
                 hiveai_agent_resize,
                 hiveai_agent_permission_decision,
+                hiveai_prompt_context_collect,
+                hiveai_prompt_generate,
+                hiveai_prompts_list,
+                hiveai_prompt_versions,
+                hiveai_prompt_edit,
+                hiveai_prompt_approve,
+                hiveai_prompt_dispatch,
                 hiveai_projects_list,
                 hiveai_project_register,
                 hiveai_project_get,

@@ -109,6 +109,10 @@ pub struct AgentSession {
     pub diagnostic_message: Option<String>,
     pub prompt_reference: Option<String>,
     pub prompt_body: Option<String>,
+    pub prompt_id: Option<String>,
+    pub prompt_version_id: Option<String>,
+    pub prompt_version: Option<i64>,
+    pub prompt_version_sha256: Option<String>,
     pub provider_version: Option<String>,
     pub elapsed_ms: Option<u64>,
     pub supports_resume: bool,
@@ -913,7 +917,7 @@ fn load_session(
     session_id: &str,
 ) -> Result<AgentSession, String> {
     let connection = database.open_connection()?;
-    let row = connection.query_row("SELECT id,project_id,task_id,provider,state,started_at,ended_at,created_at,prompt_body,final_response,final_response_truncated,final_response_state,final_response_role FROM agent_sessions WHERE id=?1", [session_id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, Option<String>>(2)?, row.get::<_, String>(3)?, row.get::<_, String>(4)?, row.get::<_, Option<String>>(5)?, row.get::<_, Option<String>>(6)?, row.get::<_, String>(7)?, row.get::<_, Option<String>>(8)?, row.get::<_, Option<String>>(9)?, row.get::<_, bool>(10)?, row.get::<_, String>(11)?, row.get::<_, Option<String>>(12)?))).optional().map_err(|error| format!("read agent session: {error}"))?.ok_or("AGENT_SESSION_NOT_FOUND")?;
+    let row = connection.query_row("SELECT id,project_id,task_id,provider,state,started_at,ended_at,created_at,prompt_body,final_response,final_response_truncated,final_response_state,final_response_role,prompt_id,prompt_version_id,prompt_version,prompt_version_sha256 FROM agent_sessions WHERE id=?1", [session_id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, Option<String>>(2)?, row.get::<_, String>(3)?, row.get::<_, String>(4)?, row.get::<_, Option<String>>(5)?, row.get::<_, Option<String>>(6)?, row.get::<_, String>(7)?, row.get::<_, Option<String>>(8)?, row.get::<_, Option<String>>(9)?, row.get::<_, bool>(10)?, row.get::<_, String>(11)?, row.get::<_, Option<String>>(12)?, row.get::<_, Option<String>>(13)?, row.get::<_, Option<String>>(14)?, row.get::<_, Option<i64>>(15)?, row.get::<_, Option<String>>(16)?))).optional().map_err(|error| format!("read agent session: {error}"))?.ok_or("AGENT_SESSION_NOT_FOUND")?;
     let events = load_events(&connection, session_id)?;
     let mut stdout = String::new();
     let mut stderr = String::new();
@@ -1029,6 +1033,10 @@ fn load_session(
         diagnostic_message,
         prompt_reference,
         prompt_body: row.8,
+        prompt_id: row.13,
+        prompt_version_id: row.14,
+        prompt_version: row.15,
+        prompt_version_sha256: row.16,
         provider_version,
         elapsed_ms,
         supports_resume: false,
@@ -1127,6 +1135,10 @@ impl AgentSession {
             diagnostic_message: session.diagnostic_message,
             prompt_reference: None,
             prompt_body: session.prompt_body,
+            prompt_id: None,
+            prompt_version_id: None,
+            prompt_version: None,
+            prompt_version_sha256: None,
             provider_version: None,
             elapsed_ms: None,
             supports_resume: false,

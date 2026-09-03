@@ -46,6 +46,10 @@ export type AgentSession = {
   diagnosticMessage: string | null;
   promptReference: string | null;
   promptBody: string | null;
+  promptId: string | null;
+  promptVersionId: string | null;
+  promptVersion: number | null;
+  promptVersionSha256: string | null;
   providerVersion: string | null;
   elapsedMs: number | null;
   supportsResume: boolean;

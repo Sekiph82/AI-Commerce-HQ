@@ -60,6 +60,7 @@ import { getCommandCenterSnapshot, type CommandCenterProject } from "./commandCe
 import { getProjectCockpitSnapshot, type ProjectCockpitSnapshot } from "./projectCockpit";
 import { getAgentReadiness, listAgentSessions, resizeAgentTerminal, retryAgentSession, startAgentSession, stopAgentSession, type AgentSession, type ProviderReadiness, type SessionProvider } from "./agentSessionCenter";
 import { overrideWorkflow, type WorkflowState } from "./workflow";
+export { PromptEnginePage } from "./PromptEnginePage";
 import {
   addCustomSourcePath,
   discoverTaskSources,
