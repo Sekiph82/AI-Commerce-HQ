@@ -127,6 +127,28 @@ describe("M14 Agent Session Center", () => {
     expect(screen.getByText("Original prompt text was not persisted for this session.")).toBeInTheDocument();
   });
 
+  it("keeps the required start order and gives a running session a live current conversation", async () => {
+    const running = { ...session, id: "running-session", state: "RUNNING", endedAt: null, stdout: JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "Reading the project now." }] } }) };
+    invoke.mockImplementation((command: string) => {
+      if (command === "hiveai_projects_list") return Promise.resolve(records);
+      if (command === "hiveai_agent_readiness") return Promise.resolve(readiness);
+      if (command === "hiveai_agent_sessions_list") return Promise.resolve([running]);
+      return Promise.resolve({ stagedFiles: [], unstagedFiles: [], untrackedFiles: [], conflictedFiles: [] });
+    });
+    const { container } = render(<App />);
+    const form = container.querySelector(".agent-operation-panel");
+    expect(form).toBeTruthy();
+    expect(Array.from(form?.querySelectorAll("label") ?? []).map((label) => label.childNodes[0]?.textContent?.trim())).toEqual(["Project", "Task ID", "Prompt", "Provider"]);
+    expect(screen.getByTestId("agent-current-conversation")).toHaveTextContent("Start a Codex or Claude session");
+    fireEvent.click(await screen.findByRole("button", { name: /View CLAUDE FREEFORM_PROJECT_OPERATION RUNNING/i }));
+    const current = screen.getByTestId("agent-session-detail");
+    expect(current).toHaveTextContent("Current conversation");
+    expect(current).toHaveTextContent("Claude is working...");
+    expect(current).toHaveTextContent("Reading the project now.");
+    expect(current).not.toHaveTextContent('"type":"assistant"');
+    expect(container.querySelector(".agent-session-workspace")?.firstElementChild).toBe(current);
+  });
+
   it("keeps persisted sessions compact and permits only one explicit detail", async () => {
     const secondSession = { ...session, id: "codex-session", provider: "CODEX", operationKind: "CODEX_EXEC" };
     invoke.mockImplementation((command: string) => {
@@ -142,6 +164,6 @@ describe("M14 Agent Session Center", () => {
     expect(screen.getByTestId("agent-session-detail")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /View CODEX CODEX_EXEC COMPLETED/i }));
     expect(screen.getAllByTestId("agent-session-detail")).toHaveLength(1);
-    expect(screen.getByText("CODEX session")).toBeInTheDocument();
+    expect(screen.getByText("CODEX conversation")).toBeInTheDocument();
   });
 });

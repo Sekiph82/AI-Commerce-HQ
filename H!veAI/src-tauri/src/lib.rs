@@ -16,6 +16,7 @@ mod project_cockpit;
 mod project_dashboard;
 mod projects;
 mod runtime;
+mod stream_sanitizer;
 mod task_intelligence;
 mod task_sources;
 mod time;

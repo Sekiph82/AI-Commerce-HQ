@@ -1,6 +1,7 @@
 use crate::db::DatabaseState;
 use crate::process_policy::background_command;
 use crate::projects::{fetch_project, ProjectRecord};
+use crate::stream_sanitizer::{has_meaningful_provider_output, StreamRedactor};
 use crate::time::utc_timestamp;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
@@ -21,7 +22,6 @@ const MAX_PROMPT_BYTES: usize = 64 * 1024;
 const MAX_OUTPUT_BYTES: usize = 64 * 1024;
 const MAX_OUTPUT_EVENTS: usize = 128;
 const MAX_SESSION_EVENTS: usize = MAX_OUTPUT_EVENTS * 2 + 16;
-const MAX_REDACTION_CARRY_BYTES: usize = 4096;
 const PERSIST_QUEUE_CAPACITY: usize = 32;
 const PERSIST_RETRY_ATTEMPTS: usize = 3;
 const PERSIST_RETRY_BACKOFF: [Duration; 2] = [Duration::from_millis(10), Duration::from_millis(25)];
@@ -158,85 +158,6 @@ impl Capture {
         }
         Some((text, self.event_count, self.truncated))
     }
-}
-
-#[derive(Default)]
-struct StreamRedactor {
-    carry: Vec<u8>,
-    discard_until_newline: bool,
-}
-
-impl StreamRedactor {
-    fn push(&mut self, bytes: &[u8]) -> Vec<String> {
-        let mut output = Vec::new();
-        let mut remaining = bytes;
-        while !remaining.is_empty() {
-            if self.discard_until_newline {
-                if let Some(index) = remaining.iter().position(|byte| *byte == b'\n') {
-                    self.discard_until_newline = false;
-                    remaining = &remaining[index + 1..];
-                } else {
-                    return output;
-                }
-            } else {
-                self.carry.extend_from_slice(remaining);
-                remaining = &[];
-                while let Some(index) = self.carry.iter().position(|byte| *byte == b'\n') {
-                    let record: Vec<u8> = self.carry.drain(..=index).collect();
-                    output.push(redact_record(&record));
-                }
-                if self.carry.len() > MAX_REDACTION_CARRY_BYTES {
-                    output.push("[REDACTED SENSITIVE OUTPUT]".to_string());
-                    self.carry.clear();
-                    self.discard_until_newline = true;
-                }
-            }
-        }
-        output
-    }
-
-    fn finish(&mut self) -> Vec<String> {
-        if self.discard_until_newline {
-            self.carry.clear();
-            self.discard_until_newline = false;
-            return Vec::new();
-        }
-        if self.carry.is_empty() {
-            return Vec::new();
-        }
-        let record = std::mem::take(&mut self.carry);
-        vec![redact_record(&record)]
-    }
-}
-
-fn redact_record(record: &[u8]) -> String {
-    let text = String::from_utf8_lossy(record);
-    let has_newline = text.ends_with('\n');
-    let content = text.trim_end_matches('\n').trim_end_matches('\r');
-    if contains_sensitive_marker(content) {
-        let mut redacted = "[REDACTED SENSITIVE OUTPUT]".to_string();
-        if has_newline {
-            redacted.push('\n');
-        }
-        redacted
-    } else {
-        text.into_owned()
-    }
-}
-
-fn contains_sensitive_marker(value: &str) -> bool {
-    let lower = value.to_ascii_lowercase();
-    [
-        "api_key",
-        "apikey",
-        "token",
-        "password",
-        "secret",
-        "authorization",
-        "sk-",
-    ]
-    .iter()
-    .any(|needle| lower.contains(needle))
 }
 
 trait EventStore: Send {
@@ -841,6 +762,19 @@ fn monitor_process(
                 serde_json::Value::String("CODEX_PROCESS_CRASHED".into());
             finish_payload["diagnosticMessage"] =
                 serde_json::Value::String("Codex process ended without a status".into());
+        } else if state == "COMPLETED"
+            && !stdout_capture
+                .lock()
+                .ok()
+                .map(|capture| has_meaningful_provider_output(&capture.text))
+                .unwrap_or(false)
+        {
+            finish_payload["diagnosticCode"] =
+                serde_json::Value::String("CODEX_ASSISTANT_EVIDENCE_UNAVAILABLE".into());
+            finish_payload["diagnosticMessage"] = serde_json::Value::String(
+                "Codex exited successfully, but no durable assistant or result text was captured"
+                    .into(),
+            );
         }
         if let Err(error) = lifecycle_result {
             finish_payload["lifecyclePersistenceError"] =
@@ -1499,6 +1433,7 @@ pub fn reconcile(database: &DatabaseState) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::stream_sanitizer::MAX_PROVIDER_RECORD_BYTES;
     use std::io;
     use std::process::Command;
     use tempfile::tempdir;
@@ -1810,7 +1745,6 @@ mod tests {
             let combined = payloads.join("\n").to_ascii_lowercase();
             assert!(!combined.contains(&line.to_ascii_lowercase()));
             assert!(!combined.contains("super-secret-value"));
-            assert!(!combined.contains(marker));
             assert!(combined.contains("redacted"));
         }
     }
@@ -1835,7 +1769,8 @@ mod tests {
         let payload: String = connection
             .query_row("SELECT payload_json FROM agent_events WHERE session_id='unterminated' AND event_type='STREAM_OUTPUT'", [], |row| row.get(0))
             .unwrap();
-        assert!(!payload.contains("password"));
+        assert!(payload.contains("password"));
+        assert!(!payload.contains("super-secret-value"));
         assert!(payload.contains("REDACTED"));
     }
 
@@ -1906,9 +1841,13 @@ mod tests {
     #[test]
     fn stateful_redaction_remains_bounded_before_capture_caps_are_applied() {
         let mut redactor = StreamRedactor::default();
-        let output = redactor.push(&vec![b'a'; MAX_REDACTION_CARRY_BYTES + 1]);
-        assert!(output.iter().any(|value| value.contains("REDACTED")));
-        assert!(redactor.carry.len() <= MAX_REDACTION_CARRY_BYTES);
+        let mut oversized = vec![b'a'; MAX_PROVIDER_RECORD_BYTES + 1];
+        oversized.push(b'\n');
+        let output = redactor.push(&oversized);
+        assert!(output
+            .iter()
+            .any(|value| value.contains("PROVIDER RECORD TRUNCATED")));
+        assert!(redactor.buffered_bytes() <= MAX_PROVIDER_RECORD_BYTES);
         let mut capture = Capture::default();
         for _ in 0..(MAX_OUTPUT_EVENTS + 4) {
             let _ = capture.append("safe");

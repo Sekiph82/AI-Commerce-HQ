@@ -1,6 +1,7 @@
 use crate::codex_adapter::{AgentAdapter, CodexAdapter, CodexSession, CodexStartRequest};
 use crate::process_policy::background_command;
 use crate::projects::{fetch_project, ProjectRecord};
+use crate::stream_sanitizer::{has_meaningful_provider_output, StreamRedactor};
 use crate::time::utc_timestamp;
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -19,7 +20,6 @@ use uuid::Uuid;
 const MAX_PROMPT_BYTES: usize = 64 * 1024;
 const MAX_OUTPUT_BYTES: usize = 64 * 1024;
 const MAX_OUTPUT_EVENTS: usize = 128;
-const MAX_REDACTION_CARRY_BYTES: usize = 4096;
 const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -151,77 +151,6 @@ impl Capture {
         }
         Some(retained)
     }
-}
-
-#[derive(Default)]
-struct StreamRedactor {
-    carry: Vec<u8>,
-    discard_until_newline: bool,
-}
-
-impl StreamRedactor {
-    fn push(&mut self, bytes: &[u8]) -> Vec<String> {
-        let mut output = Vec::new();
-        if self.discard_until_newline {
-            if let Some(index) = bytes.iter().position(|byte| *byte == b'\n') {
-                self.discard_until_newline = false;
-                return self.push(&bytes[index + 1..]);
-            }
-            return output;
-        }
-        self.carry.extend_from_slice(bytes);
-        while let Some(index) = self.carry.iter().position(|byte| *byte == b'\n') {
-            let record: Vec<u8> = self.carry.drain(..=index).collect();
-            output.push(redact_record(&record));
-        }
-        if self.carry.len() > MAX_REDACTION_CARRY_BYTES {
-            output.push("[REDACTED SENSITIVE OUTPUT]".to_string());
-            self.carry.clear();
-            self.discard_until_newline = true;
-        }
-        output
-    }
-
-    fn finish(&mut self) -> Vec<String> {
-        if self.discard_until_newline {
-            self.carry.clear();
-            self.discard_until_newline = false;
-            return Vec::new();
-        }
-        if self.carry.is_empty() {
-            return Vec::new();
-        }
-        vec![redact_record(&std::mem::take(&mut self.carry))]
-    }
-}
-
-fn redact_record(record: &[u8]) -> String {
-    let text = String::from_utf8_lossy(record);
-    let content = text.trim_end_matches(['\r', '\n']);
-    if contains_sensitive_marker(content) {
-        if text.ends_with('\n') {
-            "[REDACTED SENSITIVE OUTPUT]\n".into()
-        } else {
-            "[REDACTED SENSITIVE OUTPUT]".into()
-        }
-    } else {
-        text.into_owned()
-    }
-}
-
-fn contains_sensitive_marker(value: &str) -> bool {
-    let lower = value.to_ascii_lowercase();
-    [
-        "api_key",
-        "apikey",
-        "token",
-        "password",
-        "secret",
-        "authorization",
-        "sk-",
-    ]
-    .iter()
-    .any(|needle| lower.contains(needle))
 }
 
 fn validate_prompt(prompt: &str) -> Result<(), String> {
@@ -694,6 +623,13 @@ fn run_claude_session(
         (
             Some("CLAUDE_PROCESS_FAILED"),
             Some("Claude exited before producing a successful terminal result"),
+        )
+    } else if state == "COMPLETED" && !has_meaningful_provider_output(&stdout_capture.text) {
+        (
+            Some("CLAUDE_ASSISTANT_EVIDENCE_UNAVAILABLE"),
+            Some(
+                "Claude exited successfully, but no durable assistant or result text was captured",
+            ),
         )
     } else {
         (None, None)
@@ -1175,6 +1111,7 @@ impl AgentSession {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::stream_sanitizer::sanitize_record;
     use std::fs;
     use tempfile::tempdir;
 
@@ -1208,7 +1145,10 @@ mod tests {
         let mut redactor = StreamRedactor::default();
         assert!(redactor.push(b"authorization: Bearer ").is_empty());
         let output = redactor.push(b"secret-value\n");
-        assert_eq!(output, vec!["[REDACTED SENSITIVE OUTPUT]\n"]);
+        assert_eq!(
+            output,
+            vec!["authorization: Bearer [REDACTED SENSITIVE VALUE]\n"]
+        );
         for marker in [
             "api_key=hidden",
             "apikey=hidden",
@@ -1217,11 +1157,52 @@ mod tests {
             "secret=hidden",
             "sk-hidden",
         ] {
-            assert_eq!(
-                redact_record(format!("{marker}\n").as_bytes()),
-                "[REDACTED SENSITIVE OUTPUT]\n"
-            );
+            let sanitized = sanitize_record(format!("{marker}\n").as_bytes());
+            assert!(!sanitized.contains("hidden"));
+            assert!(!sanitized.contains("sk-hidden"));
         }
+    }
+
+    #[test]
+    fn sanitized_claude_assistant_survives_persist_and_reload() {
+        let database_directory = tempdir().unwrap();
+        let project_directory = tempdir().unwrap();
+        let database =
+            crate::db::DatabaseState::initialize(database_directory.path().to_path_buf()).unwrap();
+        let project = crate::projects::register_project(
+            &database,
+            crate::projects::RegisterProjectRequest {
+                path: project_directory.path().to_string_lossy().into(),
+                name: Some("Claude evidence fixture".into()),
+            },
+        )
+        .unwrap();
+        let session_id = "claude-reload-fixture";
+        let connection = database.open_connection().unwrap();
+        connection
+            .execute(
+                "INSERT INTO agent_sessions (id,project_id,provider,state,created_at,prompt_body) VALUES (?1,?2,'CLAUDE','COMPLETED',?3,?4)",
+                params![session_id, project.id, utc_timestamp(), "Inspect the project read-only."],
+            )
+            .unwrap();
+        let raw = json!({
+            "type": "assistant",
+            "message": {"role": "assistant", "content": [{"type": "text", "text": "The project is healthy."}]},
+            "api_key": "sk-never-persist"
+        });
+        let sanitized = sanitize_record(format!("{raw}\n").as_bytes());
+        insert_event(
+            &connection,
+            session_id,
+            "STREAM_STDOUT",
+            json!({"text":sanitized,"channel":"stdout"}),
+        )
+        .unwrap();
+        drop(connection);
+        let reloaded = load_session(&database, session_id).unwrap();
+        assert!(reloaded.stdout.contains("The project is healthy."));
+        assert!(!reloaded.stdout.contains("sk-never-persist"));
+        assert!(reloaded.stdout.contains("REDACTED SENSITIVE VALUE"));
     }
 
     #[test]
