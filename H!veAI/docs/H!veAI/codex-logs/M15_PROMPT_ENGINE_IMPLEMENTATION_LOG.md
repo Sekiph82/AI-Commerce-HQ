@@ -139,7 +139,7 @@ The conditional M15 real-provider acceptance operation was not run: there was no
 95. PASS: only scoped H!veAI files are committed; parent unrelated files remain unstaged.
 96. PASS: push to `origin/H!veAI` will use the normal non-force command.
 97. PASS after push: final local HEAD will equal `origin/H!veAI`.
-98. PASS after push: final commit SHA and changed-file scope will be recorded in this log and final response.
+98. PASS after push: implementation commit SHA and changed-file scope are recorded below and the final branch SHA is recorded in the final response.
 
 ## Completion boundary
 
@@ -149,6 +149,8 @@ M15: `IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT AUDIT + USER NATIVE/V
 
 M16-M20: planned/blocked. M21: planned and not started.
 
-Initial scoped implementation commit SHA: `1e0c256` (the final amended commit SHA is recorded in the final response and verified against `origin/H!veAI` after push).
+Scoped implementation commit SHA: `a09f5e5c3c15184d189165566d035df7e7505fc5` (the final implementation commit verified against `origin/H!veAI` after push).
+
+Committed implementation scope: `CODEX_ROADMAP.md`, `README.md`, `TASKS.md`, `docs/H!veAI/README.md`, `docs/H!veAI/codex-logs/M15_PROMPT_ENGINE_IMPLEMENTATION_LOG.md`, `src-tauri/src/agent_session_center.rs`, `src-tauri/src/db/migrations.rs`, `src-tauri/src/db/mod.rs`, `src-tauri/src/lib.rs`, `src-tauri/src/prompt_engine.rs`, `src/App.tsx`, `src/PromptEnginePage.tsx`, `src/agentSessionCenter.ts`, `src/components/Shell.tsx`, `src/pages.tsx`, `src/promptEngine.ts`, `src/styles.css`, and `tests/m15-prompt-engine-focused.test.tsx`.
 
 Final local/origin equality: verified after push with `git rev-list --left-right --count HEAD...origin/H!veAI` equal to `0 0`; final SHA is recorded in the final response.
