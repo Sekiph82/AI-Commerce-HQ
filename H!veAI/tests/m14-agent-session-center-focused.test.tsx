@@ -91,6 +91,8 @@ describe("M14 Agent Session Center", () => {
       JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "## Findings\n\n- First item\n- Second item\n\n`bounded code`" }] } }),
       JSON.stringify({ type: "tool_use", name: "read_file", input: { path: "secret.json" } }),
       JSON.stringify({ type: "rate_limit_event", status: "allowed" }),
+      "[REDACTED SENSITIVE VALUE]",
+      "[REDACTED SENSITIVE VALUE]",
       JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "The repository is clean." }] } }),
     ].join("\n") };
     invoke.mockImplementation((command: string) => {
@@ -109,6 +111,7 @@ describe("M14 Agent Session Center", () => {
     expect(reader).toHaveTextContent("The repository is clean.");
     expect(reader).not.toHaveTextContent("hidden");
     expect(reader).not.toHaveTextContent("rate_limit_event");
+    expect(reader).not.toHaveTextContent("REDACTED SENSITIVE VALUE");
     const activity = reader.querySelector(".agent-activity-disclosure");
     expect(activity).toBeTruthy();
     expect(activity).not.toHaveAttribute("open");
