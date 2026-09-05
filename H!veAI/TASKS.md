@@ -33,7 +33,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition
 - M10A remediation, independent re-audit, and Akilta native click acceptance are complete; Akilta footer link = PASS/ACCEPTED.
 - Original M11 implementation is a historical strict-audit FAIL with 8 MAJOR findings.
 - M11A REV4, REV5, REV6, and REV7 remediation history remains immutable; all findings are closed by the accepted strict audits. M11A REV7 = PASS/CLOSED and the final Projects visual cleanup = PASS/CLOSED.
-- M11 = PASS/CLOSED. M12, M12A R26, and M12B native Open Cockpit remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B/M13C/M13D/M13E = PASS/CLOSED on accepted strict re-audits and user native/visual evidence. M14 and M14A-M14E = PASS/CLOSED on accepted strict and native evidence. M15 remains OPEN; M15A R54/R55 and M15B R56-R58 remediations are complete pending independent re-audit and user native acceptance. M16-M20 remain planned/blocked and M21 remains planned/not started.
+- M11 = PASS/CLOSED. M12, M12A R26, and M12B native Open Cockpit remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B/M13C/M13D/M13E = PASS/CLOSED on accepted strict re-audits and user native/visual evidence. M14 and M14A-M14E = PASS/CLOSED on accepted strict and native evidence. M15 remains OPEN; M15A R54/R55, M15B R56-R58, and M15C post-dispatch Agents handoff are complete pending independent re-audit and user native acceptance. M16-M20 remain planned/blocked and M21 remains planned/not started.
 - M21 remains planned and was not started.
 
 ---
@@ -1316,6 +1316,16 @@ M15A REMEDIATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE AC
 - [ ] Independent strict re-audit and user native acceptance.
 
 M15B REMEDIATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE ACCEPTANCE.
+
+## M15C - Post-dispatch handoff to Agents
+
+- [x] Post-dispatch `View result in Agents` action carries the exact registered project and owned session target.
+- [x] Agents validates the target, switches project through the registry path, and opens the exact persisted session without provider relaunch.
+- [x] Invalid and wrong-project targets fail safely; normal Agents behavior, polling, manual selection, and M14E final-response presentation remain intact.
+- [x] Focused handoff/router regression, full regression, governed publication, and immutable evidence log.
+- [ ] Independent strict re-audit and user native handoff acceptance.
+
+M15C IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE HANDOFF ACCEPTANCE.
 
 ---
 

@@ -19,7 +19,7 @@ import "@xterm/xterm/css/xterm.css";
 import type { FitAddon as FitAddonType } from "@xterm/addon-fit";
 import type { Terminal as XTermType } from "@xterm/xterm";
 import { invoke } from "@tauri-apps/api/core";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { activity, attention, projects, queue } from "./fixtures";
 import {
   ActivityRow,
@@ -60,6 +60,7 @@ import { getCommandCenterSnapshot, type CommandCenterProject } from "./commandCe
 import { getProjectCockpitSnapshot, type ProjectCockpitSnapshot } from "./projectCockpit";
 import { getAgentReadiness, listAgentSessions, resizeAgentTerminal, retryAgentSession, startAgentSession, stopAgentSession, type AgentSession, type ProviderReadiness, type SessionProvider } from "./agentSessionCenter";
 import { overrideWorkflow, type WorkflowState } from "./workflow";
+import { parseAgentRouteTarget } from "./agentNavigation";
 export { PromptEnginePage } from "./PromptEnginePage";
 import {
   addCustomSourcePath,
@@ -1968,7 +1969,9 @@ function elapsedLabel(session: AgentSession, now: number) {
 
 export function Agents() {
   const desktop = isTauriDesktop();
-  const { records, selectedProjectId, selectProject } = useProjectRegistry();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { records, loading: registryLoading, selectedProjectId, selectProject } = useProjectRegistry();
   const selected = records.find((record) => record.id === selectedProjectId) ?? records[0] ?? null;
   const [readiness, setReadiness] = React.useState<ProviderReadiness[]>([]);
   const [sessions, setSessions] = React.useState<AgentSession[]>([]);
@@ -1981,11 +1984,20 @@ export function Agents() {
   const [git, setGit] = React.useState<GitSnapshot | null>(null);
   const [gitDiff, setGitDiff] = React.useState<GitDiff | null>(null);
   const [now, setNow] = React.useState(() => Date.now());
+  const [routeSessionId, setRouteSessionId] = React.useState<string | null>(null);
+  const [routeNotice, setRouteNotice] = React.useState<string | null>(null);
+  const [sessionsLoadedFor, setSessionsLoadedFor] = React.useState<string | null>(null);
+  const handledRouteSearch = React.useRef<string | null>(null);
+  const routeTarget = React.useMemo(() => parseAgentRouteTarget(location.search), [location.search]);
+  const routeHasTargetParams = React.useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.has("projectId") || params.has("sessionId");
+  }, [location.search]);
   const selectedSession = sessions.find((session) => session.id === selectedSessionId) ?? null;
   const selectedReadiness = readiness.find((item) => item.provider === provider);
   const refreshSessions = React.useCallback(async () => {
     if (!desktop || !selected?.id) return;
-    try { setSessions(await listAgentSessions(selected.id)); setError(null); } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
+    try { setSessions(await listAgentSessions(selected.id)); setSessionsLoadedFor(selected.id); setError(null); } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
   }, [desktop, selected?.id]);
   const refresh = React.useCallback(async () => {
     if (!desktop) return;
@@ -1994,6 +2006,37 @@ export function Agents() {
   React.useEffect(() => { setProvider(selected?.preferredAgentProvider ?? "CODEX"); }, [selected?.id, selected?.preferredAgentProvider]);
   React.useEffect(() => { void refresh(); }, [refresh]);
   React.useEffect(() => { if (selectedSessionId && !sessions.some((session) => session.id === selectedSessionId)) setSelectedSessionId(null); }, [sessions, selectedSessionId]);
+  React.useEffect(() => {
+    if (!routeHasTargetParams || registryLoading || handledRouteSearch.current === location.search) return;
+    handledRouteSearch.current = location.search;
+    if (!routeTarget) {
+      setRouteSessionId(null);
+      setRouteNotice("This Agents link is missing a valid registered project and session target.");
+      navigate("/agents", { replace: true });
+      return;
+    }
+    if (!records.some((record) => record.id === routeTarget.projectId)) {
+      setRouteSessionId(null);
+      setRouteNotice("The dispatched project is not registered in this workspace.");
+      navigate("/agents", { replace: true });
+      return;
+    }
+    setRouteNotice(null);
+    setRouteSessionId(routeTarget.sessionId);
+    if (selectedProjectId !== routeTarget.projectId) selectProject(routeTarget.projectId);
+  }, [location.search, navigate, records, registryLoading, routeHasTargetParams, routeTarget, selectProject, selectedProjectId]);
+  React.useEffect(() => {
+    if (!routeSessionId || !routeTarget || selected?.id !== routeTarget.projectId || sessionsLoadedFor !== routeTarget.projectId) return;
+    if (sessions.some((session) => session.id === routeSessionId && session.projectId === routeTarget.projectId)) {
+      setSelectedSessionId(routeSessionId);
+      setRouteSessionId(null);
+      setRouteNotice(null);
+    } else {
+      setRouteSessionId(null);
+      setRouteNotice("The dispatched session is not persisted under that registered project.");
+    }
+    navigate("/agents", { replace: true });
+  }, [navigate, routeSessionId, routeTarget, selected?.id, sessions, sessionsLoadedFor]);
   React.useEffect(() => { if (!desktop || !selected?.id) return; const timer = window.setInterval(() => { void refreshSessions(); }, 750); return () => window.clearInterval(timer); }, [desktop, refreshSessions, selected?.id]);
   React.useEffect(() => {
     if (!selectedSession) { setGit(null); setGitDiff(null); return; }
@@ -2017,6 +2060,7 @@ export function Agents() {
     <PageHeader title="Agent Session Center" description="Observe owned Codex and Claude sessions for registered projects." />
     {!desktop ? <div className="fixture-note">Native H!veAI is required for provider sessions.</div> : null}
     {error ? <div className="safe-notice" role="alert">{error}</div> : null}
+    {routeNotice ? <div className="safe-notice" role="status">{routeNotice}</div> : null}
     <section className="panel agent-operation-panel"><SectionHeader title="Start owned session" detail="Registered project, fixed provider policy" /><label>Project<select aria-label="Agent project" value={selected?.id ?? ""} onChange={(event) => selectProject(event.target.value, true)} disabled={busy || !records.length}>{records.map((record) => <option key={record.id} value={record.id}>{record.name}</option>)}</select></label><label>Task ID <span className="agent-field-note">optional, must belong to project</span><input aria-label="Agent task ID" value={taskId} onChange={(event) => setTaskId(event.target.value)} disabled={busy} maxLength={256} /></label><label>Prompt<textarea aria-label="Agent prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} disabled={busy} maxLength={65536} rows={5} /></label><label>Provider<select aria-label="Agent provider" value={provider} onChange={(event) => void chooseProvider(event.target.value as SessionProvider)} disabled={busy}><option value="CODEX">Codex</option><option value="CLAUDE">Claude</option></select></label><div className="agent-action-row"><button className="primary-button" type="button" onClick={() => void start()} disabled={!desktop || !selected || !selectedReadiness?.available || !prompt.trim() || busy}><Terminal size={15} /> Start {provider} session</button>{selectedSession && ["FAILED", "STOPPED", "CRASHED"].includes(selectedSession.state) ? <button className="secondary-button" type="button" onClick={() => void retry()} disabled={!prompt.trim() || busy}><RefreshCw size={15} /> Retry as new session</button> : null}</div></section>
     {!selectedSession ? <section className="panel agent-current-conversation agent-current-conversation-empty" data-testid="agent-current-conversation"><SectionHeader title="Current conversation" detail="The next owned session will appear here" /><p className="agent-output-empty">Start a Codex or Claude session to see the user prompt and live assistant result.</p></section> : null}
     <div className="agent-session-workspace">

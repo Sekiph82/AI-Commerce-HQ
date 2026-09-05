@@ -1,10 +1,12 @@
 import React from "react";
-import { Check, FileText, RefreshCw, Send, ShieldCheck, WandSparkles } from "lucide-react";
+import { ArrowUpRight, Check, FileText, RefreshCw, Send, ShieldCheck, WandSparkles } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { EmptyState, PageHeader, SectionHeader } from "./components/ui";
 import { useProjectRegistry } from "./registryContext";
 import { isTauriDesktop } from "./projectRegistry";
 import { listWorkflowTasks, type WorkflowTask } from "./workflow";
 import { approvePrompt, collectPromptContext, dispatchPrompt, editPrompt, generatePrompt, listPromptVersions, type ContextManifest, type PromptKind, type PromptVersion } from "./promptEngine";
+import { agentRouteTarget, type AgentRouteTarget } from "./agentNavigation";
 
 const TASK_TITLE_LIMIT = 72;
 
@@ -20,6 +22,7 @@ function PromptTaskPicker({ tasks, value, onChange, disabled }: { tasks: Workflo
 }
 
 export function PromptEnginePage() {
+  const navigate = useNavigate();
   const { records } = useProjectRegistry();
   const active = records.filter((record) => record.status === "ACTIVE");
   const [projectId, setProjectId] = React.useState(active[0]?.id ?? "");
@@ -36,6 +39,7 @@ export function PromptEnginePage() {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
+  const [dispatchedTarget, setDispatchedTarget] = React.useState<AgentRouteTarget | null>(null);
   const desktop = isTauriDesktop();
   const selectedProject = active.find((record) => record.id === projectId);
 
@@ -47,19 +51,19 @@ export function PromptEnginePage() {
   React.useEffect(() => { setProvider(selectedProject?.preferredAgentProvider ?? "CODEX"); }, [projectId, selectedProject?.preferredAgentProvider]);
   const run = async (action: () => Promise<void>) => { setBusy(true); setError(null); setNotice(null); try { await action(); } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); } finally { setBusy(false); } };
   const refreshContext = () => run(async () => { const next = await collectPromptContext(projectId, taskId || null); setContext(next); setNotice("Bounded context refreshed."); });
-  const generate = () => run(async () => { const next = await generatePrompt({ projectId, taskId: taskId || null, kind, title, summary, findingIds: findingIds.length ? findingIds : undefined }); setVersion(next); setContext(next.contextManifest); setHistory(await listPromptVersions(projectId, next.promptId)); setNotice("Draft generated. Review and approve it before dispatch."); });
-  const save = () => version ? run(async () => { const next = await editPrompt({ projectId, promptId: version.promptId, versionId: version.id, content: version.content, title: title || undefined, summary: summary || undefined }); setVersion(next); setHistory(await listPromptVersions(projectId, next.promptId)); setNotice(next.version === version.version ? "Draft updated." : "A new immutable version was created."); }) : undefined;
-  const approve = () => version ? run(async () => { const next = await approvePrompt(projectId, version.promptId, version.id); setVersion(next); setHistory(await listPromptVersions(projectId, next.promptId)); setNotice("Exact prompt version approved. Dispatch remains a separate action."); }) : undefined;
-  const dispatch = () => version ? run(async () => { const result = await dispatchPrompt(projectId, version.promptId, version.id, provider); setVersion(result.prompt); setHistory(await listPromptVersions(projectId, result.promptId)); setNotice(`Dispatched ${provider} session ${result.session.id} with exact version ${result.promptVersion}.`); }) : undefined;
+  const generate = () => run(async () => { const next = await generatePrompt({ projectId, taskId: taskId || null, kind, title, summary, findingIds: findingIds.length ? findingIds : undefined }); setDispatchedTarget(null); setVersion(next); setContext(next.contextManifest); setHistory(await listPromptVersions(projectId, next.promptId)); setNotice("Draft generated. Review and approve it before dispatch."); });
+  const save = () => version ? run(async () => { const next = await editPrompt({ projectId, promptId: version.promptId, versionId: version.id, content: version.content, title: title || undefined, summary: summary || undefined }); setDispatchedTarget(null); setVersion(next); setHistory(await listPromptVersions(projectId, next.promptId)); setNotice(next.version === version.version ? "Draft updated." : "A new immutable version was created."); }) : undefined;
+  const approve = () => version ? run(async () => { const next = await approvePrompt(projectId, version.promptId, version.id); setDispatchedTarget(null); setVersion(next); setHistory(await listPromptVersions(projectId, next.promptId)); setNotice("Exact prompt version approved. Dispatch remains a separate action."); }) : undefined;
+  const dispatch = () => version ? run(async () => { const result = await dispatchPrompt(projectId, version.promptId, version.id, provider); setVersion(result.prompt); setHistory(await listPromptVersions(projectId, result.promptId)); setDispatchedTarget({ projectId, sessionId: result.session.id }); setNotice(`Dispatched ${provider} session ${result.session.id} with exact version ${result.promptVersion}.`); }) : undefined;
   const canGenerate = Boolean(desktop && projectId && title.trim() && summary.trim() && !busy);
   return <>
     <PageHeader title="Prompt Engine" description="Build bounded, reviewable prompts with exact provider provenance." />
     {!desktop ? <div className="fixture-note">Native H!veAI is required for prompt persistence and provider dispatch.</div> : null}
     {error ? <div className="safe-notice" role="alert">{error}</div> : null}
-    {notice ? <div className="safe-notice prompt-notice" role="status"><Check size={15} />{notice}</div> : null}
+    {notice ? <div className="safe-notice prompt-notice" role="status"><Check size={15} />{notice}{dispatchedTarget ? <button className="secondary-button prompt-handoff-action" type="button" onClick={() => navigate(agentRouteTarget(dispatchedTarget))}><ArrowUpRight size={15} /> View result in Agents</button> : null}</div> : null}
     <div className="prompt-engine-flow">
       <section className="panel prompt-setup-panel"><SectionHeader title="1. Context and goal" detail="Registry-backed project and task authority" />
-        <label>Project<select aria-label="Prompt project" value={projectId} onChange={(event) => { setProjectId(event.target.value); setTaskId(""); setContext(null); setVersion(null); }} disabled={busy || !active.length}>{active.map((record) => <option key={record.id} value={record.id}>{record.name}</option>)}</select></label>
+        <label>Project<select aria-label="Prompt project" value={projectId} onChange={(event) => { setProjectId(event.target.value); setTaskId(""); setContext(null); setVersion(null); setDispatchedTarget(null); }} disabled={busy || !active.length}>{active.map((record) => <option key={record.id} value={record.id}>{record.name}</option>)}</select></label>
         <PromptTaskPicker tasks={tasks} value={taskId} onChange={setTaskId} disabled={busy || !projectId} />
         <label>Prompt kind<select aria-label="Prompt kind" value={kind} onChange={(event) => setKind(event.target.value as PromptKind)} disabled={busy}><option value="IMPLEMENTATION">Implementation</option><option value="REMEDIATION">Remediation</option><option value="AUDIT_SUPPORT">Audit support</option></select></label>
         <label>Title<input aria-label="Prompt title" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={512} disabled={busy} /></label>
