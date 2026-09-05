@@ -352,6 +352,17 @@ CREATE INDEX idx_prompt_versions_approval ON prompt_versions(approval_state, cre
 CREATE INDEX idx_agent_sessions_prompt_version ON agent_sessions(prompt_version_id);
 "#;
 
+const PROMPT_DISPATCH_FIELDS: &str = r#"
+ALTER TABLE prompt_versions ADD COLUMN dispatch_state TEXT NOT NULL DEFAULT 'AVAILABLE';
+ALTER TABLE prompt_versions ADD COLUMN dispatch_reservation_id TEXT;
+ALTER TABLE prompt_versions ADD COLUMN dispatch_reserved_at TEXT;
+ALTER TABLE prompt_versions ADD COLUMN dispatch_provenance_json TEXT;
+ALTER TABLE prompt_versions ADD COLUMN dispatch_error TEXT;
+UPDATE prompt_versions SET dispatch_state = CASE WHEN dispatched_session_id IS NOT NULL OR used_at IS NOT NULL THEN 'DISPATCHED' ELSE 'AVAILABLE' END;
+CREATE INDEX idx_prompt_versions_dispatch_state ON prompt_versions(dispatch_state, created_at);
+CREATE UNIQUE INDEX idx_prompt_versions_dispatch_reservation ON prompt_versions(dispatch_reservation_id) WHERE dispatch_reservation_id IS NOT NULL;
+"#;
+
 pub fn migrations() -> &'static [Migration] {
     &[
         Migration {
@@ -408,6 +419,11 @@ pub fn migrations() -> &'static [Migration] {
             version: 11,
             name: "prompt_engine_fields",
             sql: PROMPT_ENGINE_FIELDS,
+        },
+        Migration {
+            version: 12,
+            name: "prompt_dispatch_reservations",
+            sql: PROMPT_DISPATCH_FIELDS,
         },
     ]
 }
@@ -507,8 +523,8 @@ mod tests {
     fn fresh_database_reaches_latest_version() {
         let (_directory, mut connection) = temp_connection();
         let report = apply_migrations(&mut connection, migrations()).expect("migrations apply");
-        assert_eq!(report.schema_version, 11);
-        assert_eq!(report.migration_count, 11);
+        assert_eq!(report.schema_version, 12);
+        assert_eq!(report.migration_count, 12);
         assert_eq!(report.last_migration_status, "APPLIED");
     }
 
@@ -518,7 +534,7 @@ mod tests {
         apply_migrations(&mut connection, migrations()).expect("first apply");
         let report = apply_migrations(&mut connection, migrations()).expect("second apply");
         assert_eq!(report.last_migration_status, "ALREADY_CURRENT");
-        assert_eq!(report.migration_count, 11);
+        assert_eq!(report.migration_count, 12);
     }
 
     #[test]
@@ -585,7 +601,7 @@ mod tests {
         let (_directory, mut connection) = temp_connection();
         let first = apply_migrations(&mut connection, migrations()).expect("first apply");
         let second = apply_migrations(&mut connection, migrations()).expect("rerun");
-        assert_eq!(first.schema_version, 11);
+        assert_eq!(first.schema_version, 12);
         assert_eq!(second.last_migration_status, "ALREADY_CURRENT");
         let mismatch = [Migration {
             version: 1,
@@ -619,7 +635,8 @@ mod tests {
                 (8, "project_preferred_agent_provider".to_string()),
                 (9, "agent_session_prompt_body".to_string()),
                 (10, "agent_session_final_response".to_string()),
-                (11, "prompt_engine_fields".to_string())
+                (11, "prompt_engine_fields".to_string()),
+                (12, "prompt_dispatch_reservations".to_string())
             ]
         );
     }
@@ -700,6 +717,8 @@ mod tests {
             "idx_tasks_project_state",
             "idx_task_dependencies_dependency",
             "idx_prompt_versions_prompt",
+            "idx_prompt_versions_dispatch_state",
+            "idx_prompt_versions_dispatch_reservation",
             "idx_agent_sessions_project_state",
             "idx_audit_findings_audit",
             "idx_github_sync_project",

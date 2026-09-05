@@ -9,6 +9,7 @@ export type PromptVersion = {
   content: string; createdBy: string; createdAt: string; origin: string; contextManifest: ContextManifest | null;
   provenance: Record<string, unknown>; approvalState: string; approvedAt: string | null; approvedBodySha256: string | null;
   usedAt: string | null; selectedProvider: "CODEX" | "CLAUDE" | null; dispatchedSessionId: string | null; supersededAt: string | null;
+  dispatchState: string; dispatchReservationId: string | null; dispatchReservedAt: string | null; dispatchProvenance: Record<string, unknown>; dispatchError: string | null;
   bodySha256: string; isCurrent: boolean;
 };
 export type PromptRecord = { id: string; projectId: string | null; taskId: string | null; kind: PromptKind; currentVersion: number; createdAt: string; updatedAt: string; current: PromptVersion | null };

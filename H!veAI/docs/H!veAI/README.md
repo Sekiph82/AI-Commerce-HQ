@@ -89,7 +89,7 @@ Chronological builder logs. Builder logs are claims/evidence records, not indepe
 - Strict completed milestone count is now 15/20 = 75%.
 - M11 original implementation: historical strict-audit FAIL with 8 MAJOR findings.
 - M11A REV4-REV7 remediation history remains immutable and accepted; M11A REV7 = PASS/CLOSED and final Projects visual cleanup = PASS/CLOSED.
-- M11 = PASS/CLOSED. M12, M12A R26, and M12B native cockpit route remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B/M13C/M13D/M13E = PASS/CLOSED on accepted strict re-audits and user native/visual evidence. M14 and M14A-M14E = PASS/CLOSED on accepted strict and native evidence. M15 is IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT AUDIT + USER NATIVE/VISUAL ACCEPTANCE; M11/M12/M13/M14 runtime implementation incorporates the `.hiveai/PROJECT_DASHBOARD.md` authority manifest system.
+- M11 = PASS/CLOSED. M12, M12A R26, and M12B native cockpit route remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B/M13C/M13D/M13E = PASS/CLOSED on accepted strict re-audits and user native/visual evidence. M14 and M14A-M14E = PASS/CLOSED on accepted strict and native evidence. M15 remains OPEN; M15A R54/R55 remediation is complete pending independent strict re-audit and user native acceptance. M11/M12/M13/M14 runtime implementation incorporates the `.hiveai/PROJECT_DASHBOARD.md` authority manifest system.
 - M21 remains planned and was not started.
 
 For exact current status, always defer to `H!veAI/TASKS.md`.

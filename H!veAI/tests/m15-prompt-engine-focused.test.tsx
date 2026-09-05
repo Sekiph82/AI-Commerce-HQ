@@ -5,7 +5,7 @@ import App from "../src/App";
 const invoke = vi.hoisted(() => vi.fn());
 const project = { id: "prompt-project", name: "Prompt Fixture", originalPath: "C:\\Projects\\Prompt Fixture", normalizedPath: "C:\\Projects\\Prompt Fixture", status: "ACTIVE", priority: 1, preferredBuilder: null, preferredAuditor: null, taskSourcePolicy: "DISCOVER_STANDARD_FILES", preferredAgentProvider: "CODEX", registeredAt: "2026-09-03T10:00:00Z", lastValidatedAt: "2026-09-03T10:00:00Z", repository: null };
 const context = { projectId: project.id, taskId: "task-1", items: [{ class: "TASK", reference: "task:task-1", disposition: "INCLUDED", bytes: 42, reason: null, value: "task" }], includedBytes: 42, omittedCount: 0, sourceCount: 1, manifestSha256: "context-hash" };
-const version = { id: "version-1", promptId: "prompt-1", version: 1, kind: "IMPLEMENTATION", title: "Implement fixture", summary: "Read-only fixture goal", content: "Generated prompt body", createdBy: "M15_PROMPT_ENGINE", createdAt: "2026-09-03T10:00:00Z", origin: "M15_GENERATOR", contextManifest: context, provenance: { projectId: project.id }, approvalState: "DRAFT", approvedAt: null, approvedBodySha256: null, usedAt: null, selectedProvider: null, dispatchedSessionId: null, supersededAt: null, bodySha256: "body-hash", isCurrent: true };
+const version = { id: "version-1", promptId: "prompt-1", version: 1, kind: "IMPLEMENTATION", title: "Implement fixture", summary: "Read-only fixture goal", content: "Generated prompt body", createdBy: "M15_PROMPT_ENGINE", createdAt: "2026-09-03T10:00:00Z", origin: "M15_GENERATOR", contextManifest: context, provenance: { projectId: project.id }, approvalState: "DRAFT", approvedAt: null, approvedBodySha256: null, usedAt: null, selectedProvider: null, dispatchedSessionId: null, supersededAt: null, dispatchState: "AVAILABLE", dispatchReservationId: null, dispatchReservedAt: null, dispatchProvenance: {}, dispatchError: null, bodySha256: "body-hash", isCurrent: true };
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
@@ -21,7 +21,7 @@ beforeEach(() => {
     if (command === "hiveai_prompt_versions") return Promise.resolve([version]);
     if (command === "hiveai_prompt_edit") return Promise.resolve({ ...version, content: "Edited prompt body" });
     if (command === "hiveai_prompt_approve") return Promise.resolve({ ...version, content: "Edited prompt body", approvalState: "APPROVED", approvedBodySha256: "edited-hash" });
-    if (command === "hiveai_prompt_dispatch") return Promise.resolve({ prompt: { ...version, content: "Edited prompt body", approvalState: "DISPATCHED" }, session: { id: "session-1", provider: "CODEX" }, promptId: "prompt-1", promptVersionId: "version-1", promptVersion: 1, promptVersionSha256: "edited-hash" });
+    if (command === "hiveai_prompt_dispatch") return Promise.resolve({ prompt: { ...version, content: "Edited prompt body", approvalState: "DISPATCHED", dispatchState: "DISPATCHED" }, session: { id: "session-1", provider: "CODEX" }, promptId: "prompt-1", promptVersionId: "version-1", promptVersion: 1, promptVersionSha256: "edited-hash" });
     return Promise.resolve({});
   });
 });

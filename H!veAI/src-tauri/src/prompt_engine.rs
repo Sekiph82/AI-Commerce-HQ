@@ -47,7 +47,9 @@ impl PromptKind {
 pub enum PromptApprovalState {
     Draft,
     Approved,
+    Dispatching,
     Dispatched,
+    DispatchFailed,
     Superseded,
 }
 
@@ -56,7 +58,9 @@ impl PromptApprovalState {
         match self {
             Self::Draft => "DRAFT",
             Self::Approved => "APPROVED",
+            Self::Dispatching => "DISPATCHING",
             Self::Dispatched => "DISPATCHED",
+            Self::DispatchFailed => "DISPATCH_FAILED",
             Self::Superseded => "SUPERSEDED",
         }
     }
@@ -118,6 +122,11 @@ pub struct PromptVersion {
     pub selected_provider: Option<String>,
     pub dispatched_session_id: Option<String>,
     pub superseded_at: Option<String>,
+    pub dispatch_state: String,
+    pub dispatch_reservation_id: Option<String>,
+    pub dispatch_reserved_at: Option<String>,
+    pub dispatch_provenance: serde_json::Value,
+    pub dispatch_error: Option<String>,
     pub body_sha256: String,
     pub is_current: bool,
 }
@@ -371,6 +380,13 @@ pub fn collect_context(
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
+    let source_total: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM project_sources WHERE project_id=?1",
+            [&request.project_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
     for (path, kind, hash, _metadata) in source_rows {
         let disposition = if safe_source_path(&path) {
             ContextDisposition::Included
@@ -393,6 +409,19 @@ pub fn collect_context(
             value,
             disposition,
             reason,
+        ));
+    }
+    if source_total > MAX_CONTEXT_SOURCES as i64 {
+        items.push(context_item(
+            "M08_SOURCE_REFERENCE",
+            "source-bound".into(),
+            None,
+            ContextDisposition::Omitted,
+            Some(format!(
+                "{} source references omitted after the {}-source bound",
+                source_total - MAX_CONTEXT_SOURCES as i64,
+                MAX_CONTEXT_SOURCES
+            )),
         ));
     }
     let dashboard = project_dashboard::resolve(database, &request.project_id)?;
@@ -500,8 +529,57 @@ pub fn collect_context(
     Ok(manifest)
 }
 
+fn render_context(context: &ContextManifest) -> String {
+    let mut rendered = String::from("Materialized bounded context\n");
+    for item in &context.items {
+        match item.disposition {
+            ContextDisposition::Included => {
+                rendered.push_str(&format!("\n### {} [{}]\n", item.class, item.reference));
+                if let Some(value) = &item.value {
+                    rendered.push_str(value);
+                    rendered.push('\n');
+                }
+            }
+            ref disposition => {
+                rendered.push_str(&format!(
+                    "\n- {} [{}]: {}{}\n",
+                    item.class,
+                    item.reference,
+                    serde_json::to_string(disposition).unwrap_or_else(|_| "UNKNOWN".into()),
+                    item.reason
+                        .as_deref()
+                        .map(|reason| format!(" ({reason})"))
+                        .unwrap_or_default()
+                ));
+            }
+        }
+    }
+    rendered.push_str(&format!(
+        "\nManifest: {}\nIncluded bytes: {}\nIncluded items: {}\nSource references: {}\n",
+        context.manifest_sha256,
+        context.included_bytes,
+        context
+            .items
+            .iter()
+            .filter(|item| matches!(item.disposition, ContextDisposition::Included))
+            .count(),
+        context.source_count
+    ));
+    rendered
+}
+
+fn bounded_body(body: String) -> String {
+    if body.len() <= MAX_PROMPT_BODY_BYTES {
+        return body;
+    }
+    const MARKER: &str =
+        "\n\n[TRUNCATED: prompt body reached the bounded 65536-byte limit; see context manifest.]";
+    let prefix = truncate_utf8(&body, MAX_PROMPT_BODY_BYTES - MARKER.len());
+    format!("{prefix}{MARKER}")
+}
+
 fn implementation_body(request: &PromptGenerateRequest, context: &ContextManifest) -> String {
-    format!("M15 IMPLEMENTATION PROMPT\n\nGoal\n{summary}\n\nProject and task\n- Project: {project}\n- Task: {task}\n\nBounded context\n- Context manifest: {manifest}\n- Included bytes/items: {bytes}/{items}\n\nExecution contract\n1. Implement the requested behavior using the existing H!veAI architecture and authorities.\n2. Preserve exact project/task identity, local-first process policy, secret-safe persistence, and immutable evidence.\n3. Add focused tests for the requested behavior and keep the full regression green.\n4. Record truthful evidence and do not claim manual or audit acceptance.\n\nScope boundary\n{title}\n{summary}\n\nProhibited shortcuts\n- Do not scrape arbitrary files, load secrets, bypass the registry, expose shell/PID/argv control, redesign unrelated UI, or start a later milestone.\n", summary=request.summary, project=request.project_id, task=request.task_id.as_deref().unwrap_or("freeform project operation"), manifest=context.manifest_sha256, bytes=context.included_bytes, items=context.items.len(), title=request.title)
+    bounded_body(format!("M15 IMPLEMENTATION PROMPT\n\nGoal\n{summary}\n\nProject and task\n- Project: {project}\n- Task: {task}\n\n{materialized}\n\nExecution contract\n1. Implement the requested behavior using the existing H!veAI architecture and authorities.\n2. Preserve exact project/task identity, local-first process policy, secret-safe persistence, and immutable evidence.\n3. Add focused tests for the requested behavior and keep the full regression green.\n4. Record truthful evidence and do not claim manual or audit acceptance.\n\nScope boundary\n{title}\n{summary}\n\nProhibited shortcuts\n- Do not scrape arbitrary files, load secrets, bypass the registry, expose shell/PID/argv control, redesign unrelated UI, or start a later milestone.\n", summary=request.summary, project=request.project_id, task=request.task_id.as_deref().unwrap_or("freeform project operation"), materialized=render_context(context), title=request.title))
 }
 
 fn remediation_body(
@@ -520,8 +598,10 @@ fn remediation_body(
         return Err("PROMPT_REMEDIATION_FINDINGS_UNAVAILABLE".into());
     }
     let mut body = format!(
-        "M15 REMEDIATION PROMPT\n\nScope\n{}\n{}\n\nPersisted findings\n",
-        request.title, request.summary
+        "M15 REMEDIATION PROMPT\n\nScope\n{}\n{}\n\n{}\n\nSelected persisted findings\n",
+        request.title,
+        request.summary,
+        render_context(context)
     );
     for finding in findings {
         body.push_str(&format!(
@@ -530,7 +610,17 @@ fn remediation_body(
         ));
     }
     body.push_str("\nRequired closure\n- Fix only the persisted findings above.\n- Add focused regression tests that reproduce the observed behavior.\n- Preserve M04-M14 security, process, lifecycle, and UI boundaries.\n- Do not invent findings or expand into another milestone.\n");
-    Ok(body)
+    Ok(bounded_body(body))
+}
+
+fn audit_support_body(request: &PromptGenerateRequest, context: &ContextManifest) -> String {
+    bounded_body(format!(
+        "M15 AUDIT-SUPPORT PROMPT\n\nAudit target and scope\n- Target: {}\n- Project: {}\n- Task: {}\n\n{}\n\nExpected verification output\n1. Identify the exact evidence references inspected.\n2. Report PASS, CONDITIONAL, or FAIL with bounded reasons.\n3. List reproduction and closure evidence for each finding.\n4. Mark missing or unavailable evidence explicitly.\n\nMutation boundary\n- Do not mutate files, projects, prompts, sessions, or provider state unless this prompt is explicitly authorized for that action.\n- Do not invent findings or treat builder claims as independent acceptance.\n",
+        request.title,
+        request.project_id,
+        request.task_id.as_deref().unwrap_or("freeform project operation"),
+        render_context(context)
+    ))
 }
 
 pub fn generate(
@@ -573,11 +663,11 @@ pub fn generate(
         });
         context.manifest_sha256 = hash_bytes(&serde_json::to_vec(&json!({"projectId":context.project_id,"taskId":context.task_id,"items":context.items,"includedBytes":context.included_bytes,"omittedCount":context.omitted_count,"sourceCount":context.source_count})).unwrap());
     }
-    let mut body = match body_request.kind {
+    let body = match body_request.kind {
         PromptKind::Remediation => remediation_body(&body_request, &context)?,
-        _ => implementation_body(&body_request, &context),
+        PromptKind::AuditSupport => audit_support_body(&body_request, &context),
+        PromptKind::Implementation => implementation_body(&body_request, &context),
     };
-    body = truncate_utf8(&body, MAX_PROMPT_BODY_BYTES);
     let now = utc_timestamp();
     let prompt_id = Uuid::new_v4().to_string();
     let version_id = Uuid::new_v4().to_string();
@@ -603,7 +693,7 @@ fn read_version(
     version_id: &str,
 ) -> Result<PromptVersion, String> {
     let connection = database.open_connection()?;
-    let row = connection.query_row("SELECT v.id,v.prompt_id,v.version,p.kind,v.title,v.summary,v.content,v.created_by,v.created_at,v.origin,v.context_manifest_json,v.provenance_json,v.approval_state,v.approved_at,v.approved_body_sha256,v.used_at,v.selected_provider,v.dispatched_session_id,v.superseded_at,p.current_version FROM prompt_versions v JOIN prompts p ON p.id=v.prompt_id WHERE v.prompt_id=?1 AND v.id=?2", params![prompt_id,version_id], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,i64>(2)?,r.get::<_,String>(3)?,r.get::<_,Option<String>>(4)?,r.get::<_,Option<String>>(5)?,r.get::<_,String>(6)?,r.get::<_,String>(7)?,r.get::<_,String>(8)?,r.get::<_,String>(9)?,r.get::<_,Option<String>>(10)?,r.get::<_,Option<String>>(11)?,r.get::<_,String>(12)?,r.get::<_,Option<String>>(13)?,r.get::<_,Option<String>>(14)?,r.get::<_,Option<String>>(15)?,r.get::<_,Option<String>>(16)?,r.get::<_,Option<String>>(17)?,r.get::<_,Option<String>>(18)?,r.get::<_,i64>(19)?))).optional().map_err(|e| e.to_string())?.ok_or("PROMPT_VERSION_NOT_FOUND")?;
+    let row = connection.query_row("SELECT v.id,v.prompt_id,v.version,p.kind,v.title,v.summary,v.content,v.created_by,v.created_at,v.origin,v.context_manifest_json,v.provenance_json,v.approval_state,v.approved_at,v.approved_body_sha256,v.used_at,v.selected_provider,v.dispatched_session_id,v.superseded_at,v.dispatch_state,v.dispatch_reservation_id,v.dispatch_reserved_at,v.dispatch_provenance_json,v.dispatch_error,p.current_version FROM prompt_versions v JOIN prompts p ON p.id=v.prompt_id WHERE v.prompt_id=?1 AND v.id=?2", params![prompt_id,version_id], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,i64>(2)?,r.get::<_,String>(3)?,r.get::<_,Option<String>>(4)?,r.get::<_,Option<String>>(5)?,r.get::<_,String>(6)?,r.get::<_,String>(7)?,r.get::<_,String>(8)?,r.get::<_,String>(9)?,r.get::<_,Option<String>>(10)?,r.get::<_,Option<String>>(11)?,r.get::<_,String>(12)?,r.get::<_,Option<String>>(13)?,r.get::<_,Option<String>>(14)?,r.get::<_,Option<String>>(15)?,r.get::<_,Option<String>>(16)?,r.get::<_,Option<String>>(17)?,r.get::<_,Option<String>>(18)?,r.get::<_,String>(19)?,r.get::<_,Option<String>>(20)?,r.get::<_,Option<String>>(21)?,r.get::<_,Option<String>>(22)?,r.get::<_,Option<String>>(23)?,r.get::<_,i64>(24)?))).optional().map_err(|e| e.to_string())?.ok_or("PROMPT_VERSION_NOT_FOUND")?;
     Ok(PromptVersion {
         id: row.0,
         prompt_id: row.1,
@@ -625,7 +715,12 @@ fn read_version(
         selected_provider: row.16,
         dispatched_session_id: row.17,
         superseded_at: row.18,
-        is_current: row.2 == row.19,
+        dispatch_state: row.19,
+        dispatch_reservation_id: row.20,
+        dispatch_reserved_at: row.21,
+        dispatch_provenance: parse_json(row.22),
+        dispatch_error: row.23,
+        is_current: row.2 == row.24,
     })
 }
 
@@ -767,20 +862,31 @@ pub fn approve(
     read_version(database, &request.prompt_id, &request.version_id)
 }
 
-pub fn dispatch(
-    center: &AgentSessionCenter,
-    codex: &CodexAdapter,
+#[derive(Debug, Clone)]
+struct DispatchReservation {
+    reservation_id: String,
+    prompt_id: String,
+    version_id: String,
+    version: i64,
+    content: String,
+    hash: String,
+    provider: String,
+    project_id: String,
+    task_id: Option<String>,
+}
+
+fn reserve_dispatch(
     database: &DatabaseState,
-    request: PromptDispatchRequest,
-) -> Result<PromptDispatchResult, String> {
+    request: &PromptDispatchRequest,
+) -> Result<DispatchReservation, String> {
     let provider = request.provider.trim().to_ascii_uppercase();
     if provider != "CODEX" && provider != "CLAUDE" {
         return Err("PROMPT_PROVIDER_UNSUPPORTED".into());
     }
-    let version = read_version(database, &request.prompt_id, &request.version_id)?;
     validate_prompt_owner(database, &request.project_id, &request.prompt_id)?;
+    let version = read_version(database, &request.prompt_id, &request.version_id)?;
     if version.approval_state != PromptApprovalState::Approved.as_str() {
-        return Err("PROMPT_DISPATCH_REQUIRES_APPROVAL".into());
+        return Err("PROMPT_DISPATCH_REQUIRES_APPROVAL_OR_SINGLE_USE_CLAIM".into());
     }
     let hash = hash_bytes(version.content.as_bytes());
     if version.approved_body_sha256.as_deref() != Some(hash.as_str()) {
@@ -794,39 +900,179 @@ pub fn dispatch(
             |r| Ok((r.get(0)?, r.get(1)?)),
         )
         .map_err(|e| e.to_string())?;
-    drop(connection);
     if project_id != request.project_id {
         return Err("PROMPT_PROJECT_MISMATCH".into());
     }
     validate_active_project(database, &project_id)?;
     validate_task(database, &project_id, task_id.as_deref())?;
-    let mut session = agent_session_center::start(
+
+    let reservation_id = Uuid::new_v4().to_string();
+    let now = utc_timestamp();
+    let provenance = json!({
+        "dispatchReservationId": reservation_id,
+        "promptId": request.prompt_id,
+        "promptVersionId": request.version_id,
+        "promptVersion": version.version,
+        "promptVersionSha256": hash,
+        "provider": provider,
+        "projectId": project_id,
+        "taskId": task_id,
+    });
+    connection
+        .execute_batch("BEGIN IMMEDIATE")
+        .map_err(|e| format!("PROMPT_DISPATCH_CLAIM_DATABASE_FAILURE: {e}"))?;
+    let changed = connection.execute(
+        "UPDATE prompt_versions SET approval_state='DISPATCHING',dispatch_state='RESERVED',dispatch_reservation_id=?1,dispatch_reserved_at=?2,dispatch_provenance_json=?3,dispatch_error=NULL WHERE id=?4 AND prompt_id=?5 AND approval_state='APPROVED' AND used_at IS NULL AND approved_body_sha256=?6 AND content=?7 AND COALESCE(dispatch_state,'AVAILABLE')='AVAILABLE'",
+        params![reservation_id, now, provenance.to_string(), request.version_id, request.prompt_id, hash, version.content],
+    );
+    let changed = match changed {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = connection.execute_batch("ROLLBACK");
+            return Err(format!("PROMPT_DISPATCH_CLAIM_DATABASE_FAILURE: {error}"));
+        }
+    };
+    if changed != 1 {
+        let _ = connection.execute_batch("ROLLBACK");
+        return Err("PROMPT_DISPATCH_ALREADY_CLAIMED_OR_NOT_APPROVED".into());
+    }
+    connection
+        .execute_batch("COMMIT")
+        .map_err(|e| format!("PROMPT_DISPATCH_CLAIM_COMMIT_FAILURE: {e}"))?;
+    Ok(DispatchReservation {
+        reservation_id,
+        prompt_id: request.prompt_id.clone(),
+        version_id: request.version_id.clone(),
+        version: version.version,
+        content: version.content,
+        hash,
+        provider,
+        project_id,
+        task_id,
+    })
+}
+
+fn mark_dispatch_failed(
+    database: &DatabaseState,
+    reservation: &DispatchReservation,
+    error: &str,
+) -> Result<(), String> {
+    let connection = database.open_connection()?;
+    let changed = connection
+        .execute(
+            "UPDATE prompt_versions SET approval_state='DISPATCH_FAILED',dispatch_state='FAILED',dispatch_error=?1 WHERE id=?2 AND dispatch_reservation_id=?3 AND dispatch_state='RESERVED'",
+            params![truncate_utf8(error, 2048), reservation.version_id, reservation.reservation_id],
+        )
+        .map_err(|e| format!("persist dispatch failure: {e}"))?;
+    if changed != 1 {
+        return Err("PROMPT_DISPATCH_FAILURE_STATE_NOT_PERSISTED".into());
+    }
+    Ok(())
+}
+
+fn finalize_dispatch(
+    database: &DatabaseState,
+    reservation: &DispatchReservation,
+    session_id: &str,
+) -> Result<(), String> {
+    let now = utc_timestamp();
+    let provenance = json!({
+        "dispatchReservationId": reservation.reservation_id,
+        "promptId": reservation.prompt_id,
+        "promptVersionId": reservation.version_id,
+        "promptVersion": reservation.version,
+        "promptVersionSha256": reservation.hash,
+        "provider": reservation.provider,
+        "projectId": reservation.project_id,
+        "taskId": reservation.task_id,
+        "sessionId": session_id,
+    });
+    let connection = database.open_connection()?;
+    connection
+        .execute_batch("BEGIN IMMEDIATE")
+        .map_err(|e| format!("PROMPT_DISPATCH_FINALIZE_DATABASE_FAILURE: {e}"))?;
+    let session_changed = connection.execute(
+        "UPDATE agent_sessions SET prompt_id=?1,prompt_version_id=?2,prompt_version=?3,prompt_version_sha256=?4 WHERE id=?5 AND project_id=?6 AND provider=?7",
+        params![reservation.prompt_id, reservation.version_id, reservation.version, reservation.hash, session_id, reservation.project_id, reservation.provider],
+    );
+    let session_changed = match session_changed {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = connection.execute_batch("ROLLBACK");
+            return Err(format!("persist session prompt provenance: {error}"));
+        }
+    };
+    if session_changed != 1 {
+        let _ = connection.execute_batch("ROLLBACK");
+        return Err("PROMPT_DISPATCH_SESSION_PROVENANCE_NOT_PERSISTED".into());
+    }
+    let prompt_changed = connection.execute(
+        "UPDATE prompt_versions SET approval_state='DISPATCHED',dispatch_state='DISPATCHED',used_at=?1,selected_provider=?2,dispatched_session_id=?3,dispatch_provenance_json=?4,dispatch_error=NULL WHERE id=?5 AND prompt_id=?6 AND dispatch_reservation_id=?7 AND dispatch_state='RESERVED' AND approved_body_sha256=?8 AND content=?9",
+        params![now, reservation.provider, session_id, provenance.to_string(), reservation.version_id, reservation.prompt_id, reservation.reservation_id, reservation.hash, reservation.content],
+    );
+    let prompt_changed = match prompt_changed {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = connection.execute_batch("ROLLBACK");
+            return Err(format!("persist prompt dispatch provenance: {error}"));
+        }
+    };
+    if prompt_changed != 1 {
+        let _ = connection.execute_batch("ROLLBACK");
+        return Err("PROMPT_DISPATCH_RESERVATION_FINALIZE_NOT_PERSISTED".into());
+    }
+    connection
+        .execute_batch("COMMIT")
+        .map_err(|e| format!("PROMPT_DISPATCH_FINALIZE_COMMIT_FAILURE: {e}"))
+}
+
+pub fn dispatch(
+    center: &AgentSessionCenter,
+    codex: &CodexAdapter,
+    database: &DatabaseState,
+    request: PromptDispatchRequest,
+) -> Result<PromptDispatchResult, String> {
+    let reservation = reserve_dispatch(database, &request)?;
+    let mut session = match agent_session_center::start(
         center,
         codex,
         database,
         AgentStartRequest {
-            provider: provider.clone(),
-            project_id: project_id.clone(),
-            task_id: task_id.clone(),
-            prompt: version.content.clone(),
+            provider: reservation.provider.clone(),
+            project_id: reservation.project_id.clone(),
+            task_id: reservation.task_id.clone(),
+            prompt: reservation.content.clone(),
         },
-    )?;
-    let now = utc_timestamp();
-    let connection = database.open_connection()?;
-    connection.execute("UPDATE prompt_versions SET approval_state='DISPATCHED',used_at=?2,selected_provider=?3,dispatched_session_id=?4 WHERE id=?1 AND approved_body_sha256=?5 AND content=?6", params![request.version_id,now,provider,session.id,hash,version.content]).map_err(|e| format!("persist prompt dispatch provenance: {e}"))?;
-    connection.execute("UPDATE agent_sessions SET prompt_id=?2,prompt_version_id=?3,prompt_version=?4,prompt_version_sha256=?5 WHERE id=?1 AND project_id=?6", params![session.id,request.prompt_id,request.version_id,version.version,hash,project_id]).map_err(|e| format!("persist session prompt provenance: {e}"))?;
-    session.prompt_id = Some(request.prompt_id.clone());
-    session.prompt_version_id = Some(request.version_id.clone());
-    session.prompt_version = Some(version.version);
-    session.prompt_version_sha256 = Some(hash.clone());
-    let prompt = read_version(database, &request.prompt_id, &request.version_id)?;
+    ) {
+        Ok(session) => session,
+        Err(error) => {
+            mark_dispatch_failed(database, &reservation, &error)?;
+            return Err(format!("PROMPT_DISPATCH_PROVIDER_START_FAILED: {error}"));
+        }
+    };
+    if let Err(error) = finalize_dispatch(database, &reservation, &session.id) {
+        let _ = agent_session_center::stop(
+            center,
+            codex,
+            database,
+            &reservation.project_id,
+            &session.id,
+        );
+        mark_dispatch_failed(database, &reservation, &error)?;
+        return Err(format!("PROMPT_DISPATCH_PROVENANCE_FAILED: {error}"));
+    }
+    session.prompt_id = Some(reservation.prompt_id.clone());
+    session.prompt_version_id = Some(reservation.version_id.clone());
+    session.prompt_version = Some(reservation.version);
+    session.prompt_version_sha256 = Some(reservation.hash.clone());
+    let prompt = read_version(database, &reservation.prompt_id, &reservation.version_id)?;
     Ok(PromptDispatchResult {
         prompt,
         session,
-        prompt_id: request.prompt_id,
-        prompt_version_id: request.version_id,
-        prompt_version: version.version,
-        prompt_version_sha256: hash,
+        prompt_id: reservation.prompt_id,
+        prompt_version_id: reservation.version_id,
+        prompt_version: reservation.version,
+        prompt_version_sha256: reservation.hash,
     })
 }
 
@@ -834,6 +1080,8 @@ pub fn dispatch(
 mod tests {
     use super::*;
     use crate::projects::{register_project, RegisterProjectRequest};
+    use std::sync::{Arc, Barrier};
+    use std::thread;
     use tempfile::tempdir;
 
     #[test]
@@ -990,6 +1238,287 @@ mod tests {
                 .and_then(|values| values.first())
                 .and_then(|value| value.as_str()),
             Some("finding-gen")
+        );
+    }
+
+    #[test]
+    fn materialized_renderers_are_distinct_bounded_and_exclusion_safe() {
+        let context = ContextManifest {
+            project_id: "project-1".into(),
+            task_id: Some("task-1".into()),
+            items: vec![
+                context_item(
+                    "TASK",
+                    "task:task-1".into(),
+                    Some("acceptance and dependency evidence".into()),
+                    ContextDisposition::Included,
+                    None,
+                ),
+                context_item(
+                    "M08_SOURCE_REFERENCE",
+                    "source:TASKS.md".into(),
+                    Some("safe source hash".into()),
+                    ContextDisposition::Included,
+                    None,
+                ),
+                context_item(
+                    "SECRET",
+                    "source:.env".into(),
+                    Some("SHOULD_NOT_RENDER".into()),
+                    ContextDisposition::Excluded,
+                    Some("secret exclusion".into()),
+                ),
+                context_item(
+                    "TEST_EVIDENCE",
+                    "test:test-1".into(),
+                    None,
+                    ContextDisposition::Omitted,
+                    Some("context bound".into()),
+                ),
+            ],
+            included_bytes: 49,
+            omitted_count: 2,
+            source_count: 1,
+            manifest_sha256: "manifest-1".into(),
+        };
+        let implementation = implementation_body(
+            &PromptGenerateRequest {
+                project_id: "project-1".into(),
+                task_id: Some("task-1".into()),
+                kind: PromptKind::Implementation,
+                title: "Implement".into(),
+                summary: "Goal".into(),
+                finding_ids: None,
+            },
+            &context,
+        );
+        let audit = audit_support_body(
+            &PromptGenerateRequest {
+                project_id: "project-1".into(),
+                task_id: Some("task-1".into()),
+                kind: PromptKind::AuditSupport,
+                title: "Audit".into(),
+                summary: "Verify".into(),
+                finding_ids: None,
+            },
+            &context,
+        );
+        assert!(implementation.contains("acceptance and dependency evidence"));
+        assert!(implementation.contains("safe source hash"));
+        assert!(implementation.contains("EXCLUDED"));
+        assert!(!implementation.contains("SHOULD_NOT_RENDER"));
+        assert!(implementation.contains("OMITTED"));
+        assert!(audit.contains("AUDIT-SUPPORT PROMPT"));
+        assert!(audit.contains("Mutation boundary"));
+        assert_ne!(implementation, audit);
+        let huge = ContextManifest {
+            items: vec![context_item(
+                "TASK",
+                "task:huge".into(),
+                Some("x".repeat(MAX_PROMPT_BODY_BYTES + 100)),
+                ContextDisposition::Included,
+                None,
+            )],
+            ..context
+        };
+        let bounded_prompt = implementation_body(
+            &PromptGenerateRequest {
+                project_id: "project-1".into(),
+                task_id: None,
+                kind: PromptKind::Implementation,
+                title: "Bound".into(),
+                summary: "Bound".into(),
+                finding_ids: None,
+            },
+            &huge,
+        );
+        assert!(bounded_prompt.len() <= MAX_PROMPT_BODY_BYTES);
+        assert!(bounded_prompt.contains("TRUNCATED"));
+    }
+
+    fn approved_dispatch_fixture() -> (
+        tempfile::TempDir,
+        tempfile::TempDir,
+        DatabaseState,
+        String,
+        String,
+    ) {
+        let app_data = tempdir().unwrap();
+        let project_dir = tempdir().unwrap();
+        let database = DatabaseState::initialize(app_data.path().to_path_buf()).unwrap();
+        let project = register_project(
+            &database,
+            RegisterProjectRequest {
+                path: project_dir.path().to_string_lossy().into(),
+                name: Some("Dispatch fixture".into()),
+            },
+        )
+        .unwrap();
+        let prompt_id = "prompt-dispatch".to_string();
+        let version_id = "version-dispatch".to_string();
+        let content = "approved dispatch fixture";
+        let connection = database.open_connection().unwrap();
+        connection.execute("INSERT INTO prompts (id,project_id,kind,current_version,created_at,updated_at) VALUES (?1,?2,'IMPLEMENTATION',1,'now','now')", params![prompt_id,project.id]).unwrap();
+        connection.execute("INSERT INTO prompt_versions (id,prompt_id,version,content,created_by,created_at,approval_state,approved_body_sha256) VALUES (?1,?2,1,?3,'test','now','APPROVED',?4)", params![version_id, prompt_id, content, hash_bytes(content.as_bytes())]).unwrap();
+        (app_data, project_dir, database, prompt_id, version_id)
+    }
+
+    #[test]
+    fn durable_dispatch_claim_is_single_use_under_concurrency_and_replay() {
+        let (_app_data, _project_dir, database, prompt_id, version_id) =
+            approved_dispatch_fixture();
+        let project_id: String = database
+            .open_connection()
+            .unwrap()
+            .query_row(
+                "SELECT project_id FROM prompts WHERE id=?1",
+                [&prompt_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let barrier = Arc::new(Barrier::new(4));
+        let mut handles = Vec::new();
+        for _ in 0..4 {
+            let database = database.clone();
+            let barrier = barrier.clone();
+            let prompt_id = prompt_id.clone();
+            let version_id = version_id.clone();
+            let project_id = project_id.clone();
+            handles.push(thread::spawn(move || {
+                barrier.wait();
+                reserve_dispatch(
+                    &database,
+                    &PromptDispatchRequest {
+                        project_id,
+                        prompt_id,
+                        version_id,
+                        provider: "CODEX".into(),
+                    },
+                )
+                .is_ok()
+            }));
+        }
+        let successes = handles
+            .into_iter()
+            .filter_map(|handle| handle.join().ok())
+            .filter(|success| *success)
+            .count();
+        assert_eq!(successes, 1);
+        let state: String = database
+            .open_connection()
+            .unwrap()
+            .query_row(
+                "SELECT dispatch_state FROM prompt_versions WHERE id=?1",
+                [&version_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(state, "RESERVED");
+        let replay = reserve_dispatch(
+            &database,
+            &PromptDispatchRequest {
+                project_id,
+                prompt_id,
+                version_id,
+                provider: "CODEX".into(),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(
+            replay,
+            "PROMPT_DISPATCH_REQUIRES_APPROVAL_OR_SINGLE_USE_CLAIM"
+        );
+    }
+
+    #[test]
+    fn claimed_dispatch_failure_is_durable_and_not_replayable() {
+        let (_app_data, _project_dir, database, prompt_id, version_id) =
+            approved_dispatch_fixture();
+        let project_id: String = database
+            .open_connection()
+            .unwrap()
+            .query_row(
+                "SELECT project_id FROM prompts WHERE id=?1",
+                [&prompt_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let reservation = reserve_dispatch(
+            &database,
+            &PromptDispatchRequest {
+                project_id,
+                prompt_id: prompt_id.clone(),
+                version_id: version_id.clone(),
+                provider: "CLAUDE".into(),
+            },
+        )
+        .unwrap();
+        mark_dispatch_failed(&database, &reservation, "provider start fixture failed").unwrap();
+        let version = read_version(&database, &prompt_id, &version_id).unwrap();
+        assert_eq!(version.approval_state, "DISPATCH_FAILED");
+        assert_eq!(version.dispatch_state, "FAILED");
+        assert_eq!(
+            version.dispatch_error.as_deref(),
+            Some("provider start fixture failed")
+        );
+    }
+
+    #[test]
+    fn finalized_dispatch_persists_exact_session_provenance_atomically() {
+        let (_app_data, _project_dir, database, prompt_id, version_id) =
+            approved_dispatch_fixture();
+        let project_id: String = database
+            .open_connection()
+            .unwrap()
+            .query_row(
+                "SELECT project_id FROM prompts WHERE id=?1",
+                [&prompt_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let reservation = reserve_dispatch(
+            &database,
+            &PromptDispatchRequest {
+                project_id: project_id.clone(),
+                prompt_id: prompt_id.clone(),
+                version_id: version_id.clone(),
+                provider: "CODEX".into(),
+            },
+        )
+        .unwrap();
+        let session_id = "session-provenance";
+        database
+            .open_connection()
+            .unwrap()
+            .execute(
+                "INSERT INTO agent_sessions (id,project_id,provider,state,created_at) VALUES (?1,?2,'CODEX','RUNNING','now')",
+                params![session_id, project_id],
+            )
+            .unwrap();
+
+        finalize_dispatch(&database, &reservation, session_id).unwrap();
+
+        let connection = database.open_connection().unwrap();
+        let session: (String, String, i64, String) = connection
+            .query_row(
+                "SELECT prompt_id,prompt_version_id,prompt_version,prompt_version_sha256 FROM agent_sessions WHERE id=?1",
+                [session_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(session.0, prompt_id);
+        assert_eq!(session.1, version_id);
+        assert_eq!(session.2, 1);
+        assert_eq!(session.3, reservation.hash);
+
+        let version = read_version(&database, &session.0, &session.1).unwrap();
+        assert_eq!(version.approval_state, "DISPATCHED");
+        assert_eq!(version.dispatch_state, "DISPATCHED");
+        assert_eq!(version.dispatched_session_id.as_deref(), Some(session_id));
+        assert_eq!(version.dispatch_provenance["sessionId"], session_id);
+        assert_eq!(
+            version.dispatch_provenance["promptVersionSha256"],
+            reservation.hash
         );
     }
 

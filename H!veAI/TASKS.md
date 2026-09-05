@@ -33,7 +33,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition
 - M10A remediation, independent re-audit, and Akilta native click acceptance are complete; Akilta footer link = PASS/ACCEPTED.
 - Original M11 implementation is a historical strict-audit FAIL with 8 MAJOR findings.
 - M11A REV4, REV5, REV6, and REV7 remediation history remains immutable; all findings are closed by the accepted strict audits. M11A REV7 = PASS/CLOSED and the final Projects visual cleanup = PASS/CLOSED.
-- M11 = PASS/CLOSED. M12, M12A R26, and M12B native Open Cockpit remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B/M13C/M13D/M13E = PASS/CLOSED on accepted strict re-audits and user native/visual evidence. M14 and M14A-M14E = PASS/CLOSED on accepted strict and native evidence. M15 is ACTIVE/IMPLEMENTING; M16-M20 remain planned/blocked and M21 remains planned/not started.
+- M11 = PASS/CLOSED. M12, M12A R26, and M12B native Open Cockpit remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B/M13C/M13D/M13E = PASS/CLOSED on accepted strict re-audits and user native/visual evidence. M14 and M14A-M14E = PASS/CLOSED on accepted strict and native evidence. M15 remains OPEN; M15A R54/R55 remediation is complete pending independent strict re-audit and user native acceptance. M16-M20 remain planned/blocked and M21 remains planned/not started.
 - M21 remains planned and was not started.
 
 ---
@@ -1295,6 +1295,16 @@ M14B REMEDIATION COMPLETE / ACCEPTED STRICT RE-AUDIT + USER NATIVE/VISUAL EVIDEN
 - [ ] Independent strict audit.
 
 M15 IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
+
+## M15A - Context materialization and atomic dispatch provenance remediation
+
+- [x] M15-R54 durable single-use dispatch reservation before provider launch.
+- [x] M15-R55 bounded context materialization for implementation, remediation, and distinct audit-support prompts.
+- [x] Race, replay, failure-state, context-materialization, determinism, exclusion, and bounded-body regression coverage.
+- [x] Full regression and governed publication.
+- [ ] Independent strict re-audit and user native acceptance.
+
+M15A REMEDIATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE ACCEPTANCE.
 
 ---
 
