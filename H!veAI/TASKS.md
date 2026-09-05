@@ -33,7 +33,7 @@ Package numbering such as `M08.01`, `M08.02`, etc. is a task/audit decomposition
 - M10A remediation, independent re-audit, and Akilta native click acceptance are complete; Akilta footer link = PASS/ACCEPTED.
 - Original M11 implementation is a historical strict-audit FAIL with 8 MAJOR findings.
 - M11A REV4, REV5, REV6, and REV7 remediation history remains immutable; all findings are closed by the accepted strict audits. M11A REV7 = PASS/CLOSED and the final Projects visual cleanup = PASS/CLOSED.
-- M11 = PASS/CLOSED. M12, M12A R26, and M12B native Open Cockpit remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B/M13C/M13D/M13E = PASS/CLOSED on accepted strict re-audits and user native/visual evidence. M14 and M14A-M14E = PASS/CLOSED on accepted strict and native evidence. M15 remains OPEN; M15A R54/R55, M15B R56-R58, and M15C post-dispatch Agents handoff are complete pending independent re-audit and user native acceptance. M16-M20 remain planned/blocked and M21 remains planned/not started.
+- M11 = PASS/CLOSED. M12, M12A R26, and M12B native Open Cockpit remediation = PASS/CLOSED on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B/M13C/M13D/M13E = PASS/CLOSED on accepted strict re-audits and user native/visual evidence. M14 and M14A-M14E = PASS/CLOSED on accepted strict and native evidence. M15 remains OPEN; M15A R54/R55, M15B R56-R58, M15C post-dispatch Agents handoff, and M15D result placement are complete pending M15 independent final re-audit. M16-M20 remain planned/blocked and M21 remains planned/not started.
 - M21 remains planned and was not started.
 
 ---
@@ -1326,6 +1326,16 @@ M15B REMEDIATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE AC
 - [ ] Independent strict re-audit and user native handoff acceptance.
 
 M15C IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT RE-AUDIT + USER NATIVE HANDOFF ACCEPTANCE.
+
+## M15D - Post-dispatch result placement UX remediation
+
+- [x] Successful dispatch result is rendered directly below the Provider and dispatch controls.
+- [x] `View result in Agents` remains local to that result surface and preserves exact project/session targeting without redispatch.
+- [x] Codex and Claude use the same placement; errors remain page-level and stale success state is cleared on replacement actions.
+- [x] Focused placement/handoff regression, full regression, governed publication, and immutable evidence log.
+- [ ] M15 independent final strict re-audit.
+
+M15D REMEDIATION COMPLETE / M15 REMAINS OPEN PENDING INDEPENDENT FINAL STRICT RE-AUDIT.
 
 ---
 
