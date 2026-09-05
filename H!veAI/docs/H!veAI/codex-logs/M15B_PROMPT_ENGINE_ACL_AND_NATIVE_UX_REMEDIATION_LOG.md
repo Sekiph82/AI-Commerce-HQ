@@ -183,6 +183,6 @@ The required native sequence remains: open Prompt Engine, select a safe ACTIVE p
 - `tests/m15-prompt-engine-focused.test.tsx`
 - `docs/H!veAI/codex-logs/M15B_PROMPT_ENGINE_ACL_AND_NATIVE_UX_REMEDIATION_LOG.md`
 
-Implementation commit SHA: `PENDING_FIRST_COMMIT_SHA`
+Implementation commit SHA: `3382dbdff255de73f7106bf47e364606a2358a8f`
 Published stable SHA-256: `48F8F307F6365F5468E45A9F679A00DC993E35FDF7B27DB450B18576E1CD5DD4`
-Final local/origin equality: to be recorded after the normal push.
+Final local/origin equality: verified after the normal push; concrete final SHA is recorded in completion output.
