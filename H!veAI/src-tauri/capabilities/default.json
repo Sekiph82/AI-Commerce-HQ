@@ -23,6 +23,7 @@
     "allow-task-intelligence",
     "allow-workflow-state-machine",
     "allow-codex-adapter",
-    "allow-agent-session-center"
+    "allow-agent-session-center",
+    "allow-prompt-engine"
   ]
 }

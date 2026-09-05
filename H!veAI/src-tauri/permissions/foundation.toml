@@ -84,3 +84,8 @@ commands.allow = ["hiveai_codex_readiness", "hiveai_codex_sessions_list", "hivea
 identifier = "allow-agent-session-center"
 description = "Allows the main window to use the provider-neutral, registered-project Codex and Claude session center."
 commands.allow = ["hiveai_agent_readiness", "hiveai_agent_sessions_list", "hiveai_agent_start", "hiveai_agent_stop", "hiveai_agent_retry", "hiveai_agent_resume", "hiveai_agent_session_events", "hiveai_agent_resize", "hiveai_agent_permission_decision"]
+
+[[permission]]
+identifier = "allow-prompt-engine"
+description = "Allows the main window to use the bounded, reviewable Prompt Engine workflow."
+commands.allow = ["hiveai_prompt_context_collect", "hiveai_prompt_generate", "hiveai_prompts_list", "hiveai_prompt_versions", "hiveai_prompt_edit", "hiveai_prompt_approve", "hiveai_prompt_dispatch"]

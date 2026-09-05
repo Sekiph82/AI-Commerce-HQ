@@ -15,7 +15,7 @@ User-facing roadmap denominator remains **20**. `M00` is the historical rebuild/
 - M10A remediation, independent re-audit, and Akilta native click acceptance: PASS/CLOSED.
 - M11 original and remediation failures remain historical evidence; accepted strict audits close M11A REV7 and the final Projects visual cleanup.
 - M11 = PASS/CLOSED.
-- M12 = PASS/CLOSED, including M12A R26 and M12B route remediation, on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B/M13C/M13D/M13E are PASS/CLOSED on accepted strict re-audits and user native/visual evidence. M14 and M14A-M14E are PASS/CLOSED on accepted strict and native evidence. M15 remains OPEN; M15A R54/R55 remediation is complete pending independent strict re-audit and user native acceptance. M16-M20 remain planned/blocked, and M21 is not part of this roadmap run.
+- M12 = PASS/CLOSED, including M12A R26 and M12B route remediation, on accepted strict evidence and user native/visual acceptance. M13/M13A/M13B/M13C/M13D/M13E are PASS/CLOSED on accepted strict re-audits and user native/visual evidence. M14 and M14A-M14E are PASS/CLOSED on accepted strict and native evidence. M15 remains OPEN; M15A R54/R55 and M15B R56-R58 remediations are complete pending independent re-audit and user native acceptance. M16-M20 remain planned/blocked, and M21 is not part of this roadmap run.
 - M21 remains planned and was not started.
 - Strict completed progress is 15/20 = 75% because M14 is accepted and closed; the pre-M10 hotfix is not a numbered roadmap milestone.
 
@@ -405,6 +405,8 @@ Exit: every dispatched builder prompt is reproducible and traceable.
 Status: IMPLEMENTATION COMPLETE / PENDING INDEPENDENT STRICT AUDIT + USER NATIVE/VISUAL ACCEPTANCE.
 
 M15A remediation: M15-R54 durable single-use dispatch reservation and M15-R55 bounded context materialization are complete pending independent strict re-audit and user native acceptance.
+
+M15B remediation: M15-R56 narrow Prompt Engine ACL, M15-R57 full-width vertical flow, and M15-R58 explicit provider plus project-neutral task picker are complete pending independent strict re-audit and user native acceptance.
 
 ---
 

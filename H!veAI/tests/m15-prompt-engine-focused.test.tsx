@@ -4,6 +4,7 @@ import App from "../src/App";
 
 const invoke = vi.hoisted(() => vi.fn());
 const project = { id: "prompt-project", name: "Prompt Fixture", originalPath: "C:\\Projects\\Prompt Fixture", normalizedPath: "C:\\Projects\\Prompt Fixture", status: "ACTIVE", priority: 1, preferredBuilder: null, preferredAuditor: null, taskSourcePolicy: "DISCOVER_STANDARD_FILES", preferredAgentProvider: "CODEX", registeredAt: "2026-09-03T10:00:00Z", lastValidatedAt: "2026-09-03T10:00:00Z", repository: null };
+const longBulkEditTaskTitle = "Bulk Edit task with a deliberately long title that must stay readable and bounded in the picker";
 const context = { projectId: project.id, taskId: "task-1", items: [{ class: "TASK", reference: "task:task-1", disposition: "INCLUDED", bytes: 42, reason: null, value: "task" }], includedBytes: 42, omittedCount: 0, sourceCount: 1, manifestSha256: "context-hash" };
 const version = { id: "version-1", promptId: "prompt-1", version: 1, kind: "IMPLEMENTATION", title: "Implement fixture", summary: "Read-only fixture goal", content: "Generated prompt body", createdBy: "M15_PROMPT_ENGINE", createdAt: "2026-09-03T10:00:00Z", origin: "M15_GENERATOR", contextManifest: context, provenance: { projectId: project.id }, approvalState: "DRAFT", approvedAt: null, approvedBodySha256: null, usedAt: null, selectedProvider: null, dispatchedSessionId: null, supersededAt: null, dispatchState: "AVAILABLE", dispatchReservationId: null, dispatchReservedAt: null, dispatchProvenance: {}, dispatchError: null, bodySha256: "body-hash", isCurrent: true };
 
@@ -15,7 +16,7 @@ beforeEach(() => {
   invoke.mockReset();
   invoke.mockImplementation((command: string) => {
     if (command === "hiveai_projects_list") return Promise.resolve([project]);
-    if (command === "hiveai_workflow_project_list") return Promise.resolve({ projectId: project.id, tasks: [{ taskId: "task-1", projectId: project.id, title: "Fixture task", currentState: "BACKLOG", workflowManaged: true, sourceActive: true, sourceRetired: false, allowedNextStates: [], allowedActors: [], suspensionResumeState: null, latestEvent: null, attentionRequired: false, requiredActor: "HUMAN", milestone: "M15" }] });
+    if (command === "hiveai_workflow_project_list") return Promise.resolve({ projectId: project.id, tasks: [{ taskId: "task-1", projectId: project.id, title: longBulkEditTaskTitle, currentState: "BACKLOG", workflowManaged: true, sourceActive: true, sourceRetired: false, allowedNextStates: [], allowedActors: [], suspensionResumeState: null, latestEvent: null, attentionRequired: false, requiredActor: "HUMAN", milestone: "M15" }] });
     if (command === "hiveai_prompt_context_collect") return Promise.resolve(context);
     if (command === "hiveai_prompt_generate") return Promise.resolve(version);
     if (command === "hiveai_prompt_versions") return Promise.resolve([version]);
@@ -42,8 +43,28 @@ describe("M15 Prompt Engine", () => {
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("hiveai_prompt_edit", expect.objectContaining({ request: expect.objectContaining({ projectId: project.id, promptId: "prompt-1", versionId: "version-1", content: "Edited prompt body" }) })));
     fireEvent.click(screen.getByRole("button", { name: /Approve exact version/ }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("hiveai_prompt_approve", { request: { projectId: project.id, promptId: "prompt-1", versionId: "version-1" } }));
-    fireEvent.click(screen.getByRole("button", { name: /Dispatch approved prompt/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Dispatch to Codex/ }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("hiveai_prompt_dispatch", { request: { projectId: project.id, promptId: "prompt-1", versionId: "version-1", provider: "CODEX" } }));
     expect(screen.getByText(/Dispatched CODEX session session-1/)).toBeInTheDocument();
+  });
+
+  it("uses one accessible long-title task picker and an explicit provider control", async () => {
+    render(<App />);
+    await waitFor(() => expect(screen.getByLabelText("Prompt project")).toHaveValue(project.id));
+    const taskPicker = screen.getByLabelText("Prompt task");
+    expect(taskPicker).toHaveAttribute("title", "Freeform project operation");
+    await waitFor(() => expect(screen.getByRole("option", { name: /Bulk Edit task with a deliberately long title/ })).toBeInTheDocument());
+    fireEvent.change(taskPicker, { target: { value: "task-1" } });
+    expect(taskPicker).toHaveAttribute("title", longBulkEditTaskTitle);
+    expect(taskPicker).toHaveAttribute("aria-describedby", "prompt-task-title-detail");
+    expect(screen.getByText(`Full task title: ${longBulkEditTaskTitle}`)).toHaveClass("sr-only");
+    expect(screen.getByRole("button", { name: "Codex", exact: true })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Claude", exact: true }));
+    expect(screen.getByRole("button", { name: "Claude", exact: true })).toHaveAttribute("aria-pressed", "true");
+    expect(document.querySelector(".prompt-engine-layout")).toBeNull();
+    expect(screen.getByRole("heading", { name: "1. Context and goal" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "2. Review and approve" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "3. Provider and dispatch" })).toBeInTheDocument();
+    expect(invoke).not.toHaveBeenCalledWith("hiveai_prompt_dispatch", expect.anything());
   });
 });

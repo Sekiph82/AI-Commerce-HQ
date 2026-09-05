@@ -755,4 +755,32 @@ mod capability_tests {
         assert!(permissions.contains("hiveai_project_cockpit_snapshot"));
         assert!(permissions.contains("hiveai_codex_start"));
     }
+
+    #[test]
+    fn main_window_allows_only_the_narrow_prompt_engine_permission() {
+        let capability = include_str!("../capabilities/default.json");
+        assert!(capability.contains("\"allow-prompt-engine\""));
+        let permissions = include_str!("../permissions/foundation.toml");
+        let block = permissions
+            .split("[[permission]]")
+            .find(|entry| entry.contains("identifier = \"allow-prompt-engine\""))
+            .expect("prompt engine permission exists");
+        for command in [
+            "hiveai_prompt_context_collect",
+            "hiveai_prompt_generate",
+            "hiveai_prompts_list",
+            "hiveai_prompt_versions",
+            "hiveai_prompt_edit",
+            "hiveai_prompt_approve",
+            "hiveai_prompt_dispatch",
+        ] {
+            assert!(
+                block.contains(command),
+                "missing Prompt Engine command {command}"
+            );
+        }
+        assert!(!block.contains("hiveai_agent_start"));
+        assert!(!block.contains("shell"));
+        assert!(!block.contains("process"));
+    }
 }
